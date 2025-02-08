@@ -21,23 +21,16 @@ import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.util.JsonAdapters;
+import net.sybyline.scarlet.util.MavenDepsLoader;
 import net.sybyline.scarlet.util.MiscUtils;
 
 public class Scarlet implements Closeable
 {
 
-    public static void main(String[] args) throws Exception
-    {
-        try (Scarlet scarlet = new Scarlet())
-        {
-            scarlet.run();
-        }
-    }
-
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.3.1",
+        VERSION = "0.3.2",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = String.format("%s/%s %s", USER_AGENT_NAME, VERSION, DEV_DISCORD),
@@ -54,6 +47,19 @@ public class Scarlet implements Closeable
         API_HOST_2 = "api.vrchat.cloud",
         API_URL_2 = String.format(API_URL, API_HOST_2),
         API_BASE_2 = String.format(API_BASE, API_HOST_2);
+
+    static
+    {
+        MavenDepsLoader.init();
+    }
+
+    public static void main(String[] args) throws Exception
+    {
+        try (Scarlet scarlet = new Scarlet())
+        {
+            scarlet.run();
+        }
+    }
 
     public static final Logger LOG = LoggerFactory.getLogger("Scarlet");
 
@@ -172,11 +178,7 @@ public class Scarlet implements Closeable
                         }
                         else
                         {
-                            ScarletData.UserMetadata userMeta = this.data.userMetadata(userId);
-                            if (userMeta == null)
-                                userMeta = new ScarletData.UserMetadata();
-                            userMeta.userSnowflake = userSnowflake;
-                            this.data.userMetadata(userId, userMeta);
+                            this.data.linkIdToSnowflake(userId, userSnowflake);
                             LOG.info("Linking VRChat user "+user.getDisplayName()+" ("+userId+") to Discord user <@"+userSnowflake+">");
                         }
                     } break;

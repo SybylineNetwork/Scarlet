@@ -56,6 +56,8 @@ import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.util.Pacer;
+import net.sybyline.scarlet.util.URLs;
+import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletDiscordJDA implements ScarletDiscord
@@ -134,12 +136,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
-                Commands.slash("query-target-history", "Queries audit information targeting a specific VRChat user")
+                Commands.slash("query-target-history", "Queries audit events targeting a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
                     .addOption(OptionType.INTEGER, "days-back", "The number of days into the past to search for events"),
-                Commands.slash("query-actor-history", "Queries audit information targeting a specific VRChat user")
+                Commands.slash("query-actor-history", "Queries audit events actored by a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
@@ -366,7 +368,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         return;
                     }
                     
-                    ScarletDiscordJDA.this.scarlet.data.userMetadata_setSnowflake(vrcId, user.getId());
+                    ScarletDiscordJDA.this.scarlet.data.linkIdToSnowflake(vrcId, user.getId());
                     LOG.info(String.format("Linking VRChat user %s (%s) to Discord user %s (<@%s>)", sc.getDisplayName(), vrcId, user.getEffectiveName(), user.getId()));
                     event.replyFormat("Associating %s with VRChat user [%s](https://vrchat.com/home/user/%s)", user.getEffectiveName(), sc.getDisplayName(), vrcId).setEphemeral(true).queue();
                     
@@ -609,6 +611,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
             catch (Exception ex)
             {
                 ex.printStackTrace();
+                if (event.isAcknowledged())
+                {
+                    event.getHook().sendMessage("Internal error");
+                }
+                else
+                {
+                    event.reply("Internal error");
+                }
             }
         }
 
@@ -632,8 +642,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         return;
                     }
                     
+                    String auditEntryId = parts[1];
+                    
                     StringSelectMenu.Builder builder = StringSelectMenu
-                        .create("select-tags:"+parts[1])
+                        .create("select-tags:"+auditEntryId)
                         .setMinValues(0)
                         .setMaxValues(tags.size())
                         .setPlaceholder("Select tags")
@@ -651,17 +663,84 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 } break;
                 case "edit-desc": {
                     
+                    String auditEntryId = parts[1];
+                    
                     TextInput.Builder ti = TextInput
-                        .create("input-desc:"+parts[1], "Input description", TextInputStyle.PARAGRAPH)
+                        .create("input-desc:"+auditEntryId, "Input description", TextInputStyle.PARAGRAPH)
                         .setRequired(true)
                         .setPlaceholder("Event description")
                         ;
                     
-                    Modal.Builder m = Modal.create("edit-desc:"+parts[1], "Edit description")
+                    Modal.Builder m = Modal.create("edit-desc:"+auditEntryId, "Edit description")
                         .addActionRow(ti.build())
                         ;
                     
                     event.replyModal(m.build()).queue();
+                    
+                } break;
+                case "vrchat-report": {
+                    
+                    String auditEntryId = parts[1];
+                    
+                    event.deferReply(true).queue();
+                    InteractionHook deferred = event.getHook();
+                    
+                    String targetUserId = null,
+                           targetDisplayName = null,
+                           actorUserId = null,
+                           metaDescription = null,
+                           metaTags[] = null;
+                    
+                    String eventUserSnowflake = event.getUser().getId(),
+                           eventUserId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(eventUserSnowflake);
+                    
+                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
+                    if (auditEntryMeta != null && auditEntryMeta.entry != null)
+                    {
+                        targetUserId = auditEntryMeta.entry.getTargetId();
+                        actorUserId = auditEntryMeta.entry.getActorId();
+                        metaDescription = auditEntryMeta.entryDescription;
+                        metaTags = auditEntryMeta.entryTags;
+                        
+                        User targetUser = ScarletDiscordJDA.this.scarlet.vrc.getUser(targetUserId);
+                        if (targetUser != null)
+                        {
+                            targetDisplayName = targetUser.getDisplayName();
+                        }
+                    }
+                    
+                    String reportSubject = targetDisplayName;
+                    
+                    String reportDesc = metaDescription;
+                    if (metaTags != null && metaTags.length > 0)
+                    {
+                        reportDesc = reportDesc == null ? "" : (reportDesc + "\r\n\r\nUser's Group internal moderation tags:");
+                        
+                        for (String metaTag : metaTags)
+                            reportDesc = reportDesc + "\r\n- " + ScarletDiscordJDA.this.scarlet.moderationTags.getTagLabel(metaTag);
+                    }
+                    
+                    String requestingUserId = eventUserId != null ? eventUserId : actorUserId;
+                    
+                    String link = VRChatHelpDeskURLs.newModerationRequest(
+                        null,
+                        VRChatHelpDeskURLs.ModerationCategory.USER_REPORT,
+                        requestingUserId,
+                        targetUserId,
+                        URLs.encode(reportSubject),
+                        URLs.encode(reportDesc)
+                    );
+                    
+                    StringBuilder msg = new StringBuilder();
+                    
+                    if (eventUserId == null)
+                    {
+                        msg.append("## WARNING\nThis link autofills the requesting user id of the **audit actor, not necessarily you**\nAssociate your Discord and VRChat ids with `/associate-ids`.\n\n");
+                    }
+                    
+                    msg.append("[Open new VRChat User Moderation Request](<").append(link).append(">)");
+                    
+                    deferred.sendMessage(msg.toString()).setEphemeral(true).queue();
                     
                 } break;
                 }
@@ -669,6 +748,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
             catch (Exception ex)
             {
                 ex.printStackTrace();
+                if (event.isAcknowledged())
+                {
+                    event.getHook().sendMessage("Internal error");
+                }
+                else
+                {
+                    event.reply("Internal error");
+                }
             }
         }
 
@@ -691,6 +778,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
             catch (Exception ex)
             {
                 ex.printStackTrace();
+                if (event.isAcknowledged())
+                {
+                    event.getHook().sendMessage("Internal error");
+                }
+                else
+                {
+                    event.reply("Internal error");
+                }
             }
         }
 
@@ -713,6 +808,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
             catch (Exception ex)
             {
                 ex.printStackTrace();
+                if (event.isAcknowledged())
+                {
+                    event.getHook().sendMessage("Internal error");
+                }
+                else
+                {
+                    event.reply("Internal error");
+                }
             }
         }
         
@@ -865,8 +968,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
             String content = actorMeta == null || actorMeta.userSnowflake == null ? ("Unknown Discord id for actor "+entryMeta.entry.getActorDisplayName()) : ("<@"+actorMeta.userSnowflake+">");
             Message auxMessage = threadChannel.sendMessage(content)
                 .addFiles(FileUpload.fromData(fileData, entryMeta.entry.getTargetId()+".json").asSpoiler())
-                .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"))
-                .addActionRow(Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"))
+                .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
+                              Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
+                              Button.primary("vrchat-report:"+entryMeta.entry.getId(), "Get report link"))
                 .completeAfter(1000L, TimeUnit.MILLISECONDS);
             
             entryMeta.auxMessageSnowflake = auxMessage.getId();

@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.lang.reflect.Type;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 
@@ -23,8 +24,57 @@ public class ScarletData
     }
 
     final File dir;
+    <T> T readObj(String name, Class<T> type)
+    {
+        if (name == null)
+            return null;
+        if (type == null)
+            return null;
+        File targetFile = new File(this.dir, name);
+        if (!targetFile.isFile())
+            return null;
+        try (FileReader reader = new FileReader(targetFile))
+        {
+            return JSON.getGson().fromJson(reader, type);
+        }
+        catch (Exception ex)
+        {
+            ex.printStackTrace();
+        }
+        return null;
+    }
+    <T> void writeObj(String name, Class<T> type, T data)
+    {
+        if (name == null)
+            return;
+        if (type == null)
+            return;
+        if (data == null)
+            return;
+        File targetFile = new File(this.dir, name);
+        try (FileWriter writer = new FileWriter(targetFile))
+        {
+            JSON.getGson().toJson(data, type, writer);
+        }
+        catch (Exception ex)
+        {
+            ex.printStackTrace();
+        }
+    }
+    <T> void editObj(String name, Class<T> type, UnaryOperator<T> edit)
+    {
+        T data = this.readObj(name, type);
+        if (data != null) try
+        {
+            data = edit.apply(data);
+        }
+        finally
+        {
+            this.writeObj(name, type, data);
+        }
+    }
 
-    <T> T read(String kind, String id, Class<T> type)
+    <T> T readSub(String kind, String id, Class<T> type)
     {
         if (kind == null)
             return null;
@@ -48,8 +98,7 @@ public class ScarletData
         }
         return null;
     }
-
-    <T> void write(String kind, String id, Class<T> type, T data)
+    <T> void writeSub(String kind, String id, Class<T> type, T data)
     {
         if (kind == null)
             return;
@@ -72,31 +121,59 @@ public class ScarletData
             ex.printStackTrace();
         }
     }
-
-    <T> void edit(String kind, String id, Class<T> type, UnaryOperator<T> edit)
+    <T> void editSub(String kind, String id, Class<T> type, UnaryOperator<T> edit)
     {
-        T data = this.read(kind, id, type);
+        T data = this.readSub(kind, id, type);
         if (data != null) try
         {
             data = edit.apply(data);
         }
         finally
         {
-            this.write(kind, id, type, data);
+            this.writeSub(kind, id, type, data);
         }
+    }
+
+    public GlobalMetadata globalMetadata()
+    {
+        return this.readObj("global.json", GlobalMetadata.class);
+    }
+    public void globalMetadata(GlobalMetadata globalMetadata)
+    {
+        this.writeObj("global.json", GlobalMetadata.class, globalMetadata);
+    }
+    public void globalMetadata(UnaryOperator<GlobalMetadata> edit)
+    {
+        this.editObj("global.json", GlobalMetadata.class, edit);
+    }
+    public String globalMetadata_getSnowflakeId(String userSnowflake)
+    {
+        ScarletData.GlobalMetadata globalMeta = this.globalMetadata();
+        if (globalMeta == null)
+            return null;
+        return globalMeta.getSnowflakeId(userSnowflake);
+    }
+    public ScarletData.GlobalMetadata globalMetadata_setSnowflakeId(String userSnowflake, String userId)
+    {
+        ScarletData.GlobalMetadata globalMeta = this.globalMetadata();
+        if (globalMeta == null)
+            globalMeta = new ScarletData.GlobalMetadata();
+        globalMeta.setSnowflakeId(userSnowflake, userId);
+        this.globalMetadata(globalMeta);
+        return globalMeta;
     }
 
     public UserMetadata userMetadata(String userId)
     {
-        return this.read("usr", userId, UserMetadata.class);
+        return this.readSub("usr", userId, UserMetadata.class);
     }
     public void userMetadata(String userId, UserMetadata userMetadata)
     {
-        this.write("usr", userId, UserMetadata.class, userMetadata);
+        this.writeSub("usr", userId, UserMetadata.class, userMetadata);
     }
     public void userMetadata(String userId, UnaryOperator<UserMetadata> edit)
     {
-        this.edit("usr", userId, UserMetadata.class, edit);
+        this.editSub("usr", userId, UserMetadata.class, edit);
     }
     public ScarletData.UserMetadata userMetadata_setSnowflake(String userId, String userSnowflake)
     {
@@ -107,18 +184,25 @@ public class ScarletData
         this.userMetadata(userId, userMeta);
         return userMeta;
     }
+    public String userMetadata_getSnowflake(String userId)
+    {
+        ScarletData.UserMetadata userMeta = this.userMetadata(userId);
+        if (userMeta == null)
+            return null;
+        return userMeta.userSnowflake;
+    }
 
     public AuditEntryMetadata auditEntryMetadata(String auditEntryId)
     {
-        return this.read("gaud", auditEntryId, AuditEntryMetadata.class);
+        return this.readSub("gaud", auditEntryId, AuditEntryMetadata.class);
     }
     public void auditEntryMetadata(String auditEntryId, AuditEntryMetadata auditEntryMetadata)
     {
-        this.write("gaud", auditEntryId, AuditEntryMetadata.class, auditEntryMetadata);
+        this.writeSub("gaud", auditEntryId, AuditEntryMetadata.class, auditEntryMetadata);
     }
     public void auditEntryMetadata(String auditEntryId, UnaryOperator<AuditEntryMetadata> edit)
     {
-        this.edit("gaud", auditEntryId, AuditEntryMetadata.class, edit);
+        this.editSub("gaud", auditEntryId, AuditEntryMetadata.class, edit);
     }
     public ScarletData.AuditEntryMetadata auditEntryMetadata_setTags(String auditEntryId, String[] entryTags)
     {
@@ -139,12 +223,34 @@ public class ScarletData
         return auditEntryMeta;
     }
 
+    public static class GlobalMetadata
+    {
+        public Map<String, String> userSnowflake2userId;
+        
+        public synchronized void setSnowflakeId(String userSnowflake, String userId)
+        {
+            Map<String, String> userSnowflake2userId = this.userSnowflake2userId;
+            if (userSnowflake2userId == null)
+                this.userSnowflake2userId = userSnowflake2userId = new HashMap<>();
+            if (!(userSnowflake2userId instanceof HashMap))
+                this.userSnowflake2userId = userSnowflake2userId = new HashMap<>(userSnowflake2userId);
+            userSnowflake2userId.put(userSnowflake, userId);
+        }
+        public synchronized String getSnowflakeId(String userSnowflake)
+        {
+            Map<String, String> userSnowflake2userId = this.userSnowflake2userId;
+            if (userSnowflake2userId == null)
+                return null;
+            return userSnowflake2userId.get(userSnowflake);
+        }
+    }
+
     public static class UserMetadata
     {
         public String userSnowflake;
         public String[] auditEntryIds;
         
-        public void addAuditEntryId(String auditEntryId)
+        public synchronized void addAuditEntryId(String auditEntryId)
         {
             if (auditEntryId == null)
                 return;
@@ -207,6 +313,11 @@ public class ScarletData
         { Gson gson = JSON.getGson(); return gson.fromJson(gson.toJsonTree(this.entry.getData()), type); }
         public <T> T getData(TypeToken<T> type)
         { Gson gson = JSON.getGson(); return gson.fromJson(gson.toJsonTree(this.entry.getData()), type); }
+    }
+    public void linkIdToSnowflake(String userId, String userSnowflake)
+    {
+        this.userMetadata_setSnowflake(userId, userSnowflake);
+        this.globalMetadata_setSnowflakeId(userSnowflake, userId);
     }
 
 }
