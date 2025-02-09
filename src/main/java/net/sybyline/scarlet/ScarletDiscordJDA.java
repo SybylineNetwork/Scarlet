@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,12 +33,15 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageReference;
+import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.GuildChannelUnion;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
@@ -53,10 +57,10 @@ import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.util.Pacer;
-import net.sybyline.scarlet.util.URLs;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.MiscUtils;
 
@@ -72,6 +76,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.load();
         this.jda = JDABuilder
             .createDefault(this.token)
+            .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
             .build();
         this.init();
@@ -99,11 +104,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
     final Scarlet scarlet;
     final File discordBotFile;
     final JDA jda;
-    String token, guildSf;
+    String token, guildSf, evidenceRoot;
+    Map<String, String> scarletPermission2roleSf = new HashMap<>();
     Map<String, String> auditType2channelSf = new HashMap<>();
     Map<String, Integer> auditType2color = new HashMap<>();
 
     static final String[] AUDIT_EVENT_IDS = MiscUtils.map(GroupAuditType.values(), String[]::new, GroupAuditType::id);
+    static final String[] SCARLET_PERMISSION_IDS = MiscUtils.map(ScarletPermission.values(), String[]::new, ScarletPermission::id);
 
     void init()
     {
@@ -151,7 +158,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "audit-event-type", "The VRChat Group Audit Log event type", true, true)
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
+                Commands.slash("set-permission-role", "Sets a given Scarlet-specific permission to be associated with a given Discord role")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
+                    .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
+                    .addOption(OptionType.ROLE, "discord-role", "The Discord role to use, or omit to remove entry"),
                 Commands.slash("config-info", "Shows information about the current configurstion")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(DefaultMemberPermissions.DISABLED),
+                Commands.message("submit-evidence")
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
             )
@@ -160,7 +175,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     public static class JDASettingsSpec
     {
-        public String token, guildSf = null;
+        public String token = null,
+                      guildSf = null,
+                      evidenceRoot = null;
+        public Map<String, String> scarletPermission2roleSf = new HashMap<>();
         public Map<String, String> auditType2channelSf = new HashMap<>();
         public Map<String, String> auditType2color = new HashMap<>();
     }
@@ -198,7 +216,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
         this.token = spec.token;
         this.guildSf = spec.guildSf;
-        this.auditType2channelSf = spec.auditType2channelSf;
+        this.evidenceRoot = spec.evidenceRoot;
+        this.scarletPermission2roleSf = spec.scarletPermission2roleSf == null ? new HashMap<>() : new HashMap<>(spec.scarletPermission2roleSf);
+        this.auditType2channelSf = spec.auditType2channelSf == null ? new HashMap<>() : new HashMap<>(spec.auditType2channelSf);
         Map<String, Integer> auditType2color = new HashMap<>();
         if (spec.auditType2color != null && !spec.auditType2color.isEmpty())
             spec.auditType2color.forEach((auditType, colorString) -> {
@@ -219,7 +239,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         JDASettingsSpec spec = new JDASettingsSpec();
         spec.token = this.token;
         spec.guildSf = this.guildSf;
-        spec.auditType2channelSf = this.auditType2channelSf;
+        spec.evidenceRoot = this.evidenceRoot;
+        spec.auditType2channelSf = new HashMap<>(this.auditType2channelSf);
+        spec.scarletPermission2roleSf = new HashMap<>(this.scarletPermission2roleSf);
         Map<String, String> auditType2color = new HashMap<>();
         if (this.auditType2color != null && this.auditType2color.isEmpty())
             this.auditType2color.forEach((auditType, color) -> auditType2color.put(auditType, Integer.toHexString(color)));
@@ -242,6 +264,156 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         JDAEvents()
         {
+        }
+
+        @Override
+        public void onMessageContextInteraction(MessageContextInteractionEvent event)
+        {
+            try
+            {
+                switch (event.getName())
+                {
+                case "submit-evidence": {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SUBMIT_EVIDENCE);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            event.reply("You do not have permission to submit event evidence.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+                    
+                    String evidenceRoot = ScarletDiscordJDA.this.evidenceRoot;
+                    
+                    if (evidenceRoot == null || (evidenceRoot = evidenceRoot.trim()).isEmpty())
+                    {
+                        event.reply("This feature is not enabled.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!event.getChannelType().isThread())
+                    {
+                        event.reply("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
+                        return;
+                    }
+                    Message message = event.getTarget();
+                    
+                    MessageReference ref = message.getMessageReference();
+                    
+                    if (ref == null)
+                    {
+                        event.reply("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    Message replyTarget = ref.getMessage();
+                    
+                    if (replyTarget == null)
+                    {
+                        replyTarget = ref.resolve().complete();
+                    }
+                    
+                    if (replyTarget == null)
+                    {
+                        event.reply("The target message is no longer available.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String[] parts = replyTarget
+                        .getButtons()
+                        .stream()
+                        .filter($ -> $.getId().startsWith("edit-tags:"))
+                        .findFirst()
+                        .map($ -> $.getId().split(":"))
+                        .orElse(null)
+                        ;
+                    
+                    if (parts == null)
+                    {
+                        event.reply("Could not determine audit event id.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    List<Message.Attachment> attachments = message.getAttachments();
+                    
+                    if (attachments.isEmpty())
+                    {
+                        event.reply("No attachments.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String auditEntryId = parts[1];
+                    
+                    event.deferReply(true).queue();
+                    InteractionHook deferred = event.getHook();
+                    
+                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
+                    if (auditEntryMeta == null || auditEntryMeta.entry == null)
+                    {
+                        deferred.sendMessage("Could not load audit event.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String auditEntryTargetId = auditEntryMeta.entry.getTargetId();
+                    
+                    File evidenceUserDir = new File(evidenceRoot, auditEntryTargetId);
+                    if (!evidenceUserDir.isDirectory())
+                        evidenceUserDir.mkdirs();
+                    
+                    String requesterSf = event.getUser().getId(),
+                           requesterDisplayName = event.getUser().getEffectiveName();
+                    OffsetDateTime timestamp = event.getTimeCreated();
+                    
+                    // TODO : better model for avoiding race conditions
+                    synchronized (auditEntryTargetId.intern())
+                    {
+                        
+                        ScarletData.UserMetadata auditEntryTargetUserMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId);
+                        if (auditEntryTargetUserMeta == null)
+                            auditEntryTargetUserMeta = new ScarletData.UserMetadata();
+                        
+                        // TODO : async ?
+                        
+                        for (Message.Attachment attachment : attachments)
+                        {
+                            String fileName = attachment.getFileName(),
+                                   attachmentUrl = attachment.getUrl(),
+                                   attachmentProxyUrl = attachment.getProxyUrl();
+                            
+                            File dest = new File(evidenceUserDir, fileName);
+                            if (dest.isFile())
+                            {
+                                deferred.sendMessageFormat("File '%s' already exists, skipping.", fileName).setEphemeral(true).queue();
+                            }
+                            else try
+                            {
+                                attachment.getProxy().downloadToFile(dest).join();
+                                
+                                auditEntryTargetUserMeta.addUserCaseEvidence(new ScarletData.EvidenceSubmission(auditEntryId, requesterSf, requesterDisplayName, timestamp, fileName, attachmentUrl, attachmentProxyUrl));
+                                
+                                deferred.sendMessageFormat("Saved '%s/%s'.", auditEntryTargetId, fileName).setEphemeral(true).queue();
+                                LOG.info(String.format("%s (<@%s>) saved evidence to '%s/%s'.", requesterDisplayName, requesterSf, auditEntryTargetId, fileName));
+                            }
+                            catch (Exception ex)
+                            {
+                                deferred.sendMessageFormat("Exception saving '%s'.", attachment.getFileName()).setEphemeral(true).queue();
+                                LOG.error("Exception whilst saving attachment", ex);
+                            }
+                        }
+                        
+                        ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId, auditEntryTargetUserMeta);
+                    
+                    }
+                    
+                } break;
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.printStackTrace();
+            }
         }
 
         @Override
@@ -268,6 +440,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     } break;
                     }
                 } break;
+                case "set-permission-role": {
+                    switch (event.getFocusedOption().getName())
+                    {
+                    case "scarlet-permission": {
+                        event.replyChoiceStrings(SCARLET_PERMISSION_IDS).queue();
+                    } break;
+                    }
+                } break;
                 }
             }
             catch (Exception ex)
@@ -279,7 +459,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onSlashCommandInteraction(SlashCommandInteractionEvent event)
         {
-            
             try
             {
                 switch (event.getName())
@@ -287,8 +466,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 case "create-or-update-moderation-tag": {
                     
                     String value = event.getOption("value").getAsString(),
-                           label = event.getOption("label", null, OptionMapping::getAsString),
-                           description = event.getOption("description", null, OptionMapping::getAsString);
+                           label = event.getOption("label", OptionMapping::getAsString),
+                           description = event.getOption("description", OptionMapping::getAsString);
                     
                     int result = ScarletDiscordJDA.this.scarlet.moderationTags.addOrUpdateTag(value, label, description);
                     
@@ -424,6 +603,32 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                         sb.append("[").append(auditEntryMeta.entry.getDescription()).append("](").append(messageLink).append(")");
                                     }
                                 }
+                            }
+                        }
+                    }
+                    
+                    if (userMeta.evidenceSubmissions != null && userMeta.evidenceSubmissions.length > 0)
+                    {
+                        sb.append("\n### Evidence submissions:");
+                        for (ScarletData.EvidenceSubmission evidenceSubmission : userMeta.evidenceSubmissions)
+                        {
+                            if (evidenceSubmission != null)
+                            {
+                                sb.append("\n[`").append(evidenceSubmission.fileName).append("`](<").append(evidenceSubmission.url).append(">)");
+                                sb.append(" [(proxy)](<").append(evidenceSubmission.proxyUrl).append(">)");
+                                
+                                ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(evidenceSubmission.auditEntryId);
+                                if (auditEntryMeta != null && auditEntryMeta.hasSomeUrl())
+                                {
+                                    sb.append(" for [`").append(evidenceSubmission.auditEntryId).append("`](<").append(auditEntryMeta.getSomeUrl()).append(">)");
+                                }
+                                else
+                                {
+                                    sb.append(" for `").append(evidenceSubmission.auditEntryId).append("`");
+                                }
+                                
+                                sb.append(" from ").append(evidenceSubmission.submitterDisplayName).append(" (<@").append(evidenceSubmission.submitterSnowflake).append(">)");
+                                sb.append(" at <t:").append(Long.toUnsignedString(evidenceSubmission.submissionTime.toEpochSecond())).append(":f>");
                             }
                         }
                     }
@@ -581,6 +786,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 case "set-audit-channel": {
                     String auditType0 = event.getOption("audit-event-type").getAsString();
                     GroupAuditType auditType = GroupAuditType.of(auditType0);
+                    if (auditType == null)
+                    {
+                        event.replyFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
+                        return;
+                    }
                     OptionMapping channel0 = event.getOption("discord-channel");
 
                     if (channel0 == null)
@@ -595,15 +805,34 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     {
                         event.replyFormat("The channel %s doesn't support message sending", channel.getName()).setEphemeral(true).queue();
                     }
-                    else if (auditType == null)
-                    {
-                        event.replyFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
-                    }
                     else
                     {
                         ScarletDiscordJDA.this.setAuditChannel(auditType, channel);
-                        event.replyFormat("Associating VRChat group audit log event type %s (%s) with channel <#%s>", channel.getName(), auditType.title, auditType.id, channel.getId()).setEphemeral(true).queue();
+                        event.replyFormat("Associating VRChat group audit log event type %s (%s) with channel <#%s>", auditType.title, auditType.id, channel.getId()).setEphemeral(true).queue();
                     }
+                    
+                } break;
+                case "set-permission-role": {
+                    String scarletPermission0 = event.getOption("scarlet-permission").getAsString();
+                    ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
+                    if (scarletPermission == null)
+                    {
+                        event.replyFormat("%s isn't a valid Scarlet permission", scarletPermission0).setEphemeral(true).queue();
+                        return;
+                    }
+                    OptionMapping role0 = event.getOption("discord-role");
+                    
+                    if (role0 == null)
+                    {
+                        ScarletDiscordJDA.this.setPermissionRole(scarletPermission, null);
+                        event.replyFormat("Unassociating Scarlet permission %s (%s) from any roles", scarletPermission.title, scarletPermission.id).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    Role role = role0.getAsRole();
+                    
+                    ScarletDiscordJDA.this.setPermissionRole(scarletPermission, role);
+                    event.replyFormat("Associating Scarlet permission %s (%s) with role <@%s>", scarletPermission.title, scarletPermission.id, role.getId()).setEphemeral(true).queue();
                     
                 } break;
                 }
@@ -631,6 +860,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 switch (parts[0])
                 {
                 case "edit-tags": {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SET_TAGS);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            event.reply("You do not have permission to select event tags.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
                     
                     // TODO : set default selected
                     
@@ -663,6 +902,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 } break;
                 case "edit-desc": {
                     
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SET_DESCRIPTION);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            event.reply("You do not have permission to set event descriptions.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+                    
                     String auditEntryId = parts[1];
                     
                     TextInput.Builder ti = TextInput
@@ -679,6 +928,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                 } break;
                 case "vrchat-report": {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_USE_REPORT_LINK);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            event.reply("You do not have permission to use the event report link.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
                     
                     String auditEntryId = parts[1];
                     
@@ -714,10 +973,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     String reportDesc = metaDescription;
                     if (metaTags != null && metaTags.length > 0)
                     {
-                        reportDesc = reportDesc == null ? "" : (reportDesc + "\r\n\r\nUser's Group internal moderation tags:");
+                        if (reportDesc == null)
+                            reportDesc = "";
+                        else
+                            reportDesc = reportDesc + "<br><br>";
+                        reportDesc = reportDesc + "User's Group internal moderation tags:<ul>";
                         
                         for (String metaTag : metaTags)
-                            reportDesc = reportDesc + "\r\n- " + ScarletDiscordJDA.this.scarlet.moderationTags.getTagLabel(metaTag);
+                            reportDesc = reportDesc + "<li>" + ScarletDiscordJDA.this.scarlet.moderationTags.getTagLabel(metaTag) + "</li>";
+                        reportDesc = reportDesc + "</ul>";
                     }
                     
                     String requestingUserId = eventUserId != null ? eventUserId : actorUserId;
@@ -727,8 +991,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         VRChatHelpDeskURLs.ModerationCategory.USER_REPORT,
                         requestingUserId,
                         targetUserId,
-                        URLs.encode(reportSubject),
-                        URLs.encode(reportDesc)
+                        reportSubject,
+                        reportDesc
                     );
                     
                     StringBuilder msg = new StringBuilder();
@@ -853,6 +1117,28 @@ public class ScarletDiscordJDA implements ScarletDiscord
             LOG.info(String.format("Unsetting audit channel for %s (%s)", auditType.title, auditType.id));
         }
         this.save();
+    }
+
+    public void setPermissionRole(ScarletPermission scarletPermission, Role role)
+    {
+        if (role != null)
+        {
+            this.scarletPermission2roleSf.put(scarletPermission.id, role.getId());
+            LOG.info(String.format("Setting role for Scarlet permission %s (%s) to %s (%s)", scarletPermission.title, scarletPermission.id, role.getName(), "<@"+role.getId()+">"));
+        }
+        else
+        {
+            this.scarletPermission2roleSf.remove(scarletPermission.id);
+            LOG.info(String.format("Unsetting role for Scarlet permission %s (%s)", scarletPermission.title, scarletPermission.id));
+        }
+        this.save();
+    }
+
+    public String getPermissionRole(ScarletPermission scarletPermission)
+    {
+        if (scarletPermission == null)
+            return null;
+        return this.scarletPermission2roleSf.get(scarletPermission.id);
     }
 
     @FunctionalInterface interface CondEmit { Message emit(String channelSf, Guild guild, TextChannel channel); }

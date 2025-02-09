@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.lang.reflect.Type;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -225,6 +226,10 @@ public class ScarletData
 
     public static class GlobalMetadata
     {
+        public GlobalMetadata()
+        {
+        }
+        
         public Map<String, String> userSnowflake2userId;
         
         public synchronized void setSnowflakeId(String userSnowflake, String userId)
@@ -247,8 +252,13 @@ public class ScarletData
 
     public static class UserMetadata
     {
+        public UserMetadata()
+        {
+        }
+        
         public String userSnowflake;
         public String[] auditEntryIds;
+        public EvidenceSubmission[] evidenceSubmissions;
         
         public synchronized void addAuditEntryId(String auditEntryId)
         {
@@ -260,10 +270,49 @@ public class ScarletData
             else
                 (this.auditEntryIds = Arrays.copyOf(auditEntryIds, auditEntryIds.length + 1))[auditEntryIds.length] = auditEntryId;
         }
+        
+        public synchronized void addUserCaseEvidence(EvidenceSubmission evidenceSubmission)
+        {
+            if (evidenceSubmission == null)
+                return;
+            EvidenceSubmission[] evidenceSubmissions = this.evidenceSubmissions;
+            if (evidenceSubmissions == null)
+                this.evidenceSubmissions = new EvidenceSubmission[]{evidenceSubmission};
+            else
+                (this.evidenceSubmissions = Arrays.copyOf(evidenceSubmissions, evidenceSubmissions.length + 1))[evidenceSubmissions.length] = evidenceSubmission;
+        }
+    }
+    public static class EvidenceSubmission
+    {
+        public EvidenceSubmission(String auditEntryId, String submitterSnowflake, String submitterDisplayName, OffsetDateTime submissionTime, String fileName, String url, String proxyUrl)
+        {
+            this.auditEntryId = auditEntryId;
+            this.submitterSnowflake = submitterSnowflake;
+            this.submitterDisplayName = submitterDisplayName;
+            this.submissionTime = submissionTime;
+            this.fileName = fileName;
+            this.url = url;
+            this.proxyUrl = proxyUrl;
+        }
+        public EvidenceSubmission()
+        {
+        }
+        
+        public String auditEntryId;
+        public String submitterSnowflake;
+        public String submitterDisplayName;
+        public OffsetDateTime submissionTime;
+        public String fileName;
+        public String url;
+        public String proxyUrl;
     }
 
     public static class AuditEntryMetadata
     {
+        public AuditEntryMetadata()
+        {
+        }
+        
         public String guildSnowflake;
         public String channelSnowflake;
         public String messageSnowflake;
@@ -302,6 +351,11 @@ public class ScarletData
         { return !this.hasThread() ? null : String.format("%s/%s", this.guildSnowflake, this.threadSnowflake); }
         public String getThreadUrl()
         { return !this.hasThread() ? null : String.format("https://discord.com/channels/%s/%s", this.guildSnowflake, this.threadSnowflake); }
+
+        public boolean hasSomeUrl()
+        { return this.hasThread() || this.hasMessage() || this.hasAuxMessage(); }
+        public String getSomeUrl()
+        { return this.hasThread() ? this.getThreadUrl() : this.hasMessage() ? this.getMessageUrl() : this.hasAuxMessage() ? this.getAuxMessageUrl() : null; }
         
         public boolean hasNonEmptyData()
         { Object data = this.entry.getData(); return data != null && data instanceof Map && !((Map<?, ?>)data).isEmpty(); }

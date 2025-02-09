@@ -30,7 +30,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.3.2",
+        VERSION = "0.3.3",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = String.format("%s/%s %s", USER_AGENT_NAME, VERSION, DEV_DISCORD),

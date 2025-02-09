@@ -8,17 +8,17 @@ public interface VRChatHelpDeskURLs
         StringBuilder sb = new StringBuilder();
         sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=360006750513");
         if (requesterEmail != null)
-            sb.append("&tf_anonymous_requester_email=").append(requesterEmail);
+            sb.append("&tf_anonymous_requester_email=").append(escape(requesterEmail, false));
         if (supportCategory != null)
-            sb.append("&tf_1500001394041=").append(supportCategory.value);
+            sb.append("&tf_1500001394041=").append(escape(supportCategory.value, false));
         if (requesterUserId != null)
-            sb.append("&tf_360057451993=").append(requesterUserId);
+            sb.append("&tf_360057451993=").append(escape(requesterUserId, false));
         if (supportPlatform != null)
-            sb.append("&tf_1500001394021=").append(supportPlatform.value);
+            sb.append("&tf_1500001394021=").append(escape(supportPlatform.value, false));
         if (subject != null)
-            sb.append("&tf_subject=").append(subject);
+            sb.append("&tf_subject=").append(escape(subject, false));
         if (description != null)
-            sb.append("&tf_description=").append(description);
+            sb.append("&tf_description=").append(escape(description, true));
         return sb.toString();
     }
     public enum SupportCategory
@@ -77,17 +77,17 @@ public interface VRChatHelpDeskURLs
         StringBuilder sb = new StringBuilder();
         sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=1500000182242");
         if (requesterEmail != null)
-            sb.append("&tf_anonymous_requester_email=").append(requesterEmail);
+            sb.append("&tf_anonymous_requester_email=").append(escape(requesterEmail, false));
         if (moderationCategory != null)
-            sb.append("&tf_360056455174=").append(moderationCategory.value);
+            sb.append("&tf_360056455174=").append(escape(moderationCategory.value, false));
         if (requesterUserId != null)
-            sb.append("&tf_360057451993=").append(requesterUserId);
+            sb.append("&tf_360057451993=").append(escape(requesterUserId, false));
         if (targetUserId != null)
-            sb.append("&tf_1500001445142=").append(targetUserId);
+            sb.append("&tf_1500001445142=").append(escape(targetUserId, false));
         if (subject != null)
-            sb.append("&tf_subject=").append(subject);
+            sb.append("&tf_subject=").append(escape(subject, false));
         if (description != null)
-            sb.append("&tf_description=").append(description);
+            sb.append("&tf_description=").append(escape(description, true));
         return sb.toString();
     }
     public enum ModerationCategory
@@ -106,19 +106,19 @@ public interface VRChatHelpDeskURLs
     static String newSecurityRequest(String requesterEmail, String subject, String vulnerability, String reproduce, String impact, String description, Boolean confirmation)
     {
         StringBuilder sb = new StringBuilder();
-        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=1500000182242");
+        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=1500001130621");
         if (requesterEmail != null)
-            sb.append("&tf_anonymous_requester_email=").append(requesterEmail);
+            sb.append("&tf_anonymous_requester_email=").append(escape(requesterEmail, false));
         if (subject != null)
             sb.append("&tf_subject=").append(subject);
         if (vulnerability != null)
-            sb.append("&tf_14871541233043=").append(vulnerability);
+            sb.append("&tf_14871541233043=").append(escape(vulnerability, false));
         if (reproduce != null)
-            sb.append("&tf_14871567333267=").append(reproduce);
+            sb.append("&tf_14871567333267=").append(escape(reproduce, false));
         if (impact != null)
-            sb.append("&tf_14871574761875=").append(impact);
+            sb.append("&tf_14871574761875=").append(escape(impact, false));
         if (description != null)
-            sb.append("&tf_description=").append(description);
+            sb.append("&tf_description=").append(escape(description, true));
         if (confirmation != null)
             sb.append("&tf_1900000428585=").append(confirmation);
         return sb.toString();
@@ -127,20 +127,29 @@ public interface VRChatHelpDeskURLs
     static String newRecoveryRequest(String requesterEmail, Boolean confirmation, String requesterUserId, String subject, String description, String recoveryToken)
     {
         StringBuilder sb = new StringBuilder();
-        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=1500000182242");
+        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=1900000725685");
         if (requesterEmail != null)
-            sb.append("&tf_anonymous_requester_email=").append(requesterEmail);
+            sb.append("&tf_anonymous_requester_email=").append(escape(requesterEmail, false));
         if (confirmation != null)
             sb.append("&tf_1900003404965=").append(confirmation);
         if (requesterUserId != null)
-            sb.append("&tf_360057451993=").append(requesterUserId);
+            sb.append("&tf_360057451993=").append(escape(requesterUserId, false));
         if (subject != null)
-            sb.append("&tf_subject=").append(subject);
+            sb.append("&tf_subject=").append(escape(subject, false));
         if (description != null)
-            sb.append("&tf_description=").append(description);
+            sb.append("&tf_description=").append(escape(description, true));
         if (recoveryToken != null)
-            sb.append("&tf_1900004384185=").append(recoveryToken);
+            sb.append("&tf_1900004384185=").append(escape(recoveryToken, false));
         return sb.toString();
+    }
+
+    static String escape(String string, boolean html)
+    {
+        if (string == null)
+            return null;
+        if (html)
+            string = string.replaceAll("\\R", "<br>");
+        return URLs.encode(string);
     }
 
 }
