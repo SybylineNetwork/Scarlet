@@ -3,6 +3,7 @@ package net.sybyline.scarlet.util;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,7 +48,18 @@ public class MavenDepsLoader
         if (!urlString.startsWith(depsUrlPrefix) || !urlString.endsWith(depsUrlSuffix))
             return;
         
-        Path jarPath = Paths.get(urlString.substring(depsUrlPrefix.length(), urlString.length() - depsUrlSuffix.length())),
+        String unescapedPath;
+        try
+        {
+            unescapedPath = URLDecoder.decode(urlString.substring(depsUrlPrefix.length(), urlString.length() - depsUrlSuffix.length()), "utf-8");
+        }
+        catch (Exception ex)
+        {
+            throw new Error(ex);
+        }
+        
+        
+        Path jarPath = Paths.get(unescapedPath),
              jarDir = jarPath.getParent(),
              depsDir = jarDir.resolve("libraries");
         

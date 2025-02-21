@@ -35,17 +35,17 @@ public class Scarlet implements Closeable
 
     static
     {
-        String javaVersion = System.getProperty("java.version");
+        String javaVersion = System.getProperty("java.specification.version");
         if (javaVersion == null)
-            throw new Error("System property 'java.version' is missing?!?!?!");
-        if (!javaVersion.startsWith("1.8"))
-            throw new Error("This application is designed to run on Java 8");
+            System.err.println("System property 'java.specification.version' is missing?!?!?!");
+        else if (!"1.8".equals(javaVersion))
+            System.err.println("This application was compiled to run on Java 8");
     }
 
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.1",
+        VERSION = "0.4.2",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,

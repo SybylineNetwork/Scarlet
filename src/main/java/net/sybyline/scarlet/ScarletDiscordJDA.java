@@ -377,12 +377,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
             save = true;
         }
         
-        if (spec.audioChannelSf == null)
-        {
-            spec.audioChannelSf = this.scarlet.settings.requireInput("Discord audio channel snowflake", false);
-            save = true;
-        }
-        
         if (save) this.save(spec);
         
         this.token = spec.token;

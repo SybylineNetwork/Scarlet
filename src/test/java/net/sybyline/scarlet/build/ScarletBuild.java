@@ -109,6 +109,7 @@ public class ScarletBuild
             bat.append("@rem set JAVA_HOME=").println();
             bat.append("@rem set PATH=%JAVA_HOME%\\bin;%JAVA_HOME%\\jre\\bin;%JAVA_HOME%\\jre\\bin\\server;%JAVA_HOME%\\bin\\server;%PATH%").println();
             bat.append("java -jar scarlet-").append(Scarlet.VERSION).append(".jar").println();
+            bat.append("pause").println();
         }
         
         System.out.println("Copying release files");

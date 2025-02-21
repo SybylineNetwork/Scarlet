@@ -119,6 +119,7 @@ Scarlet requires some permissions above the bare defaults:
 2. In the `Bot` tab:
     - Enable the `Server Members` and `Presence` intents in the `Privileged Gateway Intents` area.<br>
       ![setup privileged gateway intents](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_privileged_gateway_intents.png?raw=true)
+3. Invite the bot to your server
 
 ### Setting up the VRChat group
 

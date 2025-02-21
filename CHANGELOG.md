@@ -4,6 +4,13 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.2
+  - Added important step to installation instructions
+  - Added `pause` line to runner
+  - Removed input prompt for Discord audio channel snowflake
+  - Fixed bug in dependency downloader not properly unescaping characters
+  - Changed Java version check to warn instead of terminating application
+
 ## 0.4.1
   - Added logger thread and log files
   - Added importing watched groups legacy CSV via attachment submissions
