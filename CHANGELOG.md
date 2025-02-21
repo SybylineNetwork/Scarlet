@@ -1,0 +1,34 @@
+
+# Changelog
+
+## Unreleased
+  - Pending: StaffList
+
+## 0.4.0
+  - Added installation and usage instructions to README.md
+  - Added CHANGELOG.md
+  - Added SETTINGS.md
+  - Added automation for building a zip
+  - Added runtime check for JVM's Java version
+  - Added ability to automatically generate TOTP code from secret
+  - Added link and message reference to group audit event `group.instance.close`
+  - Added TTSService to announce events in a Discord voice channel
+  - Added VRChat log tailing/parsing
+  - Added Watched Groups, which generate TTS announcements when members' joining is detected
+  - Removed unused code and resources from automatic dependency downloader
+  - Renamed `submit-evidence` Discord message command to `submit-attachments`
+  - Fixed audit event embed color overrides being ignored
+  - Fixed typos
+
+## 0.3.3
+  - Fixed escaping for VRChat Help Desk autofill link generation
+  - Added role-associated permission system for interactions
+  - Added archiver for evidence submission
+
+## 0.3.2
+  - Added button to autofill VRChat Help Desk report form
+  - Added autodownloader for dependencies
+  - Added builder for Windows
+
+## 0.3.1
+  - Initial public commit

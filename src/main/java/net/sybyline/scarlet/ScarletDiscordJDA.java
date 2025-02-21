@@ -4,13 +4,22 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,12 +40,15 @@ import io.github.vrchatapi.model.User;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageReference;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.AudioChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.entities.channel.unions.GuildChannelUnion;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
@@ -57,8 +69,11 @@ import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.FileUpload;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
@@ -73,11 +88,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.scarlet = scarlet;
         this.discordBotFile = discordBotFile;
+        this.audio = new JDAAudioSendingHandler();
         this.load();
         this.jda = JDABuilder
             .createDefault(this.token)
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
+            .enableCache(CacheFlag.VOICE_STATE)
             .build();
         this.init();
     }
@@ -103,8 +120,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     final Scarlet scarlet;
     final File discordBotFile;
+    final JDAAudioSendingHandler audio;
     final JDA jda;
-    String token, guildSf, evidenceRoot;
+    String token, guildSf, audioChannelSf, evidenceRoot;
     Map<String, String> scarletPermission2roleSf = new HashMap<>();
     Map<String, String> auditType2channelSf = new HashMap<>();
     Map<String, Integer> auditType2color = new HashMap<>();
@@ -128,8 +146,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "value", "The internal name of the tag", true, true)
-                    .addOption(OptionType.STRING, "label", "The VRChat Group Audit Log event type")
-                    .addOption(OptionType.STRING, "description", "The VRChat Group Audit Log event type"),
+                    .addOption(OptionType.STRING, "label", "The display name of the tag")
+                    .addOption(OptionType.STRING, "description", "The description text of the tag"),
                 Commands.slash("delete-moderation-tag", "Deletes a moderation tag")
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
@@ -158,25 +176,169 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "audit-event-type", "The VRChat Group Audit Log event type", true, true)
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
+                Commands.slash("set-voice-channel", "Sets a given voice channel as the channel in which to announce TTS messages")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
+                    .addOption(OptionType.CHANNEL, "discord-channel", "The Discord voice channel to use, or omit to remove entry"),
                 Commands.slash("set-permission-role", "Sets a given Scarlet-specific permission to be associated with a given Discord role")
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
                     .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
                     .addOption(OptionType.ROLE, "discord-role", "The Discord role to use, or omit to remove entry"),
-                Commands.slash("config-info", "Shows information about the current configurstion")
+                Commands.slash("config-info", "Shows information about the current configuration")
                     .setGuildOnly(true)
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED),
-                Commands.message("submit-evidence")
+                Commands.message("submit-attachments")
                     .setGuildOnly(true)
+                    .setNameLocalizations(MiscUtils.genLocalized($ -> "Submit Attachments"))
                     .setDefaultPermissions(DefaultMemberPermissions.DISABLED)
             )
             .complete();
+        this.audio.init();
+    }
+
+    @Override
+    public boolean submitAudio(File file)
+    {
+        return this.audio.submitAudio(file);
+    }
+
+    static final int BYTES_PER_20MS = 3840; // 20ms * (48000 frames/second) * (2 samples/frame) * (2 bytes/sample)
+    class JDAAudioSendingHandler implements AudioSendHandler
+    {
+
+        boolean submitAudio(File file)
+        {
+            AudioManager audioManager = this.audioManager;
+            if (audioManager == null || !audioManager.isConnected())
+                return false;
+            List<byte[]> buffersToAdd = new ArrayList<>();
+            try (AudioInputStream ais = AudioSystem.getAudioInputStream(file))
+            {
+                AudioInputStream ais0 = null;
+                try
+                {
+                    if (AudioSendHandler.INPUT_FORMAT.matches(ais.getFormat()))
+                    {
+                        ais0 = ais;
+                    }
+                    else if (AudioSystem.isConversionSupported(AudioSendHandler.INPUT_FORMAT, ais.getFormat()))
+                    {
+                        ais0 = AudioSystem.getAudioInputStream(AudioSendHandler.INPUT_FORMAT, ais);
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                    while (ais0.available() > 0)
+                    {
+                        byte[] buffer = new byte[BYTES_PER_20MS];
+                        for
+                        (
+                            int read = ais0.read(buffer),
+                                total = read;
+                            total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1;
+                            total += read
+                        );
+                        buffersToAdd.add(buffer);
+                    }
+                }
+                finally
+                {
+                    if (ais0 != ais)
+                        MiscUtils.close(ais0);
+                }
+            }
+            catch (Exception ex)
+            {
+                ex.printStackTrace();
+                return false;
+            }
+            if (buffersToAdd.isEmpty())
+                return true;
+            synchronized (this)
+            {
+                this.buffers.addAll(buffersToAdd);
+            }
+            return true;
+        }
+
+        void init()
+        {
+            String guildSf = ScarletDiscordJDA.this.guildSf;
+            Guild guild = ScarletDiscordJDA.this.jda.getGuildById(guildSf);
+            AudioManager audioManager = guild.getAudioManager();
+            audioManager.setAutoReconnect(true);
+            audioManager.setConnectionListener(null);
+            audioManager.setConnectTimeout(10_000L);
+            audioManager.setReceivingHandler(null);
+            audioManager.setSelfDeafened(true);
+            audioManager.setSelfMuted(false);
+            audioManager.setSendingHandler(this);
+            // audioManager.setSpeakingMode(SpeakingMode.);
+            this.audioManager = audioManager;
+            this.updateChannel();
+        }
+
+        void updateChannel()
+        {
+            String guildSf = ScarletDiscordJDA.this.guildSf,
+                   audioChannelSf = ScarletDiscordJDA.this.audioChannelSf;
+            Guild guild = ScarletDiscordJDA.this.jda.getGuildById(guildSf);
+            AudioManager audioManager = this.audioManager;
+            if (audioChannelSf == null)
+            {
+                this.audioChannel = null;
+                if (audioManager != null)
+                {
+                    audioManager.closeAudioConnection();
+                    this.buffers.clear();
+                }
+            }
+            else
+            {
+                AudioChannel audioChannel = guild.getVoiceChannelById(audioChannelSf);
+                this.audioChannel = audioChannel;
+                if (audioManager != null)
+                {
+                    if (audioChannel != null)
+                    {
+                        audioManager.openAudioConnection(audioChannel);
+                        this.buffers.clear();
+                    }
+                    else
+                    {
+                        audioManager.closeAudioConnection();
+                        this.buffers.clear();
+                    }
+                }
+            }
+        }
+
+        AudioManager audioManager;
+        AudioChannel audioChannel;
+        final Queue<byte[]> buffers = new ConcurrentLinkedQueue<>();
+
+        @Override
+        public boolean canProvide()
+        {
+            return !this.buffers.isEmpty();
+        }
+
+        @Override
+        public ByteBuffer provide20MsAudio()
+        {
+            byte[] data = this.buffers.poll();
+            return data == null ? null : ByteBuffer.wrap(data);
+        }
+
     }
 
     public static class JDASettingsSpec
     {
         public String token = null,
                       guildSf = null,
+                      audioChannelSf = null,
                       evidenceRoot = null;
         public Map<String, String> scarletPermission2roleSf = new HashMap<>();
         public Map<String, String> auditType2channelSf = new HashMap<>();
@@ -212,10 +374,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
             save = true;
         }
         
+        if (spec.audioChannelSf == null)
+        {
+            spec.audioChannelSf = this.scarlet.settings.requireInput("Discord audio channel snowflake", false);
+            save = true;
+        }
+        
         if (save) this.save(spec);
         
         this.token = spec.token;
         this.guildSf = spec.guildSf;
+        this.audioChannelSf = spec.audioChannelSf;
         this.evidenceRoot = spec.evidenceRoot;
         this.scarletPermission2roleSf = spec.scarletPermission2roleSf == null ? new HashMap<>() : new HashMap<>(spec.scarletPermission2roleSf);
         this.auditType2channelSf = spec.auditType2channelSf == null ? new HashMap<>() : new HashMap<>(spec.auditType2channelSf);
@@ -239,6 +408,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         JDASettingsSpec spec = new JDASettingsSpec();
         spec.token = this.token;
         spec.guildSf = this.guildSf;
+        spec.audioChannelSf = this.audioChannelSf;
         spec.evidenceRoot = this.evidenceRoot;
         spec.auditType2channelSf = new HashMap<>(this.auditType2channelSf);
         spec.scarletPermission2roleSf = new HashMap<>(this.scarletPermission2roleSf);
@@ -273,14 +443,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
             {
                 switch (event.getName())
                 {
-                case "submit-evidence": {
+                case "submit-attachments": {
                     
                     String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SUBMIT_EVIDENCE);
                     if (roleSnowflake != null)
                     {
                         if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
                         {
-                            event.reply("You do not have permission to submit event evidence.").setEphemeral(true).queue();
+                            event.reply("You do not have permission to submit event attachments.").setEphemeral(true).queue();
                             return;
                         }
                     }
@@ -812,6 +982,32 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     
                 } break;
+                case "set-voice-channel": {
+                    OptionMapping channel0 = event.getOption("discord-channel");
+
+                    if (channel0 == null)
+                    {
+                        ScarletDiscordJDA.this.audioChannelSf = null;
+                        event.reply("Disabling/disconnecting from voice channel").setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.audio.updateChannel();
+                        ScarletDiscordJDA.this.save();
+                        return;
+                    }
+                    
+                    GuildChannelUnion channel = channel0.getAsChannel();
+                    if (channel.getType() != ChannelType.VOICE)
+                    {
+                        event.replyFormat("The channel %s isn't a voice channel", channel.getName()).setEphemeral(true).queue();
+                    }
+                    else
+                    {
+                        ScarletDiscordJDA.this.audioChannelSf = channel.getId();
+                        event.replyFormat("Enabling/connecting from voice channel <#%s>", channel.getId()).setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.audio.updateChannel();
+                        ScarletDiscordJDA.this.save();
+                    }
+                    
+                } break;
                 case "set-permission-role": {
                     String scarletPermission0 = event.getOption("scarlet-permission").getAsString();
                     ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
@@ -1091,7 +1287,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 String content = actorMeta == null || actorMeta.userSnowflake == null ? ("Unknown Discord id for actor "+auditEntryMeta.entry.getActorDisplayName()) : ("<@"+actorMeta.userSnowflake+">");
                 if (auditEntryMeta.entryTags != null && auditEntryMeta.entryTags.length > 0)
                 {
-                    String joined = MiscUtils.stream(auditEntryMeta.entryTags).map(ScarletDiscordJDA.this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
+                    String joined = Arrays.stream(auditEntryMeta.entryTags).map(ScarletDiscordJDA.this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
                     content = content + "\n### Tags:\n" + joined;
                 }
                 if (auditEntryMeta.entryDescription != null && !auditEntryMeta.entryDescription.trim().isEmpty())
@@ -1163,7 +1359,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         EmbedBuilder embed = new EmbedBuilder()
             .setDescription(entry.getDescription())
-            .setColor(GroupAuditType.color(entry.getEventType()))
+            .setColor(GroupAuditType.color(this.auditType2color, entry.getEventType()))
             .setTimestamp(entry.getCreatedAt())
             .setAuthor(entry.getActorDisplayName(), "https://vrchat.com/home/user/"+entry.getActorId())
             .setFooter(ScarletDiscord.FOOTER_PREFIX+entry.getId())
@@ -1269,13 +1465,27 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitInstanceCreate(Scarlet scarlet, AuditEntryMetadata entryMeta, String location)
     {
+        scarlet.data.liveInstancesMetadata_setLocationAudit(location, entryMeta.entry.getId());
         this.condEmitEmbed(entryMeta, true, "Instance Open", "https://vrchat.com/home/launch?worldId="+location.replaceFirst(":", "&instanceId="), null, null);
     }
 
     @Override
     public void emitInstanceClose(Scarlet scarlet, AuditEntryMetadata entryMeta, String location)
     {
-        this.condEmitEmbed(entryMeta, true, "Instance Close", null, null, null);
+        String prevAuditEntryId = scarlet.data.liveInstancesMetadata_getLocationAudit(location, true);
+        AuditEntryMetadata prevEntryMeta = prevAuditEntryId == null ? null : scarlet.data.auditEntryMetadata(prevAuditEntryId);
+        this.condEmit(entryMeta, (channelSf, guild, channel) ->
+        {
+            boolean hasPrev = prevEntryMeta != null && prevEntryMeta.hasMessage();
+            MessageCreateAction mca = channel
+                .sendMessageEmbeds(this
+                    .embed(entryMeta.entry, true)
+                    .setTitle("Instance Close", hasPrev ? prevEntryMeta.getMessageUrl() : null)
+                    .build());
+            if (hasPrev && Objects.equals(channelSf, prevEntryMeta.channelSnowflake))
+                mca.mentionRepliedUser(false).setMessageReference(prevEntryMeta.messageSnowflake);
+            return mca.complete();
+        });
     }
 
     @Override

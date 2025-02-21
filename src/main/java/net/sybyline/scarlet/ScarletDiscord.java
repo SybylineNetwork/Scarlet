@@ -1,6 +1,7 @@
 package net.sybyline.scarlet;
 
 import java.io.Closeable;
+import java.io.File;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,8 @@ public interface ScarletDiscord extends Closeable
     String FOOTER_PREFIX = String.format("%s %s \u2727 ", Scarlet.NAME, Scarlet.VERSION);
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/Discord");
+
+    public boolean submitAudio(File file);
 
     public default void process(Scarlet scarlet, GroupAuditLogEntry entry)
     {

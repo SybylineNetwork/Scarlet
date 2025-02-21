@@ -164,6 +164,38 @@ public class ScarletData
         return globalMeta;
     }
 
+    public LiveInstancesMetadata liveInstancesMetadata()
+    {
+        return this.readObj("live.json", LiveInstancesMetadata.class);
+    }
+    public void liveInstancesMetadata(LiveInstancesMetadata liveInstancesMeta)
+    {
+        this.writeObj("live.json", LiveInstancesMetadata.class, liveInstancesMeta);
+    }
+    public void liveInstancesMetadata(UnaryOperator<LiveInstancesMetadata> edit)
+    {
+        this.editObj("live.json", LiveInstancesMetadata.class, edit);
+    }
+    public String liveInstancesMetadata_getLocationAudit(String location, boolean remove)
+    {
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstancesMetadata();
+        if (liveInstancesMeta == null)
+            return null;
+        String auditEntryId = liveInstancesMeta.getLocationAudit(location, remove);
+        if (remove && auditEntryId != null)
+            this.liveInstancesMetadata(liveInstancesMeta);
+        return auditEntryId;
+    }
+    public ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationAudit(String location, String auditEntryId)
+    {
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstancesMetadata();
+        if (liveInstancesMeta == null)
+            liveInstancesMeta = new ScarletData.LiveInstancesMetadata();
+        liveInstancesMeta.setLocationAudit(location, auditEntryId);
+        this.liveInstancesMetadata(liveInstancesMeta);
+        return liveInstancesMeta;
+    }
+
     public UserMetadata userMetadata(String userId)
     {
         return this.readSub("usr", userId, UserMetadata.class);
@@ -247,6 +279,34 @@ public class ScarletData
             if (userSnowflake2userId == null)
                 return null;
             return userSnowflake2userId.get(userSnowflake);
+        }
+    }
+
+    public static class LiveInstancesMetadata
+    {
+        public LiveInstancesMetadata()
+        {
+        }
+        
+        public Map<String, String> location2AuditEntryId;
+        
+        public synchronized void setLocationAudit(String location, String auditEntryId)
+        {
+            Map<String, String> location2AuditEntryId = this.location2AuditEntryId;
+            if (location2AuditEntryId == null)
+                this.location2AuditEntryId = location2AuditEntryId = new HashMap<>();
+            if (!(location2AuditEntryId instanceof HashMap))
+                this.location2AuditEntryId = location2AuditEntryId = new HashMap<>(location2AuditEntryId);
+            location2AuditEntryId.put(location, auditEntryId);
+        }
+        public synchronized String getLocationAudit(String location, boolean remove)
+        {
+            Map<String, String> location2AuditEntryId = this.location2AuditEntryId;
+            if (location2AuditEntryId == null)
+                return null;
+            return remove
+                ? location2AuditEntryId.remove(location)
+                : location2AuditEntryId.get(location);
         }
     }
 

@@ -1,8 +1,12 @@
 package net.sybyline.scarlet;
 
+import java.awt.Desktop;
 import java.io.Closeable;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.StringReader;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -20,33 +24,43 @@ import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
 import net.sybyline.scarlet.util.MavenDepsLoader;
 import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.TTSService;
 
 public class Scarlet implements Closeable
 {
 
+    static
+    {
+        String javaVersion = System.getProperty("java.version");
+        if (javaVersion == null)
+            throw new Error("System property 'java.version' is missing?!?!?!");
+        if (!javaVersion.startsWith("1.8"))
+            throw new Error("This application is designed to run on Java 8");
+    }
+
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.3.3",
+        VERSION = "0.4.0",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
-        USER_AGENT = String.format("%s/%s %s", USER_AGENT_NAME, VERSION, DEV_DISCORD),
-        USER_AGENT_STATIC = String.format("%s/%s-static %s", USER_AGENT_NAME, VERSION, DEV_DISCORD),
+        USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
+        USER_AGENT_STATIC = USER_AGENT_NAME+"-static/"+VERSION+" "+DEV_DISCORD,
         
-        API_URL = "https://%s/",
-        API_BASE = "https://%s/api/1",
+        API_VERSION = "api/1",
         API_HOST_0 = "vrchat.com",
-        API_URL_0 = String.format(API_URL, API_HOST_0),
-        API_BASE_0 = String.format(API_BASE, API_HOST_0),
+        API_URL_0  = "https://"+API_HOST_0+"/",
+        API_BASE_0 = API_URL_0+API_VERSION,
         API_HOST_1 = "api.vrchat.com",
-        API_URL_1 = String.format(API_URL, API_HOST_1),
-        API_BASE_1 = String.format(API_BASE, API_HOST_1),
+        API_URL_1  = "https://"+API_HOST_1+"/",
+        API_BASE_1 = API_URL_1+API_VERSION,
         API_HOST_2 = "api.vrchat.cloud",
-        API_URL_2 = String.format(API_URL, API_HOST_2),
-        API_BASE_2 = String.format(API_BASE, API_HOST_2);
+        API_URL_2  = "https://"+API_HOST_2+"/",
+        API_BASE_2 = API_URL_2+API_VERSION;
 
     static
     {
@@ -71,28 +85,41 @@ public class Scarlet implements Closeable
         GSON_PRETTY = gb.setPrettyPrinting().create();
     }
 
-    public Scarlet()
+    public Scarlet() throws IOException
     {
+    }
+
+    {
+        // absolute initialization, even before explicit constructor body
     }
 
     @Override
     public void close() throws IOException
     {
         this.running = false;
-        this.discord.close();
+        MiscUtils.close(this.ttsService);
+        MiscUtils.close(this.discord);
+        MiscUtils.close(this.logs);
     }
 
+    volatile boolean running = true;
     final File dir = new File(System.getenv("LOCALAPPDATA"), GROUP+"/"+NAME);
     {
         if (!this.dir.isDirectory())
             this.dir.mkdirs();
     }
+    final File dirVrc = new File(System.getProperty("user.home"), "AppData/LocalLow/VRChat/VRChat");
+    
+    final ScarletEventListener eventListener = new ScarletEventListener(this);
     final ScarletSettings settings = new ScarletSettings(new File(this.dir, "settings.json"));
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(this.dir, "moderation_tags.json"));
+    final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(this.dir, "watched_groups.json"));
+    final ScarletStaffList staffList = new ScarletStaffList(this, new File(this.dir, "staff_list.json"));
     final ScarletData data = new ScarletData(new File(this.dir, "data"));
+    final TTSService ttsService = new TTSService(new File(this.dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(this.dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(this.dir, "discord_bot.json"));
-    volatile boolean running = true;
+    final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
 
     public void run()
     {
@@ -105,6 +132,7 @@ public class Scarlet implements Closeable
             ex.printStackTrace();
             return;
         }
+        this.logs.start();
         try
         {
             for (long now, lastIter = 0L; this.running; lastIter = now)
@@ -167,6 +195,20 @@ public class Scarlet implements Closeable
                         this.running = false;
                         LOG.info("Stopping");
                     } break;
+                    case "explore": {
+                        if (Desktop.isDesktopSupported())
+                        {
+                            Desktop.getDesktop().browse(this.dir.toURI());
+                            LOG.info("Browsing to folder");
+                        }
+                    } break;
+                    case "tts": {
+                        String text = ls.nextLine().trim();
+                        if (!text.isEmpty())
+                        {
+                            LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit(text));
+                        }
+                    } break;
                     case "link": {
                         String userId = ls.next();
                         String userSnowflake = ls.next();
@@ -180,6 +222,27 @@ public class Scarlet implements Closeable
                         {
                             this.data.linkIdToSnowflake(userId, userSnowflake);
                             LOG.info("Linking VRChat user "+user.getDisplayName()+" ("+userId+") to Discord user <@"+userSnowflake+">");
+                        }
+                    } break;
+                    case "importgroups": {
+                        String from = ls.nextLine().trim();
+                        boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
+                        
+                        LOG.info("Importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from);
+                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from)) : new FileReader(from))
+                        {
+                            if (this.watchedGroups.importLegacyCSV(reader))
+                            {
+                                LOG.warn("Successfully imported watched groups legacy CSV");
+                            }
+                            else
+                            {
+                                LOG.warn("Failed to import watched groups legacy CSV with unknown reason");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LOG.error("Exception importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from, ex);
                         }
                     } break;
                     }
@@ -234,7 +297,7 @@ public class Scarlet implements Closeable
             }
         } break;
         }
-        LOG.info("Querying from "+from+" to "+to);
+        LOG.trace("Querying from "+from+" to "+to);
         List<GroupAuditLogEntry> entries = this.vrc.auditQuery(from, to);
         
         for (GroupAuditLogEntry entry : entries)

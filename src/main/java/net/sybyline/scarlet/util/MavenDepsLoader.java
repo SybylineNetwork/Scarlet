@@ -1,8 +1,6 @@
 package net.sybyline.scarlet.util;
 
-import java.io.BufferedReader;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
@@ -33,10 +31,10 @@ public class MavenDepsLoader
 
     static
     {
-        clinit0();
+        clinit();
     }
 
-    static void clinit0()
+    static void clinit()
     {
         String depsUrlPrefix = "jar:file:/",
                depsAbsPath = "/META-INF/MANIFEST.MF",
@@ -92,48 +90,6 @@ public class MavenDepsLoader
             }
         }
         
-    }
-
-    static void clinit()
-    {
-        String depsUrlPrefix = "jar:file:/",
-               depsAbsPath = "/META-INF/dependencies.txt",
-               depsUrlSuffix = "!" + depsAbsPath;
-        
-        URL url = MavenDepsLoader.class.getResource(depsAbsPath);
-        if (url == null)
-            return;
-        String urlString = url.toString();
-        if (!urlString.startsWith(depsUrlPrefix) || !urlString.endsWith(depsUrlSuffix))
-            return;
-        
-        Path jarPath = Paths.get(urlString.substring(depsUrlPrefix.length(), urlString.length() - depsUrlSuffix.length())),
-             jarDir = jarPath.getParent(),
-             depsDir = jarDir.resolve("libraries");
-        
-        if (!Files.isDirectory(depsDir)) try
-        {
-            Files.createDirectories(depsDir);
-        }
-        catch (Exception ex)
-        {
-            System.err.println(String.format("net.sybyline.scarlet.util.MavenDepsLoader: Exception creating dependencies directory '%s'", depsDir));
-            ex.printStackTrace();
-            return;
-        }
-        
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(url.openStream())))
-        {
-            for (String line; (line = br.readLine()) != null;)
-            {
-                dlDep(depsDir, line);
-            }
-        }
-        catch (Exception ex)
-        {
-            System.err.println(String.format("net.sybyline.scarlet.util.MavenDepsLoader: Exception reading dependencies from '%s'", url));
-            ex.printStackTrace();
-        }
     }
 
     static void dlDep(Path depsDir, String line)

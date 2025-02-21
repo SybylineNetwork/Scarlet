@@ -88,6 +88,12 @@ public enum GroupAuditType
         return id == null ? null : BY_ID.get(id.toLowerCase());
     }
 
+    public static int color(Map<String, Integer> overrides, String id)
+    {
+        Integer override = overrides.get(id);
+        return override != null ? override.intValue() : color(id);
+    }
+
     public static int color(String id)
     {
         GroupAuditType gat = of(id);

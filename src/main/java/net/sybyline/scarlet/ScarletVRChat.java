@@ -23,6 +23,7 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
+import com.j256.twofactorauth.TimeBasedOneTimePasswordUtil;
 
 import io.github.vrchatapi.ApiCallback;
 import io.github.vrchatapi.ApiClient;
@@ -32,8 +33,10 @@ import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.ProgressResponseBody;
 import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.GroupsApi;
+import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
 import io.github.vrchatapi.model.User;
@@ -119,6 +122,7 @@ public class ScarletVRChat implements Closeable
         this.cookies.load();
         this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
         this.cachedUsers = Collections.synchronizedMap(new LRUMap_1024<>());
+        this.cachedUserGroups = Collections.synchronizedMap(new LRUMap_1024<>());
     }
 
     final Scarlet scarlet;
@@ -126,6 +130,7 @@ public class ScarletVRChat implements Closeable
     final ApiClient client;
     final String groupId;
     final Map<String, User> cachedUsers;
+    final Map<String, List<LimitedUserGroups>> cachedUserGroups;
 
     public ApiClient getClient()
     {
@@ -202,6 +207,23 @@ public class ScarletVRChat implements Closeable
                     .map(JsonPrimitive::getAsString)
                     .noneMatch("totp"::equals))
                 throw new RuntimeException("Totp-based 2fa is not enabled for this account");
+            
+            String secret = this.scarlet.settings.getString("vrc_secret");
+            if (secret != null && (secret = secret.replaceAll("[^A-Za-z2-7=]", "")).length() == 32)
+            {
+                boolean authed = false;
+                for (int tries = 2; !authed && tries --> 0; MiscUtils.sleep(3_000L)) try
+                {
+                    // use VRChatAPI time to work around potential local system time drift
+                    long now = new SystemApi(this.client).getSystemTime().toInstant().toEpochMilli();
+                    String code = TimeBasedOneTimePasswordUtil.generateNumberString(secret, now, TimeBasedOneTimePasswordUtil.DEFAULT_TIME_STEP_SECONDS, TimeBasedOneTimePasswordUtil.DEFAULT_OTP_LENGTH);
+                    authed = auth.verify2FA(new TwoFactorAuthCode().code(code)).getVerified().booleanValue();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception using totp secret");
+                }
+            }
             
             while (!auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
                 LOG.error("Invalid totp code");
@@ -293,6 +315,25 @@ public class ScarletVRChat implements Closeable
         catch (ApiException apiex)
         {
             LOG.error("Error during get user: "+apiex.getMessage());
+            return null;
+        }
+    }
+
+    public List<LimitedUserGroups> getUserGroups(String userId)
+    {
+        List<LimitedUserGroups> userGroups = this.cachedUserGroups.get(userId);
+        if (userGroups != null)
+            return userGroups;
+        UsersApi users = new UsersApi(this.client);
+        try
+        {
+            userGroups = users.getUserGroups(userId);
+            this.cachedUserGroups.put(userId, userGroups);
+            return userGroups;
+        }
+        catch (ApiException apiex)
+        {
+            LOG.error("Error during get user groups: "+apiex.getMessage());
             return null;
         }
     }

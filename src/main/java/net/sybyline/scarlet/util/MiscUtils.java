@@ -1,17 +1,23 @@
 package net.sybyline.scarlet.util;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.Spliterator;
-import java.util.Spliterators;
+import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.function.IntFunction;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.FileVersion;
 import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.User;
+
+import net.dv8tion.jda.api.interactions.DiscordLocale;
+import net.sybyline.scarlet.Scarlet;
 
 public interface MiscUtils
 {
@@ -29,10 +35,59 @@ public interface MiscUtils
         }
     }
 
-    @SafeVarargs
-    static <T> Stream<T> stream(T... array)
+    static void close(AutoCloseable resource)
     {
-        return StreamSupport.stream(Spliterators.spliterator(array, 0, array.length, Spliterator.ORDERED | Spliterator.IMMUTABLE), false);
+        if (resource != null) try
+        {
+            resource.close();
+        }
+        catch (Exception ex)
+        {
+            Scarlet.LOG.error("Exception closing resource", ex);
+        }
+    }
+
+    static int parseIntElse(String string, int fallback)
+    {
+        try
+        {
+            return Integer.parseInt(string);
+        }
+        catch (RuntimeException rex)
+        {
+            return fallback;
+        }
+    }
+
+    static double parseDoubleElse(String string, double fallback)
+    {
+        try
+        {
+            return Double.parseDouble(string);
+        }
+        catch (RuntimeException rex)
+        {
+            return fallback;
+        }
+    }
+
+    static Map<DiscordLocale, String> genLocalized(Function<DiscordLocale, String> function)
+    {
+        Map<DiscordLocale, String> map = new HashMap<>();
+        for (DiscordLocale discordLocale : DiscordLocale.values())
+            if (discordLocale != DiscordLocale.UNKNOWN)
+                map.put(discordLocale, function.apply(discordLocale));
+        return map;
+    }
+
+    static long lastModified(File file) throws IOException
+    {
+        return Files.getLastModifiedTime(file.toPath()).toMillis();
+    }
+
+    static boolean isNewerThan(File file, long epochMillis) throws IOException
+    {
+        return file.exists() && lastModified(file) > epochMillis;
     }
 
     static <T, U> U[] map(T[] arr, IntFunction<U[]> nac, Function<T, U> map)
@@ -72,6 +127,16 @@ public interface MiscUtils
             version = 1;
         }
         return "https://vrchat.com/api/1/file/"+fileId+"/"+version+"/file";
+    }
+
+    static byte[] readAllBytes(InputStream input) throws IOException
+    {
+        byte[] buffer = new byte[Math.max(1024, input.available())];
+        int offset = 0;
+        for (int bytesRead; (bytesRead = input.read(buffer, offset, buffer.length - offset)) != -1; )
+            if ((offset += bytesRead) == buffer.length)
+                buffer = Arrays.copyOf(buffer, buffer.length + Math.max(input.available(), buffer.length >> 1));
+        return offset == buffer.length ? buffer : Arrays.copyOf(buffer, offset);
     }
 
 }

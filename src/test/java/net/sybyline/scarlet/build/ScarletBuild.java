@@ -12,6 +12,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -22,6 +26,9 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.Deflater;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import net.sybyline.scarlet.Scarlet;
 
@@ -32,19 +39,24 @@ public class ScarletBuild
 
     public static void main(String[] args) throws Throwable
     {
+        build();
+    }
+
+    static void build() throws Throwable
+    {
         String build = "_internal/build",
                buildClasses = build+"/out",
                buildManifest = build+"/MANIFEST.MF",
-               buildMeta = buildClasses+"/META-INF",
-               buildDepsTxt = buildMeta+"/dependencies.txt",
                buildJar = build+"/scarlet-"+Scarlet.VERSION+".jar",
+               buildBat = build+"/run.bat",
+               buildPkg = build+"/pkg",
+               buildPkgJar = buildPkg+"/scarlet-"+Scarlet.VERSION+".jar",
+               buildPkgBat = buildPkg+"/run.bat",
+               buildZip = build+"/scarlet-"+Scarlet.VERSION+".zip",
+               
                srcJava = "src/main/java",
                srcRes = "src/main/resources",
                mainClass = "net.sybyline.scarlet.Scarlet";
-        
-//        mkDirs(build);
-//        mkDirs(buildClasses);
-//        mkDirs(buildMeta);
         
         System.out.println("Cleaning "+build);
         cleanDir(build);
@@ -71,13 +83,14 @@ public class ScarletBuild
                     att.putValue("Manifest-Version", "1.0");
                     att.putValue("Main-Class", mainClass);
                     att.putValue("Class-Path", mfClasspath());
+                    att.putValue("Name", "net/sybyline/scarlet/");
+                    att.putValue("Specification-Title", Scarlet.NAME);
+                    att.putValue("Specification-Version", Scarlet.VERSION);
+                    att.putValue("Specification-Vendor", Scarlet.DEV_DISCORD);
+                    att.putValue("Implementation-Title", "net.sybyline.scarlet");
+                    att.putValue("Implementation-Version", "build-"+OffsetDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                    att.putValue("Implementation-Vendor", Scarlet.DEV_DISCORD);
             mff.write(mf);
-        }
-        
-        System.out.println("Writing dependency list "+buildDepsTxt);
-        try (PrintStream mf = new PrintStream(buildDepsTxt))
-        {
-            mf.append(depsClasspath());
         }
         
         System.out.println("Assembling jar "+buildJar);
@@ -88,6 +101,23 @@ public class ScarletBuild
             "-C", "\""+abs(buildClasses)+"\"",
             "."
         );
+        
+        System.out.println("Printing runner "+buildBat);
+        try (PrintStream bat = new PrintStream(buildBat))
+        {
+            bat.append("@echo off").println();
+            bat.append("@rem set JAVA_HOME=").println();
+            bat.append("@rem set PATH=%JAVA_HOME%\\bin;%JAVA_HOME%\\jre\\bin;%JAVA_HOME%\\jre\\bin\\server;%JAVA_HOME%\\bin\\server;%PATH%").println();
+            bat.append("java -jar scarlet-").append(Scarlet.VERSION).append(".jar").println();
+        }
+        
+        System.out.println("Copying release files");
+        copyOne(buildJar, buildPkgJar);
+        copyOne(buildBat, buildPkgBat);
+        
+        System.out.println("Zipping release "+buildZip);
+        compressDir(buildPkg, buildZip, FileTime.fromMillis(System.currentTimeMillis()), Deflater.DEFAULT_COMPRESSION);
+        
         System.out.println("Done");
     }
 
@@ -154,21 +184,6 @@ public class ScarletBuild
         }
         return mfcp.toString();
     }
-    static String depsClasspath() throws IOException
-    {
-        String m2 = "/.m2/repository/";
-        StringBuilder mfcp = new StringBuilder();
-        for (URL url : classpathURLs())
-        {
-            String string = url.toString();
-            int m2i = string.indexOf(m2);
-            if (m2i > 9 && !string.endsWith("/"))
-            {
-                mfcp.append(string.substring(m2i + m2.length())).append("\n");
-            }
-        }
-        return mfcp.toString();
-    }
 
     static Object[] listSources(String sourcepath) throws IOException
     {
@@ -188,10 +203,6 @@ public class ScarletBuild
     {
         return DIR.resolve(path).toString().replace('\\', '/');
     }
-    static void mkDirs(String root) throws IOException
-    {
-        Files.createDirectories(DIR.resolve(root));
-    }
     static void cleanDir(String root) throws IOException
     {
         Path root0 = DIR.resolve(root);
@@ -210,6 +221,13 @@ public class ScarletBuild
         else
             Files.createDirectories(root0);
     }
+    static void copyOne(String from, String to) throws IOException
+    {
+        Path from0 = DIR.resolve(from),
+             to0 = DIR.resolve(to);
+        Files.createDirectories(to0.getParent());
+        Files.copy(from0, to0);
+    }
     static void copyContents(String from, String to) throws IOException
     {
         Path from0 = DIR.resolve(from),
@@ -222,6 +240,29 @@ public class ScarletBuild
                 return FileVisitResult.CONTINUE;
             }
         });
+    }
+    static void compressDir(String dir, String zip, FileTime filetime, int compression) throws IOException
+    {
+        Path dir0 = DIR.resolve(dir),
+             zip0 = DIR.resolve(zip);
+        if (!Files.deleteIfExists(zip0))
+            Files.createDirectories(zip0.getParent());
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(zip0)))
+        {
+            Files.walkFileTree(dir0, new SimpleFileVisitor<Path>(){
+                public FileVisitResult visitFile(Path rel, BasicFileAttributes attrs) throws IOException {
+                    out.setMethod(ZipOutputStream.DEFLATED);
+                    out.setLevel(compression);
+                    out.putNextEntry(
+                        new ZipEntry(dir0.relativize(rel).toString().replace('\\', '/'))
+                        .setLastModifiedTime(filetime != null ? filetime : attrs.lastModifiedTime())
+                        .setLastAccessTime(filetime != null ? filetime : attrs.lastAccessTime())
+                        .setCreationTime(filetime != null ? filetime : attrs.creationTime()));
+                    Files.copy(rel, out);
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        }
     }
 
 }
