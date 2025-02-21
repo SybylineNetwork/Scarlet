@@ -7,11 +7,13 @@
 
 A self-hostable VRChat Group management utility with Discord integration
 
-## Features
-
 [Changelog](https://github.com/SybylineNetwork/Scarlet/blob/main/CHANGELOG.md)
 
 [Settings](https://github.com/SybylineNetwork/Scarlet/blob/main/SETTINGS.md)
+
+[Installation](#installation)
+
+## Features
 
 ### Discord commands
 
