@@ -5,6 +5,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Reader;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,7 +70,12 @@ public class ScarletWatchedGroups
             case "PARTNER": watchedGroup.type = WatchedGroup.Type.AFFILIATED; break;
             default:        watchedGroup.type = WatchedGroup.Type.OTHER;      break;
             }
-            watchedGroup.tags = record.get(5).split(";");
+            
+            watchedGroup.tags = Arrays
+                .stream(record.get(5).split("[,;/\\|]"))
+                .filter($ -> !$.isEmpty())
+                .map(String::toLowerCase)
+                .toArray(String[]::new);
             watchedGroup.critical = Boolean.parseBoolean(record.get(3));
             watchedGroup.message = record.get(4);
             importedWatchedGroups.put(watchedGroup.id, watchedGroup);

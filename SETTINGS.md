@@ -7,6 +7,10 @@ These registry entries exist because of the use of classes in the [`java.util.pr
 
 If it isn't obvious, all nominally sensitive values listed are ficticious.
 
+## file `logs/scarlet_log_0000-00-00_00-00-00.txt`
+
+Files containing the output of the application log.
+
 ## file `discord_bot.json`
 
 Settings for the Discord bot account
@@ -58,7 +62,7 @@ Array of watched groups
         // The category of group activity, one of: "UNKNOWN", "MALICIOUS", "NUISANCE", "COMMUNITY", "AFFILIATED", or "OTHER"
         "type": "NUISANCE",
         
-        // 
+        // Array of custom moderation tags associated with group activity
         "tags": [
             "trolling"
         ],
@@ -139,7 +143,7 @@ Saved global user information:
 {
     // Map of Discord user snowflake ids to VRChat userIds
     "userSnowflake2userId": {
-        "123456789123456789":"usr_00000000-0000-0000-0000-000000000000"
+        "123456789123456789": "usr_00000000-0000-0000-0000-000000000000"
     }
 }
 ```
@@ -151,7 +155,7 @@ Current live instance information:
 {
     // Map of VRChat locations of live group instances to VRChat group audit entry ids
     "location2AuditEntryId": {
-        "wrld_00000000-0000-0000-0000-000000000000:00000~group(grp_00000000-0000-0000-0000-000000000000)~groupAccessType(plus)~region(us)":"gaud_00000000-0000-0000-0000-000000000000"
+        "wrld_00000000-0000-0000-0000-000000000000:00000~group(grp_00000000-0000-0000-0000-000000000000)~groupAccessType(plus)~region(us)": "gaud_00000000-0000-0000-0000-000000000000"
     }
 }
 ```

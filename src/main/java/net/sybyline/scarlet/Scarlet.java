@@ -45,7 +45,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.0",
+        VERSION = "0.4.1",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -73,6 +73,7 @@ public class Scarlet implements Closeable
         {
             scarlet.run();
         }
+        System.exit(0);
     }
 
     public static final Logger LOG = LoggerFactory.getLogger("Scarlet");
@@ -233,7 +234,7 @@ public class Scarlet implements Closeable
                         {
                             if (this.watchedGroups.importLegacyCSV(reader))
                             {
-                                LOG.warn("Successfully imported watched groups legacy CSV");
+                                LOG.info("Successfully imported watched groups legacy CSV");
                             }
                             else
                             {
@@ -297,7 +298,7 @@ public class Scarlet implements Closeable
             }
         } break;
         }
-        LOG.trace("Querying from "+from+" to "+to);
+        LOG.debug("Querying from "+from+" to "+to);
         List<GroupAuditLogEntry> entries = this.vrc.auditQuery(from, to);
         
         for (GroupAuditLogEntry entry : entries)

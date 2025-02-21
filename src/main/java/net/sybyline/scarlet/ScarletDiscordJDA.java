@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
@@ -77,6 +79,7 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
+import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletDiscordJDA implements ScarletDiscord
@@ -444,138 +447,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 switch (event.getName())
                 {
                 case "submit-attachments": {
-                    
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SUBMIT_EVIDENCE);
-                    if (roleSnowflake != null)
-                    {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            event.reply("You do not have permission to submit event attachments.").setEphemeral(true).queue();
-                            return;
-                        }
-                    }
-                    
-                    String evidenceRoot = ScarletDiscordJDA.this.evidenceRoot;
-                    
-                    if (evidenceRoot == null || (evidenceRoot = evidenceRoot.trim()).isEmpty())
-                    {
-                        event.reply("This feature is not enabled.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!event.getChannelType().isThread())
-                    {
-                        event.reply("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
-                        return;
-                    }
+
                     Message message = event.getTarget();
                     
-                    MessageReference ref = message.getMessageReference();
-                    
-                    if (ref == null)
-                    {
-                        event.reply("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    Message replyTarget = ref.getMessage();
-                    
-                    if (replyTarget == null)
-                    {
-                        replyTarget = ref.resolve().complete();
-                    }
-                    
-                    if (replyTarget == null)
-                    {
-                        event.reply("The target message is no longer available.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String[] parts = replyTarget
-                        .getButtons()
-                        .stream()
-                        .filter($ -> $.getId().startsWith("edit-tags:"))
-                        .findFirst()
-                        .map($ -> $.getId().split(":"))
-                        .orElse(null)
-                        ;
-                    
-                    if (parts == null)
-                    {
-                        event.reply("Could not determine audit event id.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    List<Message.Attachment> attachments = message.getAttachments();
-                    
-                    if (attachments.isEmpty())
-                    {
-                        event.reply("No attachments.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = parts[1];
-                    
-                    event.deferReply(true).queue();
-                    InteractionHook deferred = event.getHook();
-                    
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                    if (auditEntryMeta == null || auditEntryMeta.entry == null)
-                    {
-                        deferred.sendMessage("Could not load audit event.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryTargetId = auditEntryMeta.entry.getTargetId();
-                    
-                    File evidenceUserDir = new File(evidenceRoot, auditEntryTargetId);
-                    if (!evidenceUserDir.isDirectory())
-                        evidenceUserDir.mkdirs();
-                    
-                    String requesterSf = event.getUser().getId(),
-                           requesterDisplayName = event.getUser().getEffectiveName();
-                    OffsetDateTime timestamp = event.getTimeCreated();
-                    
-                    // TODO : better model for avoiding race conditions
-                    synchronized (auditEntryTargetId.intern())
-                    {
-                        
-                        ScarletData.UserMetadata auditEntryTargetUserMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId);
-                        if (auditEntryTargetUserMeta == null)
-                            auditEntryTargetUserMeta = new ScarletData.UserMetadata();
-                        
-                        // TODO : async ?
-                        
-                        for (Message.Attachment attachment : attachments)
-                        {
-                            String fileName = attachment.getFileName(),
-                                   attachmentUrl = attachment.getUrl(),
-                                   attachmentProxyUrl = attachment.getProxyUrl();
-                            
-                            File dest = new File(evidenceUserDir, fileName);
-                            if (dest.isFile())
-                            {
-                                deferred.sendMessageFormat("File '%s' already exists, skipping.", fileName).setEphemeral(true).queue();
-                            }
-                            else try
-                            {
-                                attachment.getProxy().downloadToFile(dest).join();
-                                
-                                auditEntryTargetUserMeta.addUserCaseEvidence(new ScarletData.EvidenceSubmission(auditEntryId, requesterSf, requesterDisplayName, timestamp, fileName, attachmentUrl, attachmentProxyUrl));
-                                
-                                deferred.sendMessageFormat("Saved '%s/%s'.", auditEntryTargetId, fileName).setEphemeral(true).queue();
-                                LOG.info(String.format("%s (<@%s>) saved evidence to '%s/%s'.", requesterDisplayName, requesterSf, auditEntryTargetId, fileName));
-                            }
-                            catch (Exception ex)
-                            {
-                                deferred.sendMessageFormat("Exception saving '%s'.", attachment.getFileName()).setEphemeral(true).queue();
-                                LOG.error("Exception whilst saving attachment", ex);
-                            }
-                        }
-                        
-                        ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId, auditEntryTargetUserMeta);
-                    
-                    }
+                    event.reply("Select submission type")
+                        .addActionRow(
+                            Button.primary("submit-evidence:"+message.getId(), "Submit moderation evidence"),
+                            Button.primary("import-watched-groups:"+message.getId(), "Import watched groups"))
+                        .setEphemeral(true)
+                        .queue();
                     
                 } break;
                 }
@@ -1202,6 +1082,209 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     deferred.sendMessage(msg.toString()).setEphemeral(true).queue();
                     
+                } break;
+                case "submit-evidence": {
+                    
+                    String messageSnowflake = parts[1];
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SUBMIT_EVIDENCE);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            event.reply("You do not have permission to submit event attachments.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+                    
+                    String evidenceRoot = ScarletDiscordJDA.this.evidenceRoot;
+                    
+                    if (evidenceRoot == null || (evidenceRoot = evidenceRoot.trim()).isEmpty())
+                    {
+                        event.reply("This feature is not enabled.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!event.getChannelType().isThread())
+                    {
+                        event.reply("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
+                        return;
+                    }
+                    Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
+                    
+                    MessageReference ref = message.getMessageReference();
+                    
+                    if (ref == null)
+                    {
+                        event.reply("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    Message replyTarget = ref.getMessage();
+                    
+                    if (replyTarget == null)
+                    {
+                        replyTarget = ref.resolve().complete();
+                    }
+                    
+                    if (replyTarget == null)
+                    {
+                        event.reply("The target message is no longer available.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String[] partsRef = replyTarget
+                        .getButtons()
+                        .stream()
+                        .filter($ -> $.getId().startsWith("edit-tags:"))
+                        .findFirst()
+                        .map($ -> $.getId().split(":"))
+                        .orElse(null)
+                        ;
+                    
+                    if (partsRef == null)
+                    {
+                        event.reply("Could not determine audit event id.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    List<Message.Attachment> attachments = message.getAttachments();
+                    
+                    if (attachments.isEmpty())
+                    {
+                        event.reply("No attachments.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String auditEntryId = partsRef[1];
+                    
+                    event.deferReply(true).queue();
+                    InteractionHook deferred = event.getHook();
+                    
+                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
+                    if (auditEntryMeta == null || auditEntryMeta.entry == null)
+                    {
+                        deferred.sendMessage("Could not load audit event.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String auditEntryTargetId = auditEntryMeta.entry.getTargetId();
+                    
+                    File evidenceUserDir = new File(evidenceRoot, auditEntryTargetId);
+                    if (!evidenceUserDir.isDirectory())
+                        evidenceUserDir.mkdirs();
+                    
+                    String requesterSf = event.getUser().getId(),
+                           requesterDisplayName = event.getUser().getEffectiveName();
+                    OffsetDateTime timestamp = event.getTimeCreated();
+                    
+                    // TODO : better model for avoiding race conditions
+                    synchronized (auditEntryTargetId.intern())
+                    {
+                        
+                        ScarletData.UserMetadata auditEntryTargetUserMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId);
+                        if (auditEntryTargetUserMeta == null)
+                            auditEntryTargetUserMeta = new ScarletData.UserMetadata();
+                        
+                        // TODO : async ?
+                        
+                        for (Message.Attachment attachment : attachments)
+                        {
+                            String fileName = attachment.getFileName(),
+                                   attachmentUrl = attachment.getUrl(),
+                                   attachmentProxyUrl = attachment.getProxyUrl();
+                            
+                            File dest = new File(evidenceUserDir, fileName);
+                            if (dest.isFile())
+                            {
+                                deferred.sendMessageFormat("File '%s' already exists, skipping.", fileName).setEphemeral(true).queue();
+                            }
+                            else try
+                            {
+                                attachment.getProxy().downloadToFile(dest).join();
+                                
+                                auditEntryTargetUserMeta.addUserCaseEvidence(new ScarletData.EvidenceSubmission(auditEntryId, requesterSf, requesterDisplayName, timestamp, fileName, attachmentUrl, attachmentProxyUrl));
+                                
+                                deferred.sendMessageFormat("Saved '%s/%s'.", auditEntryTargetId, fileName).setEphemeral(true).queue();
+                                LOG.info(String.format("%s (<@%s>) saved evidence to '%s/%s'.", requesterDisplayName, requesterSf, auditEntryTargetId, fileName));
+                            }
+                            catch (Exception ex)
+                            {
+                                deferred.sendMessageFormat("Exception saving '%s'.", attachment.getFileName()).setEphemeral(true).queue();
+                                LOG.error("Exception whilst saving attachment", ex);
+                            }
+                        }
+                        
+                        ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId, auditEntryTargetUserMeta);
+                    
+                    }
+                    
+                } break;
+                case "import-watched-groups": {
+                    
+                    String messageSnowflake = parts[1];
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.CONFIG_IMPORT_WATCHED_GROUPS);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            event.reply("You do not have permission to import watched groups.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+                    Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
+                    
+                    List<Message.Attachment> attachments = message.getAttachments();
+                    
+                    if (attachments.isEmpty())
+                    {
+                        event.reply("No attachments.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    event.deferReply(true).queue();
+                    InteractionHook deferred = event.getHook();
+                    
+                    String requesterSf = event.getUser().getId(),
+                           requesterDisplayName = event.getUser().getEffectiveName();
+                    
+                    LOG.info(String.format("%s (<@%s>) Importing watched groups", requesterDisplayName, requesterSf));
+                    
+                    for (Message.Attachment attachment : attachments)
+                    {
+                        String fileName = attachment.getFileName(),
+                               attachmentUrl = attachment.getUrl();
+                        
+                        if (fileName.endsWith(".csv"))
+                        {
+                            LOG.info("Importing watched groups legacy CSV from attachment: "+fileName);
+                            try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
+                            {
+                                if (ScarletDiscordJDA.this.scarlet.watchedGroups.importLegacyCSV(reader))
+                                {
+                                    LOG.info("Successfully imported watched groups legacy CSV");
+                                    deferred.sendMessageFormat("Successfully imported watched groups legacy CSV").setEphemeral(true).queue();
+                                }
+                                else
+                                {
+                                    LOG.warn("Failed to import watched groups legacy CSV with unknown reason");
+                                    deferred.sendMessageFormat("Failed to import watched groups legacy CSV with unknown reason").setEphemeral(true).queue();
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LOG.error("Exception importing watched groups legacy CSV from attachment: "+fileName, ex);
+                                deferred.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
+                            }
+                        }
+                        else
+                        {
+                            LOG.warn("Skipping attachment: "+fileName);
+                            deferred.sendMessageFormat("File '%s' is not importable.", fileName).setEphemeral(true).queue();
+                        }
+                    }
+                
                 } break;
                 }
             }

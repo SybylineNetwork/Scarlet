@@ -4,6 +4,14 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.1
+  - Added logger thread and log files
+  - Added importing watched groups legacy CSV via attachment submissions
+  - Fixed bug where the process could hang upon quitting
+  - Fixed typos and missing comments
+  - Changed some logging levels
+  - Changed handling of tags for importing watched groups legacy CSV
+
 ## 0.4.0
   - Added installation and usage instructions to README.md
   - Added CHANGELOG.md
