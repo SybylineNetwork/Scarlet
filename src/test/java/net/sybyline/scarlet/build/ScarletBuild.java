@@ -203,8 +203,8 @@ public class ScarletBuild
                 scarletMeta.latest_build = Scarlet.VERSION;
             }
         }
-//        if (!change)
-//            return;
+        if (!change)
+            return;
         try (BufferedWriter bw = Files.newBufferedWriter(meta0))
         {
             Scarlet.GSON_PRETTY.toJson(scarletMeta, ScarletMeta.class, bw);

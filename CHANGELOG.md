@@ -4,6 +4,9 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.4
+  - Fixed importing legacy CSV list of watched groups (Excel format, instead of RFC4180)
+
 ## 0.4.3
   - Added step to installation instructions to make discord bot private
   - Added newer version check

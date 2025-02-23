@@ -58,7 +58,7 @@ public class ScarletWatchedGroups
     public boolean importLegacyCSV(Reader reader) throws IOException
     {
         Map<String, WatchedGroup> importedWatchedGroups = new HashMap<>();
-        for (CSVRecord record : CSVFormat.DEFAULT.parse(reader))
+        for (CSVRecord record : CSVFormat.EXCEL.parse(reader))
         {
             WatchedGroup watchedGroup = new WatchedGroup();
             watchedGroup.id = record.get(0);
