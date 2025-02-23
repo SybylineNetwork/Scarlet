@@ -121,6 +121,7 @@ public class ScarletWatchedGroups
         }
         catch (Exception ex)
         {
+            LOG.error("Exception loading watched groups", ex);
             return false;
         }
         Map<String, WatchedGroup> watchedGroups = new ConcurrentHashMap<>();
@@ -140,7 +141,7 @@ public class ScarletWatchedGroups
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception saving watched groups", ex);
             return false;
         }
         return true;

@@ -20,11 +20,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.sun.nio.file.SensitivityWatchEventModifier;
 
 @SuppressWarnings("restriction")
 public class TTSService implements Closeable
 {
+
+    static final Logger LOG = LoggerFactory.getLogger("Scarlet/TTSService");
 
     public TTSService(File dir, Listener listener) throws IOException
     {
@@ -128,7 +133,7 @@ public class TTSService implements Closeable
         }
         catch (IOException ioex)
         {
-            ioex.printStackTrace();
+            LOG.error("Exception in TTSService thread", ioex);
         }
     }
 

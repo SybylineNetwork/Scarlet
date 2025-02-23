@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -18,6 +21,8 @@ import io.github.vrchatapi.model.GroupAuditLogEntry;
 
 public class ScarletData
 {
+
+    static final Logger LOG = LoggerFactory.getLogger("Scarlet/Data");
 
     public ScarletData(File dir)
     {
@@ -40,7 +45,7 @@ public class ScarletData
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception reading data "+name, ex);
         }
         return null;
     }
@@ -59,7 +64,7 @@ public class ScarletData
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception writing data "+name, ex);
         }
     }
     <T> void editObj(String name, Class<T> type, UnaryOperator<T> edit)
@@ -95,7 +100,7 @@ public class ScarletData
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception reading sub data "+kind+":"+id, ex);
         }
         return null;
     }
@@ -119,7 +124,7 @@ public class ScarletData
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception writing sub data "+kind+":"+id, ex);
         }
     }
     <T> void editSub(String kind, String id, Class<T> type, UnaryOperator<T> edit)

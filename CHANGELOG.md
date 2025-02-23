@@ -4,6 +4,15 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.3
+  - Added step to installation instructions to make discord bot private
+  - Added newer version check
+  - Added more build automation
+  - Fixed discord bot responding to interactions from servers other than the server specified in configuration
+  - Fixed discord bot sometimes not automatically rejoining voice channel
+  - Fixed some errors not printing to log file
+  - Changed link to download a JDK from potentially confusing Github link to Adoptium website proper
+
 ## 0.4.2
   - Added important step to installation instructions
   - Added `pause` line to runner

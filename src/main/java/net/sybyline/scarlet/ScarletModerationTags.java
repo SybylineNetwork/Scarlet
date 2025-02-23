@@ -7,10 +7,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.gson.reflect.TypeToken;
 
 public class ScarletModerationTags
 {
+
+    static final Logger LOG = LoggerFactory.getLogger("Scarlet/ModTags");
 
     public ScarletModerationTags(File moderationTagsFile)
     {
@@ -48,8 +53,8 @@ public class ScarletModerationTags
         }
         catch (Exception ex)
         {
+            LOG.error("Exception loading moderation tags", ex);
             tags = new CopyOnWriteArrayList<>();
-            ex.printStackTrace();
         }
         this.tags = tags;
         return tags;
@@ -68,7 +73,7 @@ public class ScarletModerationTags
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception saving moderation tags", ex);
         }
     }
 

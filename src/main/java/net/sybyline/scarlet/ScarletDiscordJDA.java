@@ -59,8 +59,11 @@ import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionE
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
+import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.Interaction;
 import net.dv8tion.jda.api.interactions.InteractionHook;
+import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -72,6 +75,7 @@ import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.managers.AudioManager;
+import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.FileUpload;
@@ -105,6 +109,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void close() throws IOException
     {
+        this.save();
         this.jda.shutdown();
         try
         {
@@ -114,10 +119,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 this.jda.awaitShutdown();
             }
         }
-        catch (Exception ex)
+        catch (InterruptedException iex)
         {
+            LOG.error("Interrupted awaiting JDA shutdown");
             this.jda.shutdownNow();
-            ex.printStackTrace();
         }
     }
 
@@ -143,6 +148,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             throw new RuntimeException("Awaiting JDA", ex);
         }
+        
+        // Calling getGuildById fixes bot sometimes not rejoining voice channel on start
+        Guild guild = ScarletDiscordJDA.this.jda.getGuildById(this.guildSf);
+        if (guild == null)
+        {
+            LOG.error("Guild returned null for snowflake "+this.guildSf);
+        }
+        else
+        {
+            LOG.warn("Guild "+this.guildSf+": "+guild.getName());
+        }
+        
         this.jda.updateCommands()
             .addCommands(
                 Commands.slash("create-or-update-moderation-tag", "Creates or updates a moderation tag")
@@ -254,7 +271,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
+                LOG.error("Exception loading TTS audio", ex);
                 return false;
             }
             if (buffersToAdd.isEmpty())
@@ -270,6 +287,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             String guildSf = ScarletDiscordJDA.this.guildSf;
             Guild guild = ScarletDiscordJDA.this.jda.getGuildById(guildSf);
+            if (guild == null)
+            {
+                LOG.warn("Audio: Guild returned null for snowflake "+guildSf);
+                return;
+            }
             AudioManager audioManager = guild.getAudioManager();
             audioManager.setAutoReconnect(true);
             audioManager.setConnectionListener(null);
@@ -350,14 +372,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     public void load()
     {
-        JDASettingsSpec spec;
+        JDASettingsSpec spec = null;
+        if (this.discordBotFile.isFile())
         try (FileReader fr = new FileReader(this.discordBotFile))
         {
             spec = Scarlet.GSON_PRETTY.fromJson(fr, JDASettingsSpec.class);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            spec = null;
+            LOG.error("Exception loading discord bot settings", ex);
         }
         
         if (spec == null)
@@ -423,7 +446,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception saving discord bot settings", ex);
         }
     }
 
@@ -433,9 +456,40 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
         }
 
+        boolean isInGuild(Interaction interaction)
+        {
+            return interaction.isFromGuild() && Objects.equals(ScarletDiscordJDA.this.guildSf, interaction.getGuild().getId());
+        }
+
+        void interactionError(Interaction interaction, Throwable err)
+        {
+            LOG.error("Error processing interaction of type "+interaction.getClass().getSimpleName(), err);
+            if (interaction instanceof IReplyCallback)
+            {
+                IReplyCallback replyCallback = (IReplyCallback)interaction;
+                String reply = "Error processing interaction:\n`"+err+"`";
+                (replyCallback.isAcknowledged()
+                    ? replyCallback.getHook().sendMessage(reply)
+                    : replyCallback.reply(reply)
+                ).queue();
+            }
+        }
+
+        @Override
+        public void onShutdown(ShutdownEvent event)
+        {
+            if (CloseCode.DISALLOWED_INTENTS == event.getCloseCode())
+            {
+                ScarletDiscordJDA.this.scarlet.stop();
+                LOG.error("You must enable the `Message Content` intent in the `Privileged Gateway Intents` are of your application's `Bot` tab.");
+            }
+        }
+
         @Override
         public void onMessageContextInteraction(MessageContextInteractionEvent event)
         {
+            if (!this.isInGuild(event))
+                return;
             try
             {
                 switch (event.getName())
@@ -456,13 +510,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
+                this.interactionError(event, ex);
             }
         }
 
         @Override
         public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event)
         {
+            if (!this.isInGuild(event))
+                return;
             try
             {
                 switch (event.getName())
@@ -496,13 +552,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
+                this.interactionError(event, ex);
             }
         }
 
         @Override
         public void onSlashCommandInteraction(SlashCommandInteractionEvent event)
         {
+            if (!this.isInGuild(event))
+                return;
             try
             {
                 switch (event.getName())
@@ -909,21 +967,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
-                if (event.isAcknowledged())
-                {
-                    event.getHook().sendMessage("Internal error");
-                }
-                else
-                {
-                    event.reply("Internal error");
-                }
+                this.interactionError(event, ex);
             }
         }
 
         @Override
         public void onButtonInteraction(ButtonInteractionEvent event)
         {
+            if (!this.isInGuild(event))
+                return;
             try
             {
                 String[] parts = event.getButton().getId().split(":");
@@ -1284,21 +1336,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
-                if (event.isAcknowledged())
-                {
-                    event.getHook().sendMessage("Internal error");
-                }
-                else
-                {
-                    event.reply("Internal error");
-                }
+                this.interactionError(event, ex);
             }
         }
 
         @Override
         public void onModalInteraction(ModalInteractionEvent event)
         {
+            if (!this.isInGuild(event))
+                return;
             try
             {
                 String[] parts = event.getModalId().split(":");
@@ -1314,21 +1360,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
-                if (event.isAcknowledged())
-                {
-                    event.getHook().sendMessage("Internal error");
-                }
-                else
-                {
-                    event.reply("Internal error");
-                }
+                this.interactionError(event, ex);
             }
         }
 
         @Override
         public void onStringSelectInteraction(StringSelectInteractionEvent event)
         {
+            if (!this.isInGuild(event))
+                return;
             try
             {
                 String[] parts = event.getSelectMenu().getId().split(":");
@@ -1344,15 +1384,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
-                if (event.isAcknowledged())
-                {
-                    event.getHook().sendMessage("Internal error");
-                }
-                else
-                {
-                    event.reply("Internal error");
-                }
+                this.interactionError(event, ex);
             }
         }
         

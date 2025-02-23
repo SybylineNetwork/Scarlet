@@ -44,7 +44,7 @@ public class ScarletVRChatCookieJar implements CookieJar, Closeable
         }
         catch (IOException ioex)
         {
-            ioex.printStackTrace();
+            ScarletVRChat.LOG.error("Exception loading cookies", ioex);
         }
         else try
         {
@@ -53,17 +53,21 @@ public class ScarletVRChatCookieJar implements CookieJar, Closeable
         }
         catch (IOException ioex)
         {
-            ioex.printStackTrace();
+            ScarletVRChat.LOG.error("Exception loading cookies", ioex);
         }
     }
 
-    synchronized void save() throws IOException
+    synchronized void save()
     {
         this.removeStale();
         try (PrintStream out = new PrintStream(this.cookieFile))
         {
             for (Cookie cookie : this.list)
                 out.println(cookie.toString());
+        }
+        catch (IOException ioex)
+        {
+            ScarletVRChat.LOG.error("Exception saving cookies", ioex);
         }
     }
 

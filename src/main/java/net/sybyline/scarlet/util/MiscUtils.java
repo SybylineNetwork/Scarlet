@@ -139,4 +139,51 @@ public interface MiscUtils
         return offset == buffer.length ? buffer : Arrays.copyOf(buffer, offset);
     }
 
+    static int compareSemVer(String l, String r)
+    {
+        try
+        {
+            int li, ri, cmp;
+            
+            li = l == null ? 0 : 1;
+            ri = r == null ? 0 : 1;
+            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            
+            if (l == null) return 0;
+            
+            String[] la = l.split("\\."),
+                     ra = r.split("\\."),
+                     l2a = la[2].split("-"),
+                     r2a = ra[2].split("-");
+            
+            li = Integer.parseInt(la[0]);
+            ri = Integer.parseInt(ra[0]);
+            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            
+            li = Integer.parseInt(la[1]);
+            ri = Integer.parseInt(ra[1]);
+            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            
+            li = Integer.parseInt(l2a[0]);
+            ri = Integer.parseInt(r2a[0]);
+            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            
+            li = l2a.length;
+            ri = r2a.length;
+            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            
+            if (l2a.length > 1)
+            {
+                cmp = l2a[1].compareTo(r2a[1]);
+                if (cmp != 0)
+                    return cmp;
+            }
+        }
+        catch (RuntimeException rex)
+        {
+            // ignore
+        }
+        return 0;
+    }
+
 }

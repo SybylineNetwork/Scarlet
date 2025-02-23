@@ -120,6 +120,8 @@ Scarlet requires some permissions above the bare defaults:
     - Enable the `Server Members` and `Presence` intents in the `Privileged Gateway Intents` area.<br>
       ![setup privileged gateway intents](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_privileged_gateway_intents.png?raw=true)
 3. Invite the bot to your server
+4. In the `Installation` tab for your app, select the `None` option for the `Install Link` area<br>
+   ![setup install link](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_install_link.png?raw=true)
 
 ### Setting up the VRChat group
 
@@ -136,7 +138,7 @@ All such actions (e.g., kicking or banning a user) must be performed via first-p
 1. Download the latest release (`zip` is recommended): https://github.com/SybylineNetwork/Scarlet/releases/latest
 2. Copy or extract the files into the directory of your choosing.
 3. If you have Java 8 installed to the system PATH, skip this step.
-    - Download and extract a Java 8 JDK, such as the file named like `OpenJDK8U-jdk_x64_windows_hotspot_8u???b??.zip` from https://github.com/adoptium/temurin8-binaries/releases/latest
+    - Download and extract a Java 8 JDK, such as this one from [Adoptium](https://adoptium.net/temurin/releases/?os=windows&arch=x64&package=jdk&version=8).
     - Remove the `@rem ` comment syntax from the beginnings of lines 2 and 3 of `run.bat`
     - At the end of line 2, append the path of the directory of the JDK you extracted.<br>
       ![setup edit runner](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_edit_runner.png?raw=true)

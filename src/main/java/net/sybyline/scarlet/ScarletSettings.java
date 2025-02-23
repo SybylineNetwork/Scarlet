@@ -15,11 +15,16 @@ import javax.swing.JOptionPane;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 public class ScarletSettings
 {
+
+    static final Logger LOG = LoggerFactory.getLogger("Scarlet/Settings");
 
     public ScarletSettings(File settingsFile)
     {
@@ -104,8 +109,8 @@ public class ScarletSettings
         }
         catch (Exception ex)
         {
+            LOG.error("Exception loading settings", ex);
             json = new JsonObject();
-            ex.printStackTrace();
         }
         this.json = json;
         return json;
@@ -124,7 +129,7 @@ public class ScarletSettings
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception saving settings", ex);
         }
     }
 

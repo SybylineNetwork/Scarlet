@@ -160,7 +160,7 @@ public class ScarletLogger extends LegacyAbstractLogger
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
+                ex.printStackTrace(System.err);
             }
             if (logFileStream != null) try
             {
@@ -169,7 +169,7 @@ public class ScarletLogger extends LegacyAbstractLogger
             }
             catch (Exception ex)
             {
-                ex.printStackTrace();
+                ex.printStackTrace(System.err);
             }
         }
 

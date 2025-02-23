@@ -45,11 +45,12 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.2",
+        VERSION = "0.4.3",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
         USER_AGENT_STATIC = USER_AGENT_NAME+"-static/"+VERSION+" "+DEV_DISCORD,
+        META_URL = "https://github.com/"+GROUP+"/"+NAME+"/blob/main/meta.json?raw=true",
         
         API_VERSION = "api/1",
         API_HOST_0 = "vrchat.com",
@@ -94,10 +95,15 @@ public class Scarlet implements Closeable
         // absolute initialization, even before explicit constructor body
     }
 
+    public void stop()
+    {
+        this.running = false;
+    }
+
     @Override
     public void close() throws IOException
     {
-        this.running = false;
+        this.stop();
         MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
@@ -124,13 +130,14 @@ public class Scarlet implements Closeable
 
     public void run()
     {
+        this.checkUpdate();
         try
         {
             this.vrc.login();
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Failed to authenticate with VRChat", ex);
             return;
         }
         this.logs.start();
@@ -149,7 +156,7 @@ public class Scarlet implements Closeable
                 catch (Exception ex)
                 {
                     this.running = false;
-                    ex.printStackTrace();
+                    LOG.error("Exception maybe refreshing", ex);
                     return;
                 }
                 // query & emit
@@ -160,7 +167,7 @@ public class Scarlet implements Closeable
                 catch (Exception ex)
                 {
                     this.running = false;
-                    ex.printStackTrace();
+                    LOG.error("Exception emitting query", ex);
                     return;
                 }
             }
@@ -252,7 +259,27 @@ public class Scarlet implements Closeable
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception in spin", ex);
+        }
+    }
+
+    void checkUpdate()
+    {
+        try
+        {
+            ScarletMeta meta;
+            try (HttpURLInputStream in = HttpURLInputStream.get(META_URL))
+            {
+                meta = GSON_PRETTY.fromJson(new InputStreamReader(in), ScarletMeta.class);
+            }
+            if (MiscUtils.compareSemVer(VERSION, meta.latest_release) < 0)
+            {
+                LOG.info("Newer version "+meta.latest_release+" available");
+            }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Failed to download meta", ex);
         }
     }
     

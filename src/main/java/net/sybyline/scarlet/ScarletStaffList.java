@@ -69,7 +69,7 @@ public class ScarletStaffList
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception loading staff list", ex);
             return false;
         }
         this.staffUserIds.clear();
@@ -86,7 +86,7 @@ public class ScarletStaffList
         }
         catch (Exception ex)
         {
-            ex.printStackTrace();
+            LOG.error("Exception saving staff list", ex);
             return false;
         }
         return true;

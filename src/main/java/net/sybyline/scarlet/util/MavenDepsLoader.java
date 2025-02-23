@@ -70,7 +70,7 @@ public class MavenDepsLoader
         catch (Exception ex)
         {
             System.err.println(String.format("net.sybyline.scarlet.util.MavenDepsLoader: Exception creating dependencies directory '%s'", depsDir));
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             return;
         }
         
@@ -82,7 +82,7 @@ public class MavenDepsLoader
         catch (Exception ex)
         {
             System.err.println(String.format("net.sybyline.scarlet.util.MavenDepsLoader: Exception reading manifest from '%s'", url));
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             return;
         }
         
@@ -136,7 +136,7 @@ public class MavenDepsLoader
         catch (Exception ex)
         {
             System.err.println(String.format("net.sybyline.scarlet.util.MavenDepsLoader: Exception creating directories '%s'", depPath.getParent()));
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
             return;
         }
         
@@ -148,7 +148,7 @@ public class MavenDepsLoader
         catch (Exception ex)
         {
             System.err.println(String.format("net.sybyline.scarlet.util.MavenDepsLoader: Exception copying dependency '%s' from '%s' to '%s'", depName, depUrl, depPath));
-            ex.printStackTrace();
+            ex.printStackTrace(System.err);
         }
     }
 

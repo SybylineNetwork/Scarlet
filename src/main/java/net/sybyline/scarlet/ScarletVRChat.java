@@ -340,14 +340,7 @@ public class ScarletVRChat implements Closeable
 
     public void save()
     {
-        try
-        {
-            this.cookies.save();
-        }
-        catch (Exception ex)
-        {
-            ex.printStackTrace();
-        }
+        this.cookies.save();
     }
 
     @Override

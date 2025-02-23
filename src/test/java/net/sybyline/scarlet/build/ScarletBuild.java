@@ -1,8 +1,11 @@
 package net.sybyline.scarlet.build;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -21,9 +24,12 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
@@ -31,6 +37,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import net.sybyline.scarlet.Scarlet;
+import net.sybyline.scarlet.ScarletMeta;
 
 public class ScarletBuild
 {
@@ -56,7 +63,10 @@ public class ScarletBuild
                
                srcJava = "src/main/java",
                srcRes = "src/main/resources",
-               mainClass = "net.sybyline.scarlet.Scarlet";
+               mainClass = "net.sybyline.scarlet.Scarlet",
+               
+               pom = "pom.xml",
+               meta = "meta.json";
         
         System.out.println("Cleaning "+build);
         cleanDir(build);
@@ -119,7 +129,87 @@ public class ScarletBuild
         System.out.println("Zipping release "+buildZip);
         compressDir(buildPkg, buildZip, FileTime.fromMillis(System.currentTimeMillis()), Deflater.DEFAULT_COMPRESSION);
         
+        System.out.println("Updating pom "+pom);
+        updatePom(pom);
+
+        System.out.println("Updating meta "+meta);
+        updateMeta(meta);
+        
         System.out.println("Done");
+    }
+
+    static void updatePom(String pom) throws Exception
+    {
+        Path pom0 = DIR.resolve(pom);
+        Pattern pattern = Pattern.compile("\\A(?<pre>\\s*\\Q<version>\\E\\s*)(?<ver>\\S+)(?<post>\\s*\\Q</version><!--scarlet-version-->\\E)\\z");
+        List<String> lines = new ArrayList<>();
+        boolean change = false;
+        try (BufferedReader br = Files.newBufferedReader(pom0))
+        {
+            for (String line; (line = br.readLine()) != null;)
+            {
+                Matcher matcher = pattern.matcher(line);
+                if (matcher.find())
+                {
+                    String pre = matcher.group("pre"),
+                           ver = matcher.group("ver"),
+                           post = matcher.group("post");
+                    if (Scarlet.VERSION.equals(ver))
+                    {
+                        lines.add(line);
+                    }
+                    else
+                    {
+                        System.out.println("  Changing version: "+ver+" -> "+Scarlet.VERSION);
+                        lines.add(pre+Scarlet.VERSION+post);
+                        change = true;
+                    }
+                }
+                else
+                {
+                    lines.add(line);
+                }
+            }
+        }
+        if (!change)
+            return;
+        try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(pom0)))
+        {
+            lines.forEach(pw::println);
+        }
+    }
+
+    static void updateMeta(String meta) throws Exception
+    {
+        Path meta0 = DIR.resolve(meta);
+        ScarletMeta scarletMeta;
+        try (BufferedReader br = Files.newBufferedReader(meta0))
+        {
+            scarletMeta = Scarlet.GSON_PRETTY.fromJson(br, ScarletMeta.class);
+        }
+        boolean change = false;
+        {
+            if (Scarlet.VERSION.indexOf('-') == -1)
+            {
+                if (change |= !Objects.equals(Scarlet.VERSION, scarletMeta.latest_release))
+                {
+                    System.out.println("  latest_release: "+scarletMeta.latest_release+" -> "+Scarlet.VERSION);
+                    scarletMeta.latest_release = Scarlet.VERSION;
+                }
+            }
+            if (change |= !Objects.equals(Scarlet.VERSION, scarletMeta.latest_build))
+            {
+                System.out.println("  latest_build: "+scarletMeta.latest_build+" -> "+Scarlet.VERSION);
+                scarletMeta.latest_build = Scarlet.VERSION;
+            }
+        }
+//        if (!change)
+//            return;
+        try (BufferedWriter bw = Files.newBufferedWriter(meta0))
+        {
+            Scarlet.GSON_PRETTY.toJson(scarletMeta, ScarletMeta.class, bw);
+            bw.append('\n');
+        }
     }
 
     static int exec(Object... command) throws Exception
