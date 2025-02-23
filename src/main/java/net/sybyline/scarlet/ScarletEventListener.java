@@ -4,6 +4,7 @@ import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -106,6 +107,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             List<ScarletWatchedGroups.WatchedGroup> wgs = lugs.stream()
                 .map(LimitedUserGroups::getId)
                 .map(this.scarlet.watchedGroups::getWatchedGroup)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
             if (!wgs.isEmpty())
             {

@@ -4,6 +4,9 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.5-rc1
+  - Fixed NPE when checking if a joining player has watched groups
+
 ## 0.4.4
   - Fixed importing legacy CSV list of watched groups (Excel format, instead of RFC4180)
 
