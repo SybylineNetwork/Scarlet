@@ -1,9 +1,18 @@
 package net.sybyline.scarlet.util;
 
+import java.awt.Desktop;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.Reader;
+import java.io.Writer;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -184,6 +193,59 @@ public interface MiscUtils
             // ignore
         }
         return 0;
+    }
+
+    static Writer writer(File file) throws FileNotFoundException
+    {
+        return new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
+    }
+
+    static Reader reader(File file) throws FileNotFoundException
+    {
+        return new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
+    }
+
+    interface AWTDesktop
+    {
+        static boolean open(File file)
+        {
+            if (Desktop.isDesktopSupported()) try
+            {
+                Desktop.getDesktop().open(file);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Scarlet.LOG.error("Exception opening file "+file, ex);
+            }
+            return false;
+        }
+        static boolean edit(File file)
+        {
+            if (Desktop.isDesktopSupported()) try
+            {
+                Desktop.getDesktop().edit(file);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Scarlet.LOG.error("Exception editing file "+file, ex);
+            }
+            return false;
+        }
+        static boolean browse(URI uri)
+        {
+            if (Desktop.isDesktopSupported()) try
+            {
+                Desktop.getDesktop().browse(uri);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Scarlet.LOG.error("Exception browsing to uri "+uri, ex);
+            }
+            return false;
+        }
     }
 
 }

@@ -1,6 +1,5 @@
 package net.sybyline.scarlet;
 
-import java.awt.Desktop;
 import java.io.Closeable;
 import java.io.File;
 import java.io.FileReader;
@@ -11,8 +10,14 @@ import java.io.StringReader;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Scanner;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +29,8 @@ import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.User;
 
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
 import net.sybyline.scarlet.util.MavenDepsLoader;
@@ -45,12 +52,13 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.5-rc1",
+        VERSION = "0.4.5-rc4",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
         USER_AGENT_STATIC = USER_AGENT_NAME+"-static/"+VERSION+" "+DEV_DISCORD,
-        META_URL = "https://github.com/"+GROUP+"/"+NAME+"/blob/main/meta.json?raw=true",
+        GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
+        META_URL = GITHUB_URL+"/blob/main/meta.json?raw=true",
         
         API_VERSION = "api/1",
         API_HOST_0 = "vrchat.com",
@@ -77,6 +85,20 @@ public class Scarlet implements Closeable
         System.exit(0);
     }
 
+    public static final File dir;
+    static
+    {
+        String scarletHome = System.getenv("SCARLET_HOME");
+        scarletHome = System.getProperty("SCARLET_HOME", scarletHome);
+        File dir0 = scarletHome != null
+            ? ";".equals(scarletHome.trim()) && MavenDepsLoader.jarPath() != null
+                ? MavenDepsLoader.jarPath().toFile()
+                : new File(scarletHome).getAbsoluteFile()
+            : new File(System.getenv("LOCALAPPDATA"), GROUP+"/"+NAME);
+        if (!dir0.isDirectory())
+            dir0.mkdirs();
+        dir = dir0;
+    }
     public static final Logger LOG = LoggerFactory.getLogger("Scarlet");
 
     public static final Gson GSON, GSON_PRETTY;
@@ -85,6 +107,9 @@ public class Scarlet implements Closeable
         GsonBuilder gb = JsonAdapters.gson();
         GSON = gb.create();
         GSON_PRETTY = gb.setPrettyPrinting().create();
+        LOG.info(String.format("App: %s %s", NAME, VERSION));
+        LOG.info(String.format("OS: %s (%s)", System.getProperty("os.name"), System.getProperty("os.arch")));
+        LOG.info(String.format("VM: %s %s (%s)", System.getProperty("java.version"), System.getProperty("java.vendor"), System.getProperty("java.vm.name")));
     }
 
     public Scarlet() throws IOException
@@ -104,29 +129,42 @@ public class Scarlet implements Closeable
     public void close() throws IOException
     {
         this.stop();
+        this.exec.shutdown();
+        try
+        {
+            if (!this.exec.awaitTermination(3_000L, TimeUnit.MILLISECONDS))
+            {
+                int unstarted = this.exec.shutdownNow().size();
+                LOG.error("Forcibly terminated executor service, "+unstarted+" unstarted task(s)");
+            }
+        }
+        catch (InterruptedException iex)
+        {
+        }
         MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
+        MiscUtils.close(this.ui);
     }
 
     volatile boolean running = true;
-    final File dir = new File(System.getenv("LOCALAPPDATA"), GROUP+"/"+NAME);
-    {
-        if (!this.dir.isDirectory())
-            this.dir.mkdirs();
-    }
+    final AtomicInteger threadidx = new AtomicInteger();
+    final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
+    
     final File dirVrc = new File(System.getProperty("user.home"), "AppData/LocalLow/VRChat/VRChat");
     
     final ScarletEventListener eventListener = new ScarletEventListener(this);
-    final ScarletSettings settings = new ScarletSettings(new File(this.dir, "settings.json"));
-    final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(this.dir, "moderation_tags.json"));
-    final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(this.dir, "watched_groups.json"));
-    final ScarletStaffList staffList = new ScarletStaffList(this, new File(this.dir, "staff_list.json"));
-    final ScarletData data = new ScarletData(new File(this.dir, "data"));
-    final TTSService ttsService = new TTSService(new File(this.dir, "tts"), this.eventListener);
-    final ScarletVRChat vrc = new ScarletVRChat(this, new File(this.dir, "store.bin"));
-    final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(this.dir, "discord_bot.json"));
+    final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
+    final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
+    final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(dir, "watched_groups.json"));
+    final ScarletStaffList staffList = new ScarletStaffList(this, new File(dir, "staff_list.json"));
+    final ScarletData data = new ScarletData(new File(dir, "data"));
+    final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
+    final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
+    final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
+    String[] last25logs = new String[0];
+    final ScarletUI ui = new ScarletUI(this);
 
     public void run()
     {
@@ -143,6 +181,7 @@ public class Scarlet implements Closeable
         this.logs.start();
         try
         {
+            long filecheck = 3;
             for (long now, lastIter = 0L; this.running; lastIter = now)
             {
                 // spin
@@ -170,6 +209,24 @@ public class Scarlet implements Closeable
                     LOG.error("Exception emitting query", ex);
                     return;
                 }
+                // log names
+                if (filecheck --> 0L) try
+                {
+                    File logs = new File(dir, "logs");
+                    String[] names = logs.list(($, name) -> ScarletLogger.lfpattern.matcher(name).find());
+                    names = Arrays
+                        .stream(names)
+                        .sorted(Comparator.reverseOrder())
+                        .limit(OptionData.MAX_CHOICES)
+                        .toArray(String[]::new);
+                    this.last25logs = names;
+                }
+                catch (Exception ex)
+                {
+                    this.running = false;
+                    LOG.error("Exception emitting query", ex);
+                    return;
+                }
             }
         }
         finally
@@ -187,8 +244,10 @@ public class Scarlet implements Closeable
             {
                 @SuppressWarnings("resource")
                 Scanner s = new Scanner(System.in);
-                String line = s.nextLine();
-                Scanner ls = new Scanner(new StringReader(line.trim()));
+                String line = s.nextLine().trim();
+                if (line.isEmpty())
+                    continue;
+                Scanner ls = new Scanner(new StringReader(line));
                 {
                     String op = ls.next();
                     switch (op)
@@ -204,11 +263,7 @@ public class Scarlet implements Closeable
                         LOG.info("Stopping");
                     } break;
                     case "explore": {
-                        if (Desktop.isDesktopSupported())
-                        {
-                            Desktop.getDesktop().browse(this.dir.toURI());
-                            LOG.info("Browsing to folder");
-                        }
+                        MiscUtils.AWTDesktop.browse(dir.toURI());
                     } break;
                     case "tts": {
                         String text = ls.nextLine().trim();
@@ -239,7 +294,7 @@ public class Scarlet implements Closeable
                         LOG.info("Importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from);
                         try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from)) : new FileReader(from))
                         {
-                            if (this.watchedGroups.importLegacyCSV(reader))
+                            if (this.watchedGroups.importLegacyCSV(reader, true))
                             {
                                 LOG.info("Successfully imported watched groups legacy CSV");
                             }
@@ -251,6 +306,27 @@ public class Scarlet implements Closeable
                         catch (Exception ex)
                         {
                             LOG.error("Exception importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from, ex);
+                        }
+                    } break;
+                    case "importgroupsjson": {
+                        String from = ls.nextLine().trim();
+                        boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
+                        
+                        LOG.info("Importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from);
+                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from)) : new FileReader(from))
+                        {
+                            if (this.watchedGroups.importJson(reader, true))
+                            {
+                                LOG.info("Successfully imported watched groups JSON");
+                            }
+                            else
+                            {
+                                LOG.warn("Failed to import watched groups JSON with unknown reason");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LOG.error("Exception importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from, ex);
                         }
                     } break;
                     }
@@ -327,6 +403,12 @@ public class Scarlet implements Closeable
         }
         LOG.debug("Querying from "+from+" to "+to);
         List<GroupAuditLogEntry> entries = this.vrc.auditQuery(from, to);
+        
+        if (entries == null)
+        {
+            LOG.warn("Failed to get entries from "+from+" to "+to);
+            return;
+        }
         
         for (GroupAuditLogEntry entry : entries)
         {

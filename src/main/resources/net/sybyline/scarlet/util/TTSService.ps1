@@ -17,6 +17,10 @@ namespace SybylineNetwork
             SpeechAudioFormatInfo safi = new SpeechAudioFormatInfo(48000, AudioBitsPerSample.Sixteen, AudioChannel.Stereo);
             using (SpeechSynthesizer synth = new SpeechSynthesizer())
             {
+                foreach (InstalledVoice voice in synth.GetInstalledVoices())
+                {
+                    Console.WriteLine("@"+voice.VoiceInfo.Name);
+                }
                 string dir = Console.ReadLine();
                 string line;
                 for (uint idx = 0; (line = Console.ReadLine()) != null; idx++)
@@ -25,10 +29,17 @@ namespace SybylineNetwork
                     {
                         return;
                     }
-                    string path = dir+"\\tts_"+idx+"_audio.wav";
-                    synth.SetOutputToWaveFile(path, safi);
-                    synth.Speak(new Prompt(line));
-                    Console.WriteLine(path);
+                    else if (line.StartsWith("@"))
+                    {
+                        synth.SelectVoice(line.Substring(1));
+                    }
+                    else if (line.StartsWith("+"))
+                    {
+                        string path = dir+"\\tts_"+idx+"_audio.wav";
+                        synth.SetOutputToWaveFile(path, safi);
+                        synth.Speak(new Prompt(line.Substring(1)));
+                        Console.WriteLine("+"+path);
+                    }
                 }
             }
         }

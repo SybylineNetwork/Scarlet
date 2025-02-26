@@ -4,6 +4,15 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.5-rc4
+  - Added ability to specify where Scarlet stores data
+  - Added ability to select a TTS voice
+  - Added Discord commands to configure watched groups
+  - Added Discord command to export Scarlet logs
+  - Added dummy UI for ease of exiting the application
+  - Added default command permissions for Discord commands
+  - Changed log name format for JDA classes
+
 ## 0.4.5-rc1
   - Fixed NPE when checking if a joining player has watched groups
 

@@ -13,6 +13,12 @@ A self-hostable VRChat Group management utility with Discord integration
 
 [Installation](#installation)
 
+## Why Scarlet?
+
+Scarlet is self-hosted, meaning that you have complete control of your own group's data.
+There is no third party with access to your VRChat or Discord credentials or other sensitive information.
+Since there is no automatic synchronization of data between groups running Scarlet, you don't have to worry about other groups seeing who your group has moderated or what groups you are tracking.
+
 ## Features
 
 ### Discord commands
@@ -28,6 +34,9 @@ Discord slash commands:
     Removes a custom moderation tag (max of 25)<br>
     Example: `/delete-moderation-tag "trolling"`
     - `value` The internal name of the tag
+  - `watched-group`<br>
+    Configures watched groups<br>
+    Example: `/watched-group add-tag "grp_00000000-0000-0000-0000-000000000000" "trolling"`
   - `associate-ids <discord-user:user> <vrchat-user:string>`<br>
     Associates a VRChat account with a Discord account<br>
     Example: `/associate-ids <@123456789123456789> "usr_00000000-0000-0000-0000-000000000000"`
@@ -37,6 +46,10 @@ Discord slash commands:
     Lists internal and audit information for a specific VRChat user<br>
     Example: `/vrchat-user-info "usr_00000000-0000-0000-0000-000000000000"`
     - `vrchat-user` The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)
+  - `discord-user-info <discord-user:user>`<br>
+    Lists internal information for a specific Discord user<br>
+    Example: `/discord-user-info <@123456789123456789>`
+    - `discord-user` The Discord user
   - `query-target-history <vrchat-user:string> <days-back:int?>`<br>
     Queries audit events targeting a specific VRChat user<br>
     Example: `/vrchat-user-info "usr_00000000-0000-0000-0000-000000000000" "14"`
@@ -56,11 +69,18 @@ Discord slash commands:
     Sets a given voice channel as the channel in which to announce TTS messages<br>
     Example: `/set-voice-channel <#staff-in-instance>`
     - `discord-channel` The Discord channel to use, or omit to remove entry
+  - `set-tts-voice <voice-name:string>`<br>
+    Sets the voice in which to announce TTS messages<br>
+    Example: `/set-tts-voice "Microsoft David Desktop"`
+    - `voice-name` The name of the voice to use
   - `set-permission-role <scarlet-permission:string> <discord-role:role?>`<br>
     Sets a given Scarlet-specific permission to be associated with a given Discord role<br>
     Example: `/set-permission-role "event.set_tags" <@123456789123456789>`
     - `scarlet-permission` The Scarlet-specific permission
     - `discord-role` The Discord role to use, or omit to remove entry
+  - `export-log <file-name:string?>`<br>
+    Exports a Scarlet log file as an attachment<br>
+    Example: `/export-log`
   - `config-info`<br>
     Shows information about the current configuration<br>
     Example: `/config-info`
@@ -91,6 +111,8 @@ Scarlet has several commands you can enter via standard input:
     Associates a VRChat account with a Discord account
   - `importgroups <file|url...>`<br>
     Imports a legacy CSV list of watched groups from a file or url
+  - `importgroupsjson <file|url...>`<br>
+    Imports a JSON list of watched groups from a file or url
 
 ## Installation
 
@@ -144,5 +166,9 @@ All such actions (e.g., kicking or banning a user) must be performed via first-p
       ![setup edit runner](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_edit_runner.png?raw=true)
     - If you update Scarlet, remember to either update the version of the `.jar` on line 4:<br>
       `java -jar scarlet-?.?.?.jar`.
-4. Run the `run.bat`
+4. If you want Scarlet to store data in a specific folder:
+    - Remove the `@rem ` comment syntax from the beginning of line 4 of `run.bat`
+    - At the end of line 4, append the path of the directory in which you want Scarlet to store data
+    - If you want Scarlet to store data right next to the `.jar` file, specify `;` as the path instead
+5. Run the `run.bat`
 

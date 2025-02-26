@@ -35,6 +35,7 @@ import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
+import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
@@ -121,7 +122,9 @@ public class ScarletVRChat implements Closeable
         this.cookies.setup(this.client);
         this.cookies.load();
         this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
+        scarlet.settings.setNamespace(this.groupId);
         this.cachedUsers = Collections.synchronizedMap(new LRUMap_1024<>());
+        this.cachedGroups = Collections.synchronizedMap(new LRUMap_1024<>());
         this.cachedUserGroups = Collections.synchronizedMap(new LRUMap_1024<>());
     }
 
@@ -130,7 +133,9 @@ public class ScarletVRChat implements Closeable
     final ApiClient client;
     final String groupId;
     final Map<String, User> cachedUsers;
+    final Map<String, Group> cachedGroups;
     final Map<String, List<LimitedUserGroups>> cachedUserGroups;
+    long localDriftMillis = 0L;
 
     public ApiClient getClient()
     {
@@ -147,8 +152,30 @@ public class ScarletVRChat implements Closeable
             : originalResponse;
     }
 
+    public long getLocalDriftMillis()
+    {
+        return this.localDriftMillis;
+    }
+
     public void login() throws ApiException
     {
+        try
+        {
+            long timePre = System.currentTimeMillis(),
+                 timeServer = new SystemApi(this.client).getSystemTime().toInstant().toEpochMilli(),
+                 timePost = System.currentTimeMillis(),
+                 drift = (timePre + timePost) / 2 - timeServer,
+                 driftAbs = Math.abs(drift);
+            if (drift >= 1_000L)
+            {
+                LOG.warn("Local system time is "+driftAbs+(drift > 0 ? "ms ahead of VRChat servers" : "ms behind VRChat servers"));
+            }
+            this.localDriftMillis = drift;
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception calculating drift", ex);
+        }
         try
         {
             AuthenticationApi auth = new AuthenticationApi(this.client);
@@ -315,6 +342,25 @@ public class ScarletVRChat implements Closeable
         catch (ApiException apiex)
         {
             LOG.error("Error during get user: "+apiex.getMessage());
+            return null;
+        }
+    }
+
+    public Group getGroup(String groupId)
+    {
+        Group group = this.cachedGroups.get(groupId);
+        if (group != null)
+            return group;
+        GroupsApi users = new GroupsApi(this.client);
+        try
+        {
+            group = users.getGroup(groupId, null);
+            this.cachedGroups.put(groupId, group);
+            return group;
+        }
+        catch (ApiException apiex)
+        {
+            LOG.error("Error during get group: "+apiex.getMessage());
             return null;
         }
     }

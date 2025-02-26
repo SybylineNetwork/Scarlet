@@ -241,10 +241,12 @@ Group audit log event information:
 
 Volatile data:
 ```reg
-[HKEY_CURRENT_USER\Software\JavaSoft\Prefs\net\sybyline\scarlet]
+[HKEY_CURRENT_USER\Software\JavaSoft\Prefs\net\sybyline\scarlet\grp_00000000-0000-0000-0000-000000000000]
 ; The last time Scarlet queried the audit log
 "last/Audit/Query"="2069-02-31/T12:34:56.789/Z"
 ; The last time Scarlet refreshed VRChat authentication
 "last/Auth/Refresh"="2069-02-31/T12:34:56.789/Z"
+; The bounds of the UI window (x,y,width,height)
+"ui/Bounds"="979,603,846,400"
 ```
 As the Windows implementation of the `java.util.prefs` package uses the Windows registry, which is case-insensitive, `/` characters are used to "escape" uppercase characters to avoid clashes.

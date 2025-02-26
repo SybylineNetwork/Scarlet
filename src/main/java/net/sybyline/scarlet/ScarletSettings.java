@@ -1,10 +1,11 @@
 package net.sybyline.scarlet;
 
 import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.io.Console;
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -21,6 +22,8 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import net.sybyline.scarlet.util.MiscUtils;
+
 public class ScarletSettings
 {
 
@@ -29,16 +32,25 @@ public class ScarletSettings
     public ScarletSettings(File settingsFile)
     {
         this.settingsFile = settingsFile;
-        this.preferences = Preferences.userNodeForPackage(Scarlet.class);
+        this.globalPreferences = Preferences.userNodeForPackage(Scarlet.class);
+        this.preferences = this.globalPreferences;
         this.json = null;
         this.lastAuditQuery = null;
         this.lastAuthRefresh = null;
+        this.uiBounds = null;
+    }
+
+    public void setNamespace(String namespace)
+    {
+        this.preferences = this.globalPreferences.node(namespace);
     }
 
     final File settingsFile;
-    final Preferences preferences;
+    final Preferences globalPreferences;
+    Preferences preferences;
     private JsonObject json;
     private OffsetDateTime lastAuditQuery, lastAuthRefresh;
+    private Rectangle uiBounds;
 
     public synchronized OffsetDateTime getLastAuditQuery()
     {
@@ -46,6 +58,7 @@ public class ScarletSettings
         if (lastAuditQuery != null)
             return lastAuditQuery;
         String lastAuditQueryString = this.preferences.get("lastAuditQuery", null);
+        if (lastAuditQueryString == null) lastAuditQueryString = this.globalPreferences.get("lastAuditQuery", null);
         if (lastAuditQueryString != null) try
         {
             lastAuditQuery = OffsetDateTime.parse(lastAuditQueryString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
@@ -75,6 +88,7 @@ public class ScarletSettings
         if (lastAuthRefresh != null)
             return lastAuthRefresh;
         String lastAuthRefreshString = this.preferences.get("lastAuthRefresh", null);
+        if (lastAuthRefreshString == null) lastAuthRefreshString = this.globalPreferences.get("lastAuthRefresh", null);
         if (lastAuthRefreshString != null) try
         {
             lastAuthRefresh = OffsetDateTime.parse(lastAuthRefreshString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
@@ -98,14 +112,46 @@ public class ScarletSettings
         this.preferences.put("lastAuthRefresh", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuthRefresh));
     }
 
+    public synchronized Rectangle getUIBounds()
+    {
+        Rectangle uiBounds = this.uiBounds;
+        if (uiBounds != null)
+            return uiBounds;
+        String uiBoundsString = this.preferences.get("uiBounds", null);
+        if (uiBoundsString == null) uiBoundsString = this.globalPreferences.get("uiBoundsString", null);
+        if (uiBoundsString != null) try
+        {
+            String[] values = uiBoundsString.split(",");
+            uiBounds = new Rectangle(
+                Integer.parseInt(values[0]),
+                Integer.parseInt(values[1]),
+                Integer.parseInt(values[2]),
+                Integer.parseInt(values[3]));
+            this.uiBounds = uiBounds;
+            return uiBounds;
+        }
+        catch (RuntimeException ex)
+        {
+        }
+        return uiBounds;
+    }
+
+    public synchronized void setUIBounds(Rectangle uiBounds)
+    {
+        if (uiBounds == null)
+            return;
+        this.uiBounds = uiBounds;
+        this.preferences.put("uiBounds", String.format("%d,%d,%d,%d", uiBounds.x, uiBounds.y, uiBounds.width, uiBounds.height));
+    }
+
     synchronized JsonObject getJson()
     {
         JsonObject json = this.json;
         if (json != null)
             return json;
-        try (FileReader fr = new FileReader(this.settingsFile))
+        try (Reader r = MiscUtils.reader(this.settingsFile))
         {
-            json = Scarlet.GSON_PRETTY.fromJson(fr, JsonObject.class);
+            json = Scarlet.GSON_PRETTY.fromJson(r, JsonObject.class);
         }
         catch (Exception ex)
         {
@@ -123,9 +169,9 @@ public class ScarletSettings
             return;
         if (!this.settingsFile.getParentFile().isDirectory())
             this.settingsFile.getParentFile().mkdirs();
-        try (FileWriter fw = new FileWriter(this.settingsFile))
+        try (Writer w = MiscUtils.writer(this.settingsFile))
         {
-            Scarlet.GSON_PRETTY.toJson(json, JsonObject.class, fw);
+            Scarlet.GSON_PRETTY.toJson(json, JsonObject.class, w);
         }
         catch (Exception ex)
         {

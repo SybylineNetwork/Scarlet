@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.regex.Pattern;
 
 import org.slf4j.Marker;
 import org.slf4j.event.Level;
@@ -19,6 +20,8 @@ public class ScarletLogger extends LegacyAbstractLogger
 {
 
     private static final long serialVersionUID = -875763706664943747L;
+
+    public static final Pattern lfpattern = Pattern.compile("\\Ascarlet_log_\\d\\d\\d\\d-\\d\\d-\\d\\d_\\d\\d-\\d\\d-\\d\\d\\.txt\\z");
 
     public ScarletLogger()
     {
@@ -102,7 +105,7 @@ public class ScarletLogger extends LegacyAbstractLogger
         private static final Thread printer_thread = new Thread(ThreadLogEntry::thread),
                                     shutdown_thread = new Thread(ThreadLogEntry::shutdown);
         private static final BlockingQueue<ThreadLogEntry> entries = new LinkedBlockingQueue<>();
-        private static final File logFile = new File(System.getenv("LOCALAPPDATA"), Scarlet.GROUP+"/"+Scarlet.NAME+"/logs/scarlet_log_"+DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(LocalDateTime.now())+".txt");
+        private static final File logFile = new File(Scarlet.dir, "logs/scarlet_log_"+DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(LocalDateTime.now())+".txt");
         private static final PrintStream logFileStream;
 
         static

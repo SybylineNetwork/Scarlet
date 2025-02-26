@@ -1,8 +1,8 @@
 package net.sybyline.scarlet;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.lang.reflect.Type;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
@@ -18,6 +18,8 @@ import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+
+import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletData
 {
@@ -39,7 +41,7 @@ public class ScarletData
         File targetFile = new File(this.dir, name);
         if (!targetFile.isFile())
             return null;
-        try (FileReader reader = new FileReader(targetFile))
+        try (Reader reader = MiscUtils.reader(targetFile))
         {
             return JSON.getGson().fromJson(reader, type);
         }
@@ -58,7 +60,7 @@ public class ScarletData
         if (data == null)
             return;
         File targetFile = new File(this.dir, name);
-        try (FileWriter writer = new FileWriter(targetFile))
+        try (Writer writer = MiscUtils.writer(targetFile))
         {
             JSON.getGson().toJson(data, type, writer);
         }
@@ -94,7 +96,7 @@ public class ScarletData
         File targetFile = new File(targetDir, id);
         if (!targetFile.isFile())
             return null;
-        try (FileReader reader = new FileReader(targetFile))
+        try (Reader reader = MiscUtils.reader(targetFile))
         {
             return JSON.getGson().fromJson(reader, type);
         }
@@ -118,7 +120,7 @@ public class ScarletData
         if (!targetDir.isDirectory())
             targetDir.mkdirs();
         File targetFile = new File(targetDir, id);
-        try (FileWriter writer = new FileWriter(targetFile))
+        try (Writer writer = MiscUtils.writer(targetFile))
         {
             JSON.getGson().toJson(data, type, writer);
         }

@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.jar.Manifest;
 
+import org.jetbrains.annotations.Nullable;
+
 import net.sybyline.scarlet.Scarlet;
 
 public class MavenDepsLoader
@@ -17,6 +19,11 @@ public class MavenDepsLoader
     public static void init()
     {
         // noop
+    }
+
+    public static @Nullable Path jarPath()
+    {
+        return jarPath;
     }
 
     private MavenDepsLoader()
@@ -29,6 +36,8 @@ public class MavenDepsLoader
         "https://search.maven.org/remotecontent?filepath=",
         "https://jitpack.io/",
     };
+
+    static Path jarPath = null;
 
     static
     {
@@ -62,6 +71,8 @@ public class MavenDepsLoader
         Path jarPath = Paths.get(unescapedPath),
              jarDir = jarPath.getParent(),
              depsDir = jarDir.resolve("libraries");
+        
+        MavenDepsLoader.jarPath = jarPath;
         
         if (!Files.isDirectory(depsDir)) try
         {

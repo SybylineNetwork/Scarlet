@@ -5,15 +5,23 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Reader;
+import java.io.Writer;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.github.vrchatapi.model.Group;
+
+import net.dv8tion.jda.api.EmbedBuilder;
 
 public class ScarletWatchedGroups
 {
@@ -35,7 +43,7 @@ public class ScarletWatchedGroups
     public static class WatchedGroup
     {
         public String id;
-        public Type type;
+        public Type type = Type.UNKNOWN;
         public static enum Type
         {
             UNKNOWN(),
@@ -52,12 +60,30 @@ public class ScarletWatchedGroups
         public String[] tags;
         public boolean critical;
         public String message;
+        
+        public EmbedBuilder embed(Group group)
+        {
+            String name = group != null ? group.getName() : this.id,
+                   thumbnail = group != null ? group.getBannerUrl() : "https://assets.vrchat.com/www/groups/default_banner.png";
+            return new EmbedBuilder()
+                .setTitle(name, "https://vrchat.com/home/group/"+this.id)
+                .setThumbnail(thumbnail)
+                .addField("Critical", this.critical ? "true" : "false", false)
+                .addField("Watch type", this.type == null ? "" : this.type.name(), false)
+                .addField("Message", this.message == null ? "" : this.message, false)
+                .addField("Tags", this.tags == null ? "null" : Arrays
+                    .stream(this.tags)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.joining("`, `", "`", "`")), false)
+            ;
+        }
+        
     }
 
     @SuppressWarnings("resource")
-    public boolean importLegacyCSV(Reader reader) throws IOException
+    public boolean importLegacyCSV(Reader reader, boolean overwrite) throws IOException
     {
-        Map<String, WatchedGroup> importedWatchedGroups = new HashMap<>();
+        List<WatchedGroup> importedWatchedGroups = new ArrayList<>();
         for (CSVRecord record : CSVFormat.EXCEL.parse(reader))
         {
             WatchedGroup watchedGroup = new WatchedGroup();
@@ -78,9 +104,38 @@ public class ScarletWatchedGroups
                 .toArray(String[]::new);
             watchedGroup.critical = Boolean.parseBoolean(record.get(3));
             watchedGroup.message = record.get(4);
-            importedWatchedGroups.put(watchedGroup.id, watchedGroup);
+            importedWatchedGroups.add(watchedGroup);
         }
-        this.watchedGroups.putAll(importedWatchedGroups);
+        return this.importWatchedGroups(importedWatchedGroups, overwrite);
+    }
+
+    public boolean importJson(Reader reader, boolean overwrite) throws IOException
+    {
+        WatchedGroup[] watchedGroupsArray = Scarlet.GSON_PRETTY.fromJson(reader, WatchedGroup[].class);
+        List<WatchedGroup> importedWatchedGroups = Arrays.asList(watchedGroupsArray);
+        return this.importWatchedGroups(importedWatchedGroups, overwrite);
+    }
+
+    public boolean exportJson(Writer writer) throws IOException
+    {
+        WatchedGroup[] watchedGroupsArray = this.watchedGroups.values().toArray(new WatchedGroup[0]);
+        Scarlet.GSON_PRETTY.toJson(watchedGroupsArray, WatchedGroup[].class, writer);
+        return true;
+    }
+
+    public boolean importWatchedGroups(List<WatchedGroup> importedWatchedGroups, boolean overwrite)
+    {
+        for (WatchedGroup watchedGroup : importedWatchedGroups)
+        {
+            if (overwrite)
+            {
+                this.watchedGroups.put(watchedGroup.id, watchedGroup);
+            }
+            else
+            {
+                this.watchedGroups.putIfAbsent(watchedGroup.id, watchedGroup);
+            }
+        }
         this.save();
         return true;
     }

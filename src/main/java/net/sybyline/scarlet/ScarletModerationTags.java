@@ -1,8 +1,8 @@
 package net.sybyline.scarlet;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.reflect.TypeToken;
+
+import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletModerationTags
 {
@@ -47,9 +49,13 @@ public class ScarletModerationTags
         List<Tag> tags = this.tags;
         if (tags != null)
             return tags;
-        try (FileReader fr = new FileReader(this.moderationTagsFile))
+        if (!this.moderationTagsFile.exists())
         {
-            tags = new CopyOnWriteArrayList<>(Scarlet.GSON_PRETTY.fromJson(fr, Tag.LISTOF));
+            tags = new CopyOnWriteArrayList<>();
+        }
+        else try (Reader r = MiscUtils.reader(this.moderationTagsFile))
+        {
+            tags = new CopyOnWriteArrayList<>(Scarlet.GSON_PRETTY.fromJson(r, Tag.LISTOF));
         }
         catch (Exception ex)
         {
@@ -67,9 +73,9 @@ public class ScarletModerationTags
             return;
         if (!this.moderationTagsFile.getParentFile().isDirectory())
             this.moderationTagsFile.getParentFile().mkdirs();
-        try (FileWriter fw = new FileWriter(this.moderationTagsFile))
+        try (Writer w = MiscUtils.writer(this.moderationTagsFile))
         {
-            Scarlet.GSON_PRETTY.toJson(tags, Tag.LISTOF.getType(), fw);
+            Scarlet.GSON_PRETTY.toJson(tags, Tag.LISTOF.getType(), w);
         }
         catch (Exception ex)
         {

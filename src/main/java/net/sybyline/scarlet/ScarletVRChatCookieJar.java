@@ -4,15 +4,15 @@ import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import io.github.vrchatapi.ApiClient;
+
+import net.sybyline.scarlet.util.MiscUtils;
 
 import okhttp3.Cookie;
 import okhttp3.CookieJar;
@@ -34,7 +34,7 @@ public class ScarletVRChatCookieJar implements CookieJar, Closeable
 
     synchronized void load()
     {
-        if (this.cookieFile.isFile()) try (BufferedReader in = Files.newBufferedReader(this.cookieFile.toPath(), StandardCharsets.UTF_8))
+        if (this.cookieFile.isFile()) try (BufferedReader in = new BufferedReader(MiscUtils.reader(this.cookieFile)))
         {
             in.lines()
                 .map(String::trim)
@@ -60,10 +60,13 @@ public class ScarletVRChatCookieJar implements CookieJar, Closeable
     synchronized void save()
     {
         this.removeStale();
-        try (PrintStream out = new PrintStream(this.cookieFile))
+        try (Writer w = MiscUtils.writer(this.cookieFile))
         {
             for (Cookie cookie : this.list)
-                out.println(cookie.toString());
+            {
+                w.write(cookie.toString());
+                w.write("\n");
+            }
         }
         catch (IOException ioex)
         {

@@ -1,8 +1,8 @@
 package net.sybyline.scarlet;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -11,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletStaffList
 {
@@ -63,9 +65,9 @@ public class ScarletStaffList
             return true;
         }
         List<String> ids;
-        try (FileReader fr = new FileReader(this.staffListFile))
+        try (Reader r = MiscUtils.reader(this.staffListFile))
         {
-            ids = Arrays.asList(Scarlet.GSON_PRETTY.fromJson(fr, String[].class));
+            ids = Arrays.asList(Scarlet.GSON_PRETTY.fromJson(r, String[].class));
         }
         catch (Exception ex)
         {
@@ -80,9 +82,9 @@ public class ScarletStaffList
     public boolean save()
     {
         String[] ids = this.getStaffIds();
-        try (FileWriter fw = new FileWriter(this.staffListFile))
+        try (Writer w = MiscUtils.writer(this.staffListFile))
         {
-            Scarlet.GSON_PRETTY.toJson(ids, String[].class, fw);
+            Scarlet.GSON_PRETTY.toJson(ids, String[].class, w);
         }
         catch (Exception ex)
         {

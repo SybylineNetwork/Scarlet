@@ -8,14 +8,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,9 +19,6 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.sun.nio.file.SensitivityWatchEventModifier;
-
-@SuppressWarnings("restriction")
 public class TTSService implements Closeable
 {
 
@@ -36,6 +29,7 @@ public class TTSService implements Closeable
         this.running = true;
         this.dir = dir;
         this.listener = listener;
+        this.installedVoices = new CopyOnWriteArrayList<>();
         byte[] srcBytes = MiscUtils.readAllBytes(TTSService.class.getResourceAsStream("TTSService.ps1"));
         String sourceString = new String(srcBytes, StandardCharsets.UTF_8);
         String psb64 = Base64.getEncoder().encodeToString(sourceString.getBytes(StandardCharsets.UTF_16LE));
@@ -86,13 +80,28 @@ public class TTSService implements Closeable
         return this.running;
     }
 
-    public synchronized boolean submit(String line)
+    public boolean submit(String line)
+    {
+        return this.instruct('+', line);
+    }
+
+    public List<String> getInstalledVoices()
+    {
+        return Collections.unmodifiableList(this.installedVoices);
+    }
+
+    public boolean selectVoice(String name)
+    {
+        return this.instruct('@', name);
+    }
+
+    private synchronized boolean instruct(char op, String value)
     {
         if (!this.running)
             return false;
-        if (line == null)
+        if (value == null)
             return false;
-        this.stdin.println(line);
+        this.stdin.println(op+value);
         this.stdin.flush();
         return !this.stdin.checkError();
     }
@@ -101,6 +110,7 @@ public class TTSService implements Closeable
     volatile boolean running;
     final File dir;
     final Listener listener;
+    final List<String> installedVoices;
     final Process proc;
     final PrintStream stdin;
     final InputStream stdout, stderr;
@@ -113,93 +123,39 @@ public class TTSService implements Closeable
         {
             for (String line; this.running && (line = in.readLine()) != null;)
             {
-                File file = new File(line);
-                String name = file.getName();
-                Matcher matcher = pattern.matcher(name);
-                if (matcher.find())
+                if (!line.isEmpty()) switch (line.charAt(0))
                 {
-                    int idx = Integer.parseInt(matcher.group("idx"));
-                    boolean ok = file.isFile() && file.length() > 0L;
-                    if (ok) try
+                case '@': {
+                    String ivn = line.substring(1);
+                    if (!this.installedVoices.contains(ivn))
                     {
-                        this.listener.tts_ready(idx, file);
+                        this.installedVoices.add(ivn);
                     }
-                    catch (Exception ex)
-                    {
-                        
-                    }
-                }
-            }
-        }
-        catch (IOException ioex)
-        {
-            LOG.error("Exception in TTSService thread", ioex);
-        }
-    }
-
-    void thread0()
-    {
-        Path dirPath = this.dir.toPath();
-        Pattern pattern = Pattern.compile("tts_(?<idx>\\d+)_audio\\.wav");
-        
-        WatchEvent.Kind<?>[] watchKinds =
-        {
-            StandardWatchEventKinds.ENTRY_CREATE,
-            StandardWatchEventKinds.ENTRY_MODIFY,
-        };
-        WatchEvent.Modifier[] watchModifiers =
-        {
-            SensitivityWatchEventModifier.HIGH,
-        };
-        
-        try (WatchService watch = dirPath.getFileSystem().newWatchService())
-        {
-            @SuppressWarnings("unused")
-            WatchKey wk0 = dirPath.register(watch, watchKinds, watchModifiers);
-            for (WatchKey wk; this.running;)
-            {
-                try
-                {
-                    wk = watch.take();
-                }
-                catch (InterruptedException iex)
-                {
-                    return;
-                }
-                List<WatchEvent<?>> evts = wk.pollEvents();
-                wk.reset();
-                for (WatchEvent<?> evt : evts)
-                {
-                    Path path = (Path)evt.context();
-                    String name = path.getFileName().toString();
+                } break;
+                case '+': {
+                    File file = new File(line.substring(1));
+                    String name = file.getName();
                     Matcher matcher = pattern.matcher(name);
                     if (matcher.find())
                     {
                         int idx = Integer.parseInt(matcher.group("idx"));
-                        Path abs = dirPath.resolve(path);
-                        boolean ok;
-                        try
-                        {
-                            ok = Files.exists(abs) && Files.size(abs) > 0L;
-                        }
-                        catch (IOException ioex)
-                        {
-                            ok = false;
-                        }
+                        boolean ok = file.isFile() && file.length() > 0L;
                         if (ok) try
                         {
-                            this.listener.tts_ready(idx, abs.toFile());
+                            this.listener.tts_ready(idx, file);
                         }
                         catch (Exception ex)
                         {
                             
                         }
                     }
+                } break;
                 }
             }
         }
         catch (IOException ioex)
         {
+            LOG.error("Exception in TTSService thread", ioex);
         }
     }
 

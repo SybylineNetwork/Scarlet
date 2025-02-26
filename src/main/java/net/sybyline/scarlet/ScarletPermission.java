@@ -11,6 +11,7 @@ public enum ScarletPermission
     EVENT_USE_REPORT_LINK("event.use_report_link", "Use Report Link"),
     EVENT_SUBMIT_EVIDENCE("event.submit_evidence", "Submit Evidence"),
     CONFIG_IMPORT_WATCHED_GROUPS("config.import_watched_groups", "Submit Evidence"),
+    CONFIG_EXPORT_LOGS("config.export_logs", "Export Logs"),
     ;
 
     ScarletPermission(String id, String title)
