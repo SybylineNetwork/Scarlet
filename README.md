@@ -139,7 +139,7 @@ Scarlet requires some permissions above the bare defaults:
       - Add the `Attach Files`, `Create Polls`, `Create Public Threads`, `Embed Links`, `Manage Webhooks`, `Read Message History`, `Send Messages`, `Send Messages in Threads`, `Speak`, and `View Channels` permissions.<br>
         ![setup default install settings](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_default_install_settings.png?raw=true)
 2. In the `Bot` tab:
-    - Enable the `Server Members` and `Presence` intents in the `Privileged Gateway Intents` area.<br>
+    - Enable the `Server Members` and `Message Content` intent in the `Privileged Gateway Intents` area.<br>
       ![setup privileged gateway intents](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_privileged_gateway_intents.png?raw=true)
 3. Invite the bot to your server
 4. In the `Installation` tab for your app, select the `None` option for the `Install Link` area<br>

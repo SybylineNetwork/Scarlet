@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import io.github.vrchatapi.model.Group;
 
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.sybyline.scarlet.util.UniqueStrings;
 
 public class ScarletWatchedGroups
 {
@@ -57,7 +58,7 @@ public class ScarletWatchedGroups
             OTHER(),
             ;
         }
-        public String[] tags;
+        public UniqueStrings tags = new UniqueStrings();
         public boolean critical;
         public String message;
         
@@ -68,11 +69,13 @@ public class ScarletWatchedGroups
             return new EmbedBuilder()
                 .setTitle(name, "https://vrchat.com/home/group/"+this.id)
                 .setThumbnail(thumbnail)
-                .addField("Critical", this.critical ? "true" : "false", false)
-                .addField("Watch type", this.type == null ? "" : this.type.name(), false)
-                .addField("Message", this.message == null ? "" : this.message, false)
-                .addField("Tags", this.tags == null ? "null" : Arrays
-                    .stream(this.tags)
+                .addField("Id", "`"+this.id+"`", false)
+                .addField("Critical", this.critical ? "`true`" : "`false`", false)
+                .addField("Watch type", this.type == null ? "none" : ("`"+this.type.name()+"`"), false)
+                .addField("Message", this.message == null ? "none" : ("`"+this.message+"`"), false)
+                .addField("Tags", this.tags.isEmpty() ? "none" : this.tags
+                    .strings()
+                    .stream()
                     .filter(Objects::nonNull)
                     .collect(Collectors.joining("`, `", "`", "`")), false)
             ;
@@ -97,11 +100,11 @@ public class ScarletWatchedGroups
             default:        watchedGroup.type = WatchedGroup.Type.OTHER;      break;
             }
             
-            watchedGroup.tags = Arrays
+            Arrays
                 .stream(record.get(5).split("[,;/\\|]"))
                 .filter($ -> !$.isEmpty())
                 .map(String::toLowerCase)
-                .toArray(String[]::new);
+                .forEach(watchedGroup.tags.strings()::add);
             watchedGroup.critical = Boolean.parseBoolean(record.get(3));
             watchedGroup.message = record.get(4);
             importedWatchedGroups.add(watchedGroup);
@@ -127,13 +130,16 @@ public class ScarletWatchedGroups
     {
         for (WatchedGroup watchedGroup : importedWatchedGroups)
         {
-            if (overwrite)
+            if (watchedGroup.id != null && watchedGroup.id.startsWith("grp_"))
             {
-                this.watchedGroups.put(watchedGroup.id, watchedGroup);
-            }
-            else
-            {
-                this.watchedGroups.putIfAbsent(watchedGroup.id, watchedGroup);
+                if (overwrite)
+                {
+                    this.watchedGroups.put(watchedGroup.id, watchedGroup);
+                }
+                else
+                {
+                    this.watchedGroups.putIfAbsent(watchedGroup.id, watchedGroup);
+                }
             }
         }
         this.save();
@@ -181,7 +187,7 @@ public class ScarletWatchedGroups
         }
         Map<String, WatchedGroup> watchedGroups = new ConcurrentHashMap<>();
         for (WatchedGroup watchedGroup : watchedGroupsArray)
-            if (watchedGroup != null)
+            if (watchedGroup != null && watchedGroup.id != null && watchedGroup.id.startsWith("grp_"))
                 watchedGroups.put(watchedGroup.id, watchedGroup);
         this.watchedGroups = watchedGroups;
         return true;

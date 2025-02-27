@@ -2,11 +2,16 @@ package net.sybyline.scarlet.log;
 
 import java.io.File;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.slf4j.Marker;
 import org.slf4j.event.Level;
@@ -15,13 +20,16 @@ import org.slf4j.helpers.LegacyAbstractLogger;
 import org.slf4j.helpers.MessageFormatter;
 
 import net.sybyline.scarlet.Scarlet;
+import net.sybyline.scarlet.util.MavenDepsLoader;
 
 public class ScarletLogger extends LegacyAbstractLogger
 {
 
     private static final long serialVersionUID = -875763706664943747L;
 
-    public static final Pattern lfpattern = Pattern.compile("\\Ascarlet_log_\\d\\d\\d\\d-\\d\\d-\\d\\d_\\d\\d-\\d\\d-\\d\\d\\.txt\\z");
+    public static final String linesep = String.format("%n");
+    public static final Pattern lfpattern = Pattern.compile("\\Ascarlet_log_\\d\\d\\d\\d-\\d\\d-\\d\\d_\\d\\d-\\d\\d-\\d\\d\\.txt\\z"),
+                                errpkg = Pattern.compile("^(?<ws>\\s*at\\s+)(?<pkg>net\\.sybyline\\.scarlet(\\.[\\w$]+)*)\\.(?<cls>[\\w$]+)\\.(?<mth>[\\w$<>]+)\\((?<file>[\\w$]+\\.java)\\:(?<line>\\d+)\\)$");
 
     public ScarletLogger()
     {
@@ -81,6 +89,30 @@ public class ScarletLogger extends LegacyAbstractLogger
 //        stream.print(logMessage);
 //        if (throwable != null)
 //            throwable.printStackTrace(stream);
+        if (throwable != null && MavenDepsLoader.jarPath() != null)
+        {
+            StringWriter sw = new StringWriter();
+            throwable.printStackTrace(new PrintWriter(sw));
+            logMessage = Arrays.stream(sw.getBuffer().toString().split("\\R"))
+                .map($ ->
+                {
+                    Matcher m = errpkg.matcher($);
+                    if (m.find())
+                    {
+                        String ws = m.group("ws"),
+                               pkg = m.group("pkg"),
+                               cls = m.group("cls"),
+                               mth = m.group("mth"),
+                               file = m.group("file"),
+                               line = m.group("line");
+//                        $ = ws + pkg + "." + cls + "." + mth + "(" + file + ":" + line + ")";
+                        $ = ws + pkg + "." + cls + "." + mth + "([" + file + ":" + line + "](https://github.com/SybylineNetwork/Scarlet/tree/" + Scarlet.VERSION + "/src/main/java/" + pkg.replace('.', '/') + "/" + file + "#L" + line + "))";
+                    }
+                    return $;
+                })
+                .collect(Collectors.joining(linesep, logMessage, linesep));
+            throwable = null;
+        }
         ThreadLogEntry.logEntry(stream, logMessage, throwable);
     }
 

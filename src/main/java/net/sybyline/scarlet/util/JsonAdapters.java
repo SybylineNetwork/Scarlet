@@ -44,6 +44,7 @@ public interface JsonAdapters
         .registerTypeAdapter(Instant.class, new ByString<>(JsonAdapters::instant2json, JsonAdapters::json2instant))
         .registerTypeAdapter(byte[].class, new ByString<>(JsonAdapters::bytes2json, JsonAdapters::json2bytes))
         .registerTypeAdapter(UUID.class, new ByString<>(JsonAdapters::uuid2json, JsonAdapters::json2uuid))
+        .registerTypeAdapter(UniqueStrings.class, new UniqueStrings.Adapter())
         .disableHtmlEscaping();
     }
 

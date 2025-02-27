@@ -4,6 +4,13 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.5
+  - Added caching layer for some VRChat API requests
+  - Added some autocomplete for the `watched-group` command
+  - Added initial text `Unclaimed` to new moderation events
+  - Fixed missing reprompt on invalid credentials
+  - Fixed incorrect gateway intent in instructions
+
 ## 0.4.5-rc4
   - Added ability to specify where Scarlet stores data
   - Added ability to select a TTS voice

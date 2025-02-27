@@ -20,6 +20,7 @@ import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 
 import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.UniqueStrings;
 
 public class ScarletData
 {
@@ -249,7 +250,7 @@ public class ScarletData
         ScarletData.AuditEntryMetadata auditEntryMeta = this.auditEntryMetadata(auditEntryId);
         if (auditEntryMeta == null)
             auditEntryMeta = new ScarletData.AuditEntryMetadata();
-        auditEntryMeta.entryTags = entryTags == null || entryTags.length == 0 ? null : entryTags;
+        auditEntryMeta.entryTags.clear().addAll(entryTags);
         this.auditEntryMetadata(auditEntryId, auditEntryMeta);
         return auditEntryMeta;
     }
@@ -388,7 +389,7 @@ public class ScarletData
         
         public GroupAuditLogEntry entry;
         
-        public String[] entryTags;
+        public UniqueStrings entryTags = new UniqueStrings();
         public String entryDescription;
         
         public boolean hasMessage()

@@ -5,10 +5,8 @@ import java.io.File;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +40,6 @@ import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
 import io.github.vrchatapi.model.User;
 
-import net.sybyline.scarlet.util.LRUMap_1024;
 import net.sybyline.scarlet.util.MiscUtils;
 
 import okhttp3.Interceptor;
@@ -123,18 +120,18 @@ public class ScarletVRChat implements Closeable
         this.cookies.load();
         this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
         scarlet.settings.setNamespace(this.groupId);
-        this.cachedUsers = Collections.synchronizedMap(new LRUMap_1024<>());
-        this.cachedGroups = Collections.synchronizedMap(new LRUMap_1024<>());
-        this.cachedUserGroups = Collections.synchronizedMap(new LRUMap_1024<>());
+        this.cachedUsers = new ScarletJsonCache<>("usr", User.class);
+        this.cachedGroups = new ScarletJsonCache<>("grp", Group.class);
+        this.cachedUserGroups = new ScarletJsonCache<>("gmem", new TypeToken<List<LimitedUserGroups>>(){});
     }
 
     final Scarlet scarlet;
     final ScarletVRChatCookieJar cookies;
     final ApiClient client;
     final String groupId;
-    final Map<String, User> cachedUsers;
-    final Map<String, Group> cachedGroups;
-    final Map<String, List<LimitedUserGroups>> cachedUserGroups;
+    final ScarletJsonCache<User> cachedUsers;
+    final ScarletJsonCache<Group> cachedGroups;
+    final ScarletJsonCache<List<LimitedUserGroups>> cachedUserGroups;
     long localDriftMillis = 0L;
 
     public ApiClient getClient()
@@ -158,6 +155,11 @@ public class ScarletVRChat implements Closeable
     }
 
     public void login() throws ApiException
+    {
+        this.login(false);
+    }
+
+    private void login(boolean isRefresh) throws ApiException
     {
         try
         {
@@ -188,12 +190,12 @@ public class ScarletVRChat implements Closeable
                 }
                 else
                 {
-                    LOG.info("Auth declared invalid");
+                    if (!isRefresh) LOG.info("Auth declared invalid");
                 }
             }
             catch (Exception ex)
             {
-                LOG.info("Auth discovered invalid", ex);
+                if (!isRefresh) LOG.info("Auth discovered invalid", ex);
             }
             JsonObject data;
             try
@@ -207,8 +209,8 @@ public class ScarletVRChat implements Closeable
             }
             catch (Exception ex)
             {
-                LOG.info("Cached auth not valid", ex);
-                try
+                if (!isRefresh) LOG.info("Cached auth not valid", ex);
+                do try
                 {
                     this.client.setUsername(this.scarlet.settings.getStringOrRequireInput("vrc_username", "VRChat Username", false));
                     this.client.setPassword(this.scarlet.settings.getStringOrRequireInput("vrc_password", "VRChat Password", true));
@@ -219,11 +221,19 @@ public class ScarletVRChat implements Closeable
                         return;
                     }
                 }
+                catch (ApiException apiex)
+                {
+                    this.scarlet.settings.getJson().remove("vrc_username");
+                    this.scarlet.settings.getJson().remove("vrc_password");
+                    LOG.error("Invalid credentials");
+                    data = null;
+                }
                 finally
                 {
                     this.client.setUsername(null);
                     this.client.setPassword(null);
                 }
+                while (data == null);
             }
             
             if (data.get("requiresTwoFactorAuth")
@@ -265,23 +275,29 @@ public class ScarletVRChat implements Closeable
 
     public boolean logout()
     {
+        return this.logout(false);
+    }
+
+    private boolean logout(boolean isRefresh)
+    {
         try
         {
             AuthenticationApi auth = new AuthenticationApi(this.client);
-            LOG.info("Log out: "+auth.logout().getSuccess().getMessage());
+            if (!isRefresh) LOG.info("Log out: "+auth.logout().getSuccess().getMessage());
             return true;
         }
         catch (Exception ex)
         {
-            LOG.info("Error logging out", ex);
+            LOG.error("Error logging out", ex);
             return false;
         }
     }
 
     public void refresh() throws ApiException
     {
-        this.logout();
-        this.login();
+        LOG.info("Refreshing auth");
+        this.logout(true);
+        this.login(true);
     }
 
     public List<GroupAuditLogEntry> auditQuery(OffsetDateTime from, OffsetDateTime to)
@@ -329,9 +345,15 @@ public class ScarletVRChat implements Closeable
 
     public User getUser(String userId)
     {
-        User user = this.cachedUsers.get(userId);
+        return this.getUser(userId, Long.MIN_VALUE);
+    }
+    public User getUser(String userId, long minEpoch)
+    {
+        User user = this.cachedUsers.get(userId, minEpoch);
         if (user != null)
             return user;
+        if (this.cachedUsers.is404(userId))
+            return null;
         UsersApi users = new UsersApi(this.client);
         try
         {
@@ -341,16 +363,25 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
-            LOG.error("Error during get user: "+apiex.getMessage());
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedUsers.add404(userId);
+            else
+                LOG.error("Error during get user: "+apiex.getMessage());
             return null;
         }
     }
 
     public Group getGroup(String groupId)
     {
-        Group group = this.cachedGroups.get(groupId);
+        return this.getGroup(groupId, Long.MIN_VALUE);
+    }
+    public Group getGroup(String groupId, long minEpoch)
+    {
+        Group group = this.cachedGroups.get(groupId, minEpoch);
         if (group != null)
             return group;
+        if (this.cachedGroups.is404(groupId))
+            return null;
         GroupsApi users = new GroupsApi(this.client);
         try
         {
@@ -360,16 +391,25 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
-            LOG.error("Error during get group: "+apiex.getMessage());
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedGroups.add404(groupId);
+            else
+                LOG.error("Error during get group: "+apiex.getMessage());
             return null;
         }
     }
 
     public List<LimitedUserGroups> getUserGroups(String userId)
     {
-        List<LimitedUserGroups> userGroups = this.cachedUserGroups.get(userId);
+        return this.getUserGroups(userId, Long.MIN_VALUE);
+    }
+    public List<LimitedUserGroups> getUserGroups(String userId, long minEpoch)
+    {
+        List<LimitedUserGroups> userGroups = this.cachedUserGroups.get(userId, minEpoch);
         if (userGroups != null)
             return userGroups;
+        if (this.cachedUserGroups.is404(userId))
+            return null;
         UsersApi users = new UsersApi(this.client);
         try
         {
@@ -379,7 +419,10 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
-            LOG.error("Error during get user groups: "+apiex.getMessage());
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedUserGroups.add404(userId);
+            else
+                LOG.error("Error during get user groups: "+apiex.getMessage());
             return null;
         }
     }

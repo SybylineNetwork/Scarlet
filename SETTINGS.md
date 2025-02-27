@@ -11,6 +11,20 @@ If it isn't obvious, all nominally sensitive values listed are ficticious.
 
 Files containing the output of the application log.
 
+## file `caches/XXX/XXX_00000000-0000-0000-0000-000000000000.json`
+
+Files containing cached objects from the VRChat API
+
+## file `caches/XXX/known_404s.json`
+
+List of ids known to return a `HTTP 404 Not Found` from the VRChat API
+```json
+[
+    "XXX_00000000-0000-0000-0000-000000000000",
+    "XXX_11111111-1111-1111-1111-111111111111"
+]
+```
+
 ## file `discord_bot.json`
 
 Settings for the Discord bot account
