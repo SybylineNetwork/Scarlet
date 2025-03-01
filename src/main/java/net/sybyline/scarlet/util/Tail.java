@@ -8,7 +8,7 @@ import java.io.RandomAccessFile;
 import java.nio.charset.Charset;
 
 /**
- * Modified from org.apache.commons.io.input.Tailer to add preamble functionality
+ * Adapted from org.apache.commons.io.input.Tailer to add preamble and loop functionality
  */
 public class Tail implements Runnable
 {

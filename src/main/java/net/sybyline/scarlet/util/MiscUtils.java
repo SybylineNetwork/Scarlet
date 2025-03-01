@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.IntFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.FileVersion;
@@ -148,45 +150,54 @@ public interface MiscUtils
         return offset == buffer.length ? buffer : Arrays.copyOf(buffer, offset);
     }
 
+    static Pattern SEMVER = Pattern.compile("(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)([\\.\\-_]?(?<kind>\\w+))?([\\.\\-_]?(?<build>\\d+))?");
     static int compareSemVer(String l, String r)
     {
         try
         {
+            if (l == null)
+                return r == null ? 0 : 1;
+            if (r == null)
+                return -1;
+            Matcher lm = SEMVER.matcher(l),
+                    rm = SEMVER.matcher(r);
+            if (!lm.matches())
+                return !rm.matches() ? l.compareTo(r) : 1;
+            if (!rm.matches())
+                return -1;
+            
             int li, ri, cmp;
             
-            li = l == null ? 0 : 1;
-            ri = r == null ? 0 : 1;
+            li = Integer.parseInt(lm.group("major"));
+            ri = Integer.parseInt(rm.group("major"));
             if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
             
-            if (l == null) return 0;
-            
-            String[] la = l.split("\\."),
-                     ra = r.split("\\."),
-                     l2a = la[2].split("-"),
-                     r2a = ra[2].split("-");
-            
-            li = Integer.parseInt(la[0]);
-            ri = Integer.parseInt(ra[0]);
+            li = Integer.parseInt(lm.group("minor"));
+            ri = Integer.parseInt(rm.group("minor"));
             if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
             
-            li = Integer.parseInt(la[1]);
-            ri = Integer.parseInt(ra[1]);
+            li = Integer.parseInt(lm.group("patch"));
+            ri = Integer.parseInt(rm.group("patch"));
             if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
             
-            li = Integer.parseInt(l2a[0]);
-            ri = Integer.parseInt(r2a[0]);
-            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            String lx = lm.group("kind"),
+                   rx = rm.group("kind");
             
-            li = l2a.length;
-            ri = r2a.length;
-            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
+            cmp = lx == null
+                ? rx == null
+                    ? 0
+                    : 1
+                : rx == null
+                    ? -1
+                    : lx.compareTo(rx);
+            if (cmp != 0) return cmp;
+
+            lx = lm.group("build");
+            rx = rm.group("build");
             
-            if (l2a.length > 1)
-            {
-                cmp = l2a[1].compareTo(r2a[1]);
-                if (cmp != 0)
-                    return cmp;
-            }
+            li = lx == null ? Integer.MAX_VALUE : Integer.parseInt(lx);
+            ri = rx == null ? Integer.MAX_VALUE : Integer.parseInt(rx);
+            if ((cmp = Integer.compare(li, ri)) != 0) return cmp;
         }
         catch (RuntimeException rex)
         {

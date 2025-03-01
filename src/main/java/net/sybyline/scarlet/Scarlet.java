@@ -52,12 +52,13 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.5",
+        VERSION = "0.4.6-rc1",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
         USER_AGENT_STATIC = USER_AGENT_NAME+"-static/"+VERSION+" "+DEV_DISCORD,
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
+        LICENSE_URL = GITHUB_URL+"?tab=MIT-1-ov-file",
         META_URL = GITHUB_URL+"/blob/main/meta.json?raw=true",
         
         API_VERSION = "api/1",
@@ -122,6 +123,8 @@ public class Scarlet implements Closeable
 
     public void stop()
     {
+        if (!this.running)
+            LOG.info("Queuing shutdown...");
         this.running = false;
     }
 
@@ -130,6 +133,7 @@ public class Scarlet implements Closeable
     {
         this.stop();
         this.exec.shutdown();
+        this.execModal.shutdown();
         try
         {
             if (!this.exec.awaitTermination(3_000L, TimeUnit.MILLISECONDS))
@@ -141,15 +145,28 @@ public class Scarlet implements Closeable
         catch (InterruptedException iex)
         {
         }
+        try
+        {
+            if (!this.execModal.awaitTermination(3_000L, TimeUnit.MILLISECONDS))
+            {
+                int unstarted = this.execModal.shutdownNow().size();
+                LOG.error("Forcibly terminated modal executor service, "+unstarted+" unstarted task(s)");
+            }
+        }
+        catch (InterruptedException iex)
+        {
+        }
         MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
         MiscUtils.close(this.ui);
+        LOG.info("Finished shutdown flow");
     }
 
     volatile boolean running = true;
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
+    final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
     
     final File dirVrc = new File(System.getProperty("user.home"), "AppData/LocalLow/VRChat/VRChat");
     

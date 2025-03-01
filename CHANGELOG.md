@@ -3,6 +3,13 @@
 
 ## Unreleased
   - Pending: StaffList
+  - Pending: Settings UI
+
+## 0.4.6-rc1
+  - Added list of users in current instance to the UI
+  - Added various links to the UI
+  - Added ability for group to autopopulate email field for VRChat Help Desk Links
+  - Fixed watched groups not being properly detected
 
 ## 0.4.5
   - Added caching layer for some VRChat API requests

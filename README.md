@@ -114,6 +114,11 @@ Scarlet has several commands you can enter via standard input:
   - `importgroupsjson <file|url...>`<br>
     Imports a JSON list of watched groups from a file or url
 
+### Interoperability
+
+Scarlet links to the official VRChat website whenever possible, including for user profiles, group posts, instances, and much more.
+Scarlet can generate a link that will autopopulate the fields of the VRChat Help Desk report form based on custom tags assigned to moderation events, streamlining the reporting process and reducing mistakes from human error.
+
 ## Installation
 
 You will need:

@@ -250,12 +250,16 @@ public class ScarletVRChatLogs implements Closeable
                 this.entryTxt = matcher.group("txt");
             }
             this.buffer.add(line);
+            if (this.isInPreamble && !inPreamble)
+                LOG.info("Caught up with " + this.file.getName());
             this.isInPreamble &= inPreamble;
         }
         @Override
         protected void on_eof()
         {
             this.handleCurrentEntry();
+            if (this.isInPreamble)
+                LOG.info("Caught up with " + this.file.getName());
             this.isInPreamble = false;
         }
         @Override

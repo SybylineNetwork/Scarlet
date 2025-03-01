@@ -138,7 +138,10 @@ General settings for Scarlet:
     "vrc_secret": "abcd efgh ijkl mnop qrst uvxx yz23 4567",
     
     // The VRChat groupId of the relevant group
-    "vrchat_group_id": "grp_00000000-0000-0000-0000-000000000000"  
+    "vrchat_group_id": "grp_00000000-0000-0000-0000-000000000000",
+    
+    // The email address you would like autofilled for the VRChat Help Desk form
+    "vrchat_report_email": "username@example.com"
 }
 ```
 

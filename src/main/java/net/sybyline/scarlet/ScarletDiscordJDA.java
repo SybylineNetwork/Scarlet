@@ -1821,8 +1821,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     String requestingUserId = eventUserId != null ? eventUserId : actorUserId;
                     
+                    String requestingEmail = ScarletDiscordJDA.this.scarlet.settings.getString("vrchat_report_email");
+                    
                     String link = VRChatHelpDeskURLs.newModerationRequest(
-                        null,
+                        requestingEmail,
                         VRChatHelpDeskURLs.ModerationCategory.USER_REPORT,
                         requestingUserId,
                         targetUserId,

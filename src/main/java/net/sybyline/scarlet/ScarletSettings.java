@@ -6,6 +6,7 @@ import java.io.Console;
 import java.io.File;
 import java.io.Reader;
 import java.io.Writer;
+import java.lang.reflect.Type;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 
 import net.sybyline.scarlet.util.MiscUtils;
 
@@ -194,6 +196,52 @@ public class ScarletSettings
     {
         JsonObject json = this.getJson();
         json.addProperty(key, value);
+        this.saveJson();
+    }
+
+    public <T> T getObject(String key, TypeToken<T> type)
+    {
+        return this.getObject(key, type.getType());
+    }
+    public <T> T getObject(String key, Class<T> type)
+    {
+        return this.getObject(key, (Type)type);
+    }
+    public synchronized <T> T getObject(String key, Type type)
+    {
+        JsonObject json = this.getJson();
+        if (json.has(key)) try
+        {
+            return Scarlet.GSON_PRETTY.fromJson(json.get(key), type);
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception deserializing setting `"+key+"` of type `"+type+"`", ex);
+        }
+        return null;
+    }
+    public <T> void setObject(String key, TypeToken<T> type, T value)
+    {
+        this.setObject(key, type.getType(), value);
+    }
+    public <T> void setObject(String key, Class<T> type, T value)
+    {
+        this.setObject(key, (Type)type, value);
+    }
+    public synchronized <T> void setObject(String key, Type type, T value)
+    {
+        JsonObject json = this.getJson();
+        JsonElement element;
+        try
+        {
+            element = Scarlet.GSON_PRETTY.toJsonTree(value, type);
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception serializing setting `"+key+"` of type `"+type+"`", ex);
+            return;
+        }
+        json.add(key, element);
         this.saveJson();
     }
 
