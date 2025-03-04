@@ -3,7 +3,14 @@
 
 ## Unreleased
   - Pending: StaffList
-  - Pending: Settings UI
+
+## 0.4.6
+  - Added splash screen
+  - Added update check popup
+  - Added automatic disabling log parser if VRChat client not present
+  - Fixed auth refresh not triggering
+  - Fixed setting TTS voice not working or persisting
+  - Changed UI theming
 
 ## 0.4.6-rc1
   - Added list of users in current instance to the UI

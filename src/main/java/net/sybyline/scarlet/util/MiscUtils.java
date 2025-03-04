@@ -1,6 +1,11 @@
 package net.sybyline.scarlet.util;
 
+import java.awt.Color;
 import java.awt.Desktop;
+import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -151,6 +156,13 @@ public interface MiscUtils
     }
 
     static Pattern SEMVER = Pattern.compile("(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)([\\.\\-_]?(?<kind>\\w+))?([\\.\\-_]?(?<build>\\d+))?");
+    static boolean isPreviewVersion(String v)
+    {
+        if (v == null)
+            return false;
+        Matcher vm = SEMVER.matcher(v);
+        return vm.matches() && (vm.group("kind") != null || vm.group("build") != null);
+    }
     static int compareSemVer(String l, String r)
     {
         try
@@ -214,6 +226,43 @@ public interface MiscUtils
     static Reader reader(File file) throws FileNotFoundException
     {
         return new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
+    }
+
+    static Color lerp(Color lhs, Color rhs, float lerp)
+    {
+        lerp = Math.max(0, Math.min(1, lerp));
+        int r = (int)(lhs.getRed()   + lerp * (rhs.getRed()   - lhs.getRed()));
+        int g = (int)(lhs.getGreen() + lerp * (rhs.getGreen() - lhs.getGreen()));
+        int b = (int)(lhs.getBlue()  + lerp * (rhs.getBlue()  - lhs.getBlue()));
+        int a = (int)(lhs.getAlpha() + lerp * (rhs.getAlpha() - lhs.getAlpha()));
+        return new Color(r, g, b, a);
+    }
+
+    interface AWTToolkit
+    {
+        static void set(String text)
+        {
+            try
+            {
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), (c, t) -> {});
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+        static String get()
+        {
+            try
+            {
+                Transferable t = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+                if (t != null && t.isDataFlavorSupported(DataFlavor.stringFlavor))
+                    return (String)t.getTransferData(DataFlavor.stringFlavor);
+            }
+            catch (Exception ex)
+            {
+            }
+            return null;
+        }
     }
 
     interface AWTDesktop

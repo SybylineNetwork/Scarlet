@@ -39,6 +39,7 @@ public class ScarletSettings
         this.json = null;
         this.lastAuditQuery = null;
         this.lastAuthRefresh = null;
+        this.lastUpdateCheck = null;
         this.uiBounds = null;
     }
 
@@ -51,7 +52,7 @@ public class ScarletSettings
     final Preferences globalPreferences;
     Preferences preferences;
     private JsonObject json;
-    private OffsetDateTime lastAuditQuery, lastAuthRefresh;
+    private OffsetDateTime lastAuditQuery, lastAuthRefresh, lastUpdateCheck;
     private Rectangle uiBounds;
 
     public synchronized OffsetDateTime getLastAuditQuery()
@@ -103,7 +104,7 @@ public class ScarletSettings
         lastAuthRefresh = OffsetDateTime.now(ZoneOffset.UTC);
         this.lastAuthRefresh = lastAuthRefresh;
         this.preferences.put("lastAuthRefresh", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuthRefresh));
-        return lastAuditQuery;
+        return lastAuthRefresh;
     }
 
     public synchronized void setLastAuthRefresh(OffsetDateTime lastAuthRefresh)
@@ -112,6 +113,36 @@ public class ScarletSettings
             return;
         this.lastAuthRefresh = lastAuthRefresh;
         this.preferences.put("lastAuthRefresh", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuthRefresh));
+    }
+
+    public synchronized OffsetDateTime getLastUpdateCheck()
+    {
+        OffsetDateTime lastUpdateCheck = this.lastUpdateCheck;
+        if (lastUpdateCheck != null)
+            return lastUpdateCheck;
+        String lastUpdateCheckString = this.preferences.get("lastUpdateCheck", null);
+        if (lastUpdateCheckString == null) lastUpdateCheckString = this.globalPreferences.get("lastUpdateCheck", null);
+        if (lastUpdateCheckString != null) try
+        {
+            lastUpdateCheck = OffsetDateTime.parse(lastUpdateCheckString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            this.lastUpdateCheck = lastUpdateCheck;
+            return lastUpdateCheck;
+        }
+        catch (RuntimeException ex)
+        {
+        }
+        lastUpdateCheck = OffsetDateTime.now(ZoneOffset.UTC);
+        this.lastUpdateCheck = lastUpdateCheck;
+        this.preferences.put("lastUpdateCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastUpdateCheck));
+        return lastUpdateCheck;
+    }
+
+    public synchronized void setLastUpdateCheck(OffsetDateTime lastUpdateCheck)
+    {
+        if (lastUpdateCheck == null)
+            return;
+        this.lastUpdateCheck = lastUpdateCheck;
+        this.preferences.put("lastUpdateCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastUpdateCheck));
     }
 
     public synchronized Rectangle getUIBounds()
@@ -164,7 +195,7 @@ public class ScarletSettings
         return json;
     }
 
-    synchronized void saveJson()
+    public synchronized void saveJson()
     {
         JsonObject json = this.json;
         if (json == null)
@@ -243,6 +274,14 @@ public class ScarletSettings
         }
         json.add(key, element);
         this.saveJson();
+    }
+    public synchronized void setElementNoSave(String key, JsonElement element)
+    {
+        this.getJson().add(key, element);
+    }
+    public synchronized JsonElement getElement(String key)
+    {
+        return this.getJson().get(key);
     }
 
     public synchronized String getStringOrRequireInput(String key, String display, boolean sensitive)

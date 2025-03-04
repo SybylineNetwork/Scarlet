@@ -71,6 +71,8 @@ public class TTSService implements Closeable
     public interface Listener
     {
         
+        void tts_init(TTSService tts);
+        
         void tts_ready(int job, File file);
         
     }
@@ -82,7 +84,24 @@ public class TTSService implements Closeable
 
     public boolean submit(String line)
     {
+        this.instructPendingVoice();
         return this.instruct('+', line);
+    }
+
+    public boolean submitSsml(String line)
+    {
+        this.instructPendingVoice();
+        return this.instruct('=', line);
+    }
+
+    public boolean addLexicon(String uri)
+    {
+        return this.instruct('[', uri);
+    }
+
+    public boolean removeLexicon(String uri)
+    {
+        return this.instruct(']', uri);
     }
 
     public List<String> getInstalledVoices()
@@ -90,9 +109,36 @@ public class TTSService implements Closeable
         return Collections.unmodifiableList(this.installedVoices);
     }
 
+    public synchronized void selectVoiceLater(String name)
+    {
+        this.pendingVoiceSelection = name;
+    }
+
+    synchronized void instructPendingVoice()
+    {
+        String name = this.pendingVoiceSelection;
+        if (name == null)
+            return;
+        this.pendingVoiceSelection = null;
+        this.selectVoice(name);
+    }
+
     public boolean selectVoice(String name)
     {
         return this.instruct('@', name);
+    }
+
+    boolean isToDefaultAudio = false;
+    public boolean isOutputToDefaultAudioDevice()
+    {
+        return this.isToDefaultAudio;
+    }
+    public boolean setOutputToDefaultAudioDevice(boolean isToDefaultAudio)
+    {
+        if (this.isToDefaultAudio == isToDefaultAudio)
+            return false;
+        this.isToDefaultAudio = isToDefaultAudio;
+        return this.instruct('!', isToDefaultAudio?"True":"False");
     }
 
     private synchronized boolean instruct(char op, String value)
@@ -115,12 +161,14 @@ public class TTSService implements Closeable
     final PrintStream stdin;
     final InputStream stdout, stderr;
     final Thread thread;
+    String pendingVoiceSelection;
 
     void thread()
     {
         BufferedReader in = new BufferedReader(new InputStreamReader(this.stdout));
         try
         {
+            this.listener.tts_init(this);
             for (String line; this.running && (line = in.readLine()) != null;)
             {
                 if (!line.isEmpty()) switch (line.charAt(0))
@@ -149,6 +197,9 @@ public class TTSService implements Closeable
                             
                         }
                     }
+                } break;
+                default: {
+                    LOG.warn("TTSService subprocess stdout: "+line);
                 } break;
                 }
             }

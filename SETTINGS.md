@@ -141,7 +141,28 @@ General settings for Scarlet:
     "vrchat_group_id": "grp_00000000-0000-0000-0000-000000000000",
     
     // The email address you would like autofilled for the VRChat Help Desk form
-    "vrchat_report_email": "username@example.com"
+    "vrchat_report_email": "username@example.com",
+    
+    // The voice in which TTS speaks
+    "tts_voice_name": "Microsoft Zira Desktop",
+    
+    // Whether to output TTS to the default system audio device
+    "tts_use_default_audio_device": false,
+    
+    // Whether to announce watched groups with TTS
+    "tts_announce_watched_groups": true,
+    
+    // Whether to announce new players with TTS
+    "tts_announce_new_players": true,
+    
+    // Threshold for what account age qualifies as a 'new' player for the above (in days, 1 to 365, default 30)
+    "tts_announce_players_newer_than_days": 30,
+    
+    // Whether to show a popup if a new version is availiable
+    "ui_alert_update": true,
+    
+    // Whether still to show the above popup if a new preview version is availiable
+    "ui_alert_update_preview": true
 }
 ```
 
@@ -263,6 +284,8 @@ Volatile data:
 "last/Audit/Query"="2069-02-31/T12:34:56.789/Z"
 ; The last time Scarlet refreshed VRChat authentication
 "last/Auth/Refresh"="2069-02-31/T12:34:56.789/Z"
+; The last time Scarlet checked for updates
+"last/Update/Check"="2069-02-31/T12:34:56.789/Z"
 ; The bounds of the UI window (x,y,width,height)
 "ui/Bounds"="979,603,846,400"
 ```

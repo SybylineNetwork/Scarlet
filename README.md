@@ -129,6 +129,10 @@ You will need:
 
 If you wish to not install Java 8 for all users on the PC, if you would like to have several different Java installations, or if you would otherwise prefer to keep the Java 8 installation to Scarlet only, see the instructions further below.
 
+Thanks to [@KozyBlake](https://github.com/KozyBlake) for making this video tutorial:
+
+[![installation-tutorial-video](https://img.youtube.com/vi/JMJgMSThBac/0.jpg)](https://www.youtube.com/watch?v=JMJgMSThBac)
+
 ### Setting up Discord application
 
 It is recommended that you create a bot account dedicated specifically for running Scarlet.

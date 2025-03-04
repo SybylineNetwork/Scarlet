@@ -13,11 +13,14 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Scanner;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.swing.JOptionPane;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +55,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.6-rc1",
+        VERSION = "0.4.6",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -79,6 +82,7 @@ public class Scarlet implements Closeable
 
     public static void main(String[] args) throws Exception
     {
+        Thread.setDefaultUncaughtExceptionHandler(Scarlet::uncaughtException);
         try (Scarlet scarlet = new Scarlet())
         {
             scarlet.run();
@@ -89,18 +93,26 @@ public class Scarlet implements Closeable
     public static final File dir;
     static
     {
-        String scarletHome = System.getenv("SCARLET_HOME");
+        String scarletHome = System.getenv("SCARLET_HOME"),
+               localappdata =  System.getenv("LOCALAPPDATA");
         scarletHome = System.getProperty("SCARLET_HOME", scarletHome);
         File dir0 = scarletHome != null
             ? ";".equals(scarletHome.trim()) && MavenDepsLoader.jarPath() != null
                 ? MavenDepsLoader.jarPath().toFile()
                 : new File(scarletHome).getAbsoluteFile()
-            : new File(System.getenv("LOCALAPPDATA"), GROUP+"/"+NAME);
+            : localappdata != null
+                ? new File(localappdata, GROUP+"/"+NAME)
+                : new File(System.getProperty("user.home"), "AppData/Local/"+GROUP+"/"+NAME);
         if (!dir0.isDirectory())
             dir0.mkdirs();
         dir = dir0;
     }
     public static final Logger LOG = LoggerFactory.getLogger("Scarlet");
+
+    static void uncaughtException(Thread t, Throwable e)
+    {
+        LOG.error("Uncaught exception in thread: "+t, e);
+    }
 
     public static final Gson GSON, GSON_PRETTY;
     static
@@ -163,6 +175,8 @@ public class Scarlet implements Closeable
         LOG.info("Finished shutdown flow");
     }
 
+    final ScarletUISplash splash = new ScarletUISplash(this);
+
     volatile boolean running = true;
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
@@ -170,8 +184,9 @@ public class Scarlet implements Closeable
     
     final File dirVrc = new File(System.getProperty("user.home"), "AppData/LocalLow/VRChat/VRChat");
     
-    final ScarletEventListener eventListener = new ScarletEventListener(this);
     final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
+    final ScarletUI ui = new ScarletUI(this);
+    final ScarletEventListener eventListener = new ScarletEventListener(this);
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
     final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(dir, "watched_groups.json"));
     final ScarletStaffList staffList = new ScarletStaffList(this, new File(dir, "staff_list.json"));
@@ -181,11 +196,15 @@ public class Scarlet implements Closeable
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
     String[] last25logs = new String[0];
-    final ScarletUI ui = new ScarletUI(this);
+    final ScarletUI.Setting<Boolean> alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
+                                     alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true);
+
 
     public void run()
     {
-        this.checkUpdate();
+        this.ui.loadSettings();
+        this.eventListener.settingsLoaded();
+        this.splash.splashSubtext("Logging in to VRChat Api");
         try
         {
             this.vrc.login();
@@ -195,6 +214,8 @@ public class Scarlet implements Closeable
             LOG.error("Failed to authenticate with VRChat", ex);
             return;
         }
+        this.splash.splashSubtext("Checking for updates");
+        this.checkUpdate();
         this.logs.start();
         try
         {
@@ -241,8 +262,17 @@ public class Scarlet implements Closeable
                 catch (Exception ex)
                 {
                     this.running = false;
-                    LOG.error("Exception emitting query", ex);
+                    LOG.error("Exception enumerating log files", ex);
                     return;
+                }
+                // maybe check update
+                try
+                {
+                    this.maybeCheckUpdate();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception maybe checking for update", ex);
                 }
             }
         }
@@ -286,6 +316,7 @@ public class Scarlet implements Closeable
                         String text = ls.nextLine().trim();
                         if (!text.isEmpty())
                         {
+                            this.ttsService.setOutputToDefaultAudioDevice(this.eventListener.ttsUseDefaultAudioDevice.get());
                             LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit(text));
                         }
                     } break;
@@ -356,6 +387,17 @@ public class Scarlet implements Closeable
         }
     }
 
+    void maybeCheckUpdate()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (now.isAfter(this.settings.getLastUpdateCheck().plusHours(3)))
+        {
+            this.settings.setLastUpdateCheck(now);
+            this.checkUpdate();
+        }
+    }
+
+    String newerVersion = null;
     void checkUpdate()
     {
         try
@@ -365,9 +407,15 @@ public class Scarlet implements Closeable
             {
                 meta = GSON_PRETTY.fromJson(new InputStreamReader(in), ScarletMeta.class);
             }
-            if (MiscUtils.compareSemVer(VERSION, meta.latest_release) < 0)
+            String cmp_version = this.alertForPreviewUpdates.get() || MiscUtils.isPreviewVersion(VERSION) ? meta.latest_build : meta.latest_release;
+            if (!Objects.equals(this.newerVersion, cmp_version) && MiscUtils.compareSemVer(VERSION, cmp_version) < 0)
             {
-                LOG.info("Newer version "+meta.latest_release+" available");
+                LOG.info(NAME+" version "+cmp_version+" available");
+                if (this.alertForUpdates.get())
+                {
+                    this.execModal.execute(() -> JOptionPane.showMessageDialog(null, NAME+" version "+cmp_version+" available", "Update available", JOptionPane.INFORMATION_MESSAGE));
+                }
+                this.newerVersion = cmp_version;
             }
         }
         catch (Exception ex)
@@ -375,15 +423,15 @@ public class Scarlet implements Closeable
             LOG.error("Failed to download meta", ex);
         }
     }
-    
-    void maybeRefresh() throws ApiException
+
+    void maybeRefresh()
     {
-        OffsetDateTime lastAuthRefresh = this.settings.getLastAuthRefresh(),
-                       now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (now.isAfter(lastAuthRefresh.plusHours(72)))
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (this.wantsVrcRefresh || now.isAfter(this.settings.getLastAuthRefresh().plusHours(72)))
         {
             this.settings.setLastAuthRefresh(now);
             this.vrc.refresh();
+            this.wantsVrcRefresh = false;
         }
     }
 
@@ -391,6 +439,18 @@ public class Scarlet implements Closeable
                      CATCH_UP_SKIP_UNTIL_24 = 1,
                      CATCH_UP_LIMIT_NEXT_24 = 2;
     int catchupMode = CATCH_UP_LIMIT_NEXT_24;
+    boolean wantsVrcRefresh = false;
+    public void queueVrcRefresh()
+    {
+        this.wantsVrcRefresh = true;
+    }
+    public boolean checkVrcRefresh(ApiException apiex)
+    {
+        if (!apiex.getMessage().contains("HTTP response code: 401"))
+            return false;
+        this.queueVrcRefresh();
+        return true;
+    }
     void queryEmit()
     {
         OffsetDateTime from = this.settings.getLastAuditQuery(),

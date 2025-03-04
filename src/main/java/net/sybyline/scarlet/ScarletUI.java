@@ -1,13 +1,18 @@
 package net.sybyline.scarlet;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.net.URI;
@@ -15,22 +20,34 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextField;
 import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
@@ -38,6 +55,9 @@ import javax.swing.event.TableColumnModelListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.model.User;
@@ -56,7 +76,8 @@ public class ScarletUI implements AutoCloseable
     {
         try
         {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+//            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            UIManager.setLookAndFeel(new FlatDarkLaf());
         }
         catch (Exception ex)
         {
@@ -64,17 +85,40 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    public static interface Option<T>
+    public interface Setting<T>
     {
-        
+        String id();
+        String name();
+        Component render();
+        T get();
+        T getDefault();
+        void set(T value);
+    }
+//    public interface SettingCategory
+//    {
+//        String id();
+//        String name();
+//        Component render();
+//        Setting<String> settingString(String id, String name, String defaultValue);
+//        Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max);
+//        Setting<Boolean> settingBool(String id, String name, boolean defaultValue);
+//    }
+    interface SerializableSetting<T> extends Setting<T>
+    {
+        boolean pollDirty();
+        void markDirty();
+        JsonElement serialize();
+        void deserialize(JsonElement element);
     }
 
     public ScarletUI(Scarlet scarlet)
     {
         this.scarlet = scarlet;
-        this.jframe = new JFrame(Scarlet.NAME+" "+Scarlet.VERSION);
+        this.jframe = new JFrame(Scarlet.NAME);
         this.jtabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
         this.propstable = new PropsTable<>();
+        this.jpanel_settings = new JPanel();
+        this.ssettings = Collections.synchronizedList(new ArrayList<>());
         this.propstableColumsDirty = false;
         this.connectedPlayers = new HashMap<>();
         this.initUI();
@@ -151,12 +195,63 @@ public class ScarletUI implements AutoCloseable
         this.propstable.clearEntries();
     }
 
+//    public synchronized SettingCategory settingCategory(String id, String name)
+//    {
+//        try
+//        {
+//            return new SettingCategoryImpl(id, name);
+//        }
+//        finally
+//        {
+//            this.readdSettingUI();
+//        }
+//    }
+
+    public synchronized Setting<String> settingString(String id, String name, String defaultValue)
+    {
+        try
+        {
+            return new StringSetting(id, name, defaultValue);
+        }
+        finally
+        {
+            this.readdSettingUI();
+        }
+    }
+
+    public synchronized Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max)
+    {
+        try
+        {
+            return new IntSetting(id, name, defaultValue, min, max);
+        }
+        finally
+        {
+            this.readdSettingUI();
+        }
+    }
+
+    public synchronized Setting<Boolean> settingBool(String id, String name, boolean defaultValue)
+    {
+        try
+        {
+            return new BoolSetting(id, name, defaultValue);
+        }
+        finally
+        {
+            this.readdSettingUI();
+        }
+    }
+
     final Scarlet scarlet;
     final JFrame jframe;
     final JTabbedPane jtabs;
     final PropsTable<ConnectedPlayer> propstable;
+    final JPanel jpanel_settings;
+    final List<SerializableSetting<?>> ssettings;
     boolean propstableColumsDirty;
     final Map<String, ConnectedPlayer> connectedPlayers;
+    
     static class ConnectedPlayer
     {
         String name;
@@ -269,13 +364,7 @@ public class ScarletUI implements AutoCloseable
                 this.jtabs.addTab("Instance", new JScrollPane(this.propstable));
             }
             {
-                JPanel jpanel_settings = new JPanel();
-                jpanel_settings.setLayout(new GridBagLayout());
-                GridBagConstraints gbc_settings = new GridBagConstraints();
-                {
-                    // TODO : settings
-                    jpanel_settings.add(new JLabel("// TODO"), gbc_settings);
-                }
+                this.jpanel_settings.setLayout(new GridBagLayout());
                 this.jtabs.addTab("Settings", new JScrollPane(jpanel_settings));
             }
             this.jframe.add(this.jtabs, BorderLayout.CENTER);
@@ -310,11 +399,8 @@ public class ScarletUI implements AutoCloseable
                 this.jframe.setBounds(uiBounds);
             else
                 this.jframe.setBounds(100, 100, 600, 400);
-            this.jframe.setResizable(true);
-            this.jframe.setEnabled(true);
-            this.jframe.setVisible(true);
         }
-        this.scarlet.exec.scheduleAtFixedRate(this::saveInstanceColumnsIfDirty, 60_000L, 60_000L, TimeUnit.MILLISECONDS);
+        this.scarlet.exec.scheduleAtFixedRate(this::saveIfDirty, 10_000L, 10_000L, TimeUnit.MILLISECONDS);
     }
 
     void loadInstanceColumns()
@@ -337,8 +423,9 @@ public class ScarletUI implements AutoCloseable
             });
     }
 
-    void saveInstanceColumnsIfDirty()
+    void saveIfDirty()
     {
+        this.saveSettings();
         if (!this.propstableColumsDirty)
             return;
         this.propstableColumsDirty = false;
@@ -366,8 +453,434 @@ public class ScarletUI implements AutoCloseable
     @Override
     public void close() throws Exception
     {
+        this.saveSettings();
         this.saveInstanceColumns();
         this.jframe.dispose();
     }
+
+    void readdSettingUI()
+    {
+        this.jpanel_settings.removeAll();
+        GridBagConstraints gbc_settings = new GridBagConstraints();
+        gbc_settings.gridx = 0;
+        gbc_settings.gridy = 0;
+        gbc_settings.insets = new Insets(2, 2, 2, 2);
+        for (SerializableSetting<?> ssetting : this.ssettings)
+        {
+            gbc_settings.anchor = GridBagConstraints.EAST;
+            this.jpanel_settings.add(new JLabel(ssetting.name()+":", JLabel.RIGHT), gbc_settings);
+            gbc_settings.gridx = 1;
+            gbc_settings.anchor = GridBagConstraints.WEST;
+            this.jpanel_settings.add(ssetting.render(), gbc_settings);
+            gbc_settings.gridx = 0;
+            gbc_settings.gridy++;
+        }
+        gbc_settings.gridx = 2;
+        gbc_settings.fill = GridBagConstraints.BOTH;
+        gbc_settings.gridheight = 1;
+        gbc_settings.gridwidth = GridBagConstraints.REMAINDER;
+        gbc_settings.weightx = 1.0D;
+        gbc_settings.weighty = 1.0D;
+        gbc_settings.anchor = GridBagConstraints.WEST;
+        this.jpanel_settings.add(new JLabel(), gbc_settings);
+        
+        gbc_settings.gridy++;
+        
+        gbc_settings.gridx = 2;
+        gbc_settings.fill = GridBagConstraints.BOTH;
+        gbc_settings.gridheight = GridBagConstraints.REMAINDER;
+        gbc_settings.gridwidth = GridBagConstraints.REMAINDER;
+        gbc_settings.weightx = 1.0D;
+        gbc_settings.weighty = 0.0D;
+        gbc_settings.anchor = GridBagConstraints.EAST;
+        this.jpanel_settings.add(new JLabel(Scarlet.VERSION, JLabel.RIGHT), gbc_settings);
+    }
+
+    void loadSettings()
+    {
+        for (SerializableSetting<?> ssetting : this.ssettings)
+        {
+            JsonElement element = this.scarlet.settings.getElement(ssetting.id());
+            if (element != null && !element.isJsonNull())
+            {
+                ssetting.deserialize(element);
+            }
+        }
+    }
+
+    void saveSettings()
+    {
+        int saved = 0;
+        for (SerializableSetting<?> ssetting : this.ssettings)
+        {
+            if (!ssetting.id().isEmpty())
+            {
+                this.scarlet.settings.setElementNoSave(ssetting.id(), ssetting.serialize());
+                if (ssetting.pollDirty())
+                {
+                    saved++;
+                }
+            }
+        }
+        if (saved > 0)
+        {
+            this.scarlet.settings.saveJson();
+        }
+    }
+
+//    class SettingCategoryImpl implements SettingCategory, SerializableSetting<JsonObject>
+//    {
+//        @Override
+//        public JsonObject get()
+//        {
+//            return null;
+//        }
+//        @Override
+//        public JsonObject getDefault()
+//        {
+//            return null;
+//        }
+//        @Override
+//        public void set(JsonObject value)
+//        {
+//        }
+//        @Override
+//        public boolean pollDirty()
+//        {
+//            return false;
+//        }
+//        @Override
+//        public void markDirty()
+//        {
+//        }
+//        @Override
+//        public JsonElement serialize()
+//        {
+//            return null;
+//        }
+//        @Override
+//        public void deserialize(JsonElement element)
+//        {
+//        }
+//        @Override
+//        public String id()
+//        {
+//            return null;
+//        }
+//        @Override
+//        public String name()
+//        {
+//            return null;
+//        }
+//        @Override
+//        public Component render()
+//        {
+//            return null;
+//        }
+//        @Override
+//        public Setting<String> settingString(String id, String name, String defaultValue)
+//        {
+//            return null;
+//        }
+//        @Override
+//        public Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max)
+//        {
+//            return null;
+//        }
+//        @Override
+//        public Setting<Boolean> settingBool(String id, String name, boolean defaultValue)
+//        {
+//            return null;
+//        }
+//    }
+
+    abstract class ASetting<T, C extends Component> implements SerializableSetting<T>
+    {
+        protected ASetting(String id, String name, T defaultValue, Supplier<C> render)
+        {
+            this(id, name, defaultValue, render.get());
+        }
+        protected ASetting(String id, String name, T defaultValue, C render)
+        {
+            this.id = id;
+            this.name = name;
+            this.defaultValue = defaultValue;
+            this.value = defaultValue;
+            this.render = render;
+            this.dirty = new AtomicBoolean(false);
+            this.update();
+            ScarletUI.this.ssettings.add(this);
+        }
+        final String id, name;
+        final T defaultValue;
+        final C render;
+        final AtomicBoolean dirty;
+        T value;
+        @Override
+        public final String id()
+        {
+            return this.id;
+        }
+        @Override
+        public final String name()
+        {
+            return this.name;
+        }
+        @Override
+        public final T get()
+        {
+            return this.value;
+        }
+        @Override
+        public final T getDefault()
+        {
+            return this.defaultValue;
+        }
+        @Override
+        public final void set(T value)
+        {
+            this.value = value != null ? value : this.defaultValue;
+            this.update();
+            this.markDirty();
+        }
+        @Override
+        public final Component render()
+        {
+            return this.render;
+        }
+        @Override
+        public final boolean pollDirty()
+        {
+            return this.dirty.getAndSet(false);
+        }
+        @Override
+        public final void markDirty()
+        {
+            this.dirty.set(true);
+        }
+        protected abstract void update();
+    }
+
+    class StringSetting extends ASetting<String, JTextField>
+    {
+        StringSetting(String id, String name, String defaultValue)
+        {
+            super(id, name, defaultValue, new JTextField(32));
+            JPopupMenu cpm = new JPopupMenu();
+            cpm.add("Paste").addActionListener($ -> Optional.ofNullable(MiscUtils.AWTToolkit.get()).ifPresent(this::set));
+            this.render.setComponentPopupMenu(cpm);
+            this.render.addActionListener($ -> {
+                this.accept();
+                this.markDirty();
+            });
+            this.render.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusLost(FocusEvent e)
+                {
+                    StringSetting.this.accept();
+                    StringSetting.this.markDirty();
+                }
+            });
+            this.render.getDocument().addDocumentListener(new DocumentListener() {
+                @Override
+                public void removeUpdate(DocumentEvent e)
+                {
+                    StringSetting.this.accept();
+                }
+                @Override
+                public void insertUpdate(DocumentEvent e)
+                {
+                    StringSetting.this.accept();
+                }
+                @Override
+                public void changedUpdate(DocumentEvent e)
+                {
+                    StringSetting.this.accept();
+                }
+            });
+        }
+        @Override
+        public JsonElement serialize()
+        {
+            return new JsonPrimitive(this.value);
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
+            if (!element.isJsonPrimitive())
+                return;
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (!primitive.isString())
+                return;
+            this.set(primitive.getAsString());
+        }
+        @Override
+        protected void update()
+        {
+            if (Objects.equals(this.value, this.render.getText()))
+                return;
+            this.render.setText(this.value);
+        }
+        void accept()
+        {
+            this.value = this.render.getText();
+        }
+    }
+
+    class IntSetting extends ASetting<Integer, JTextField>
+    {
+        IntSetting(String id, String name, int defaultValue, int min, int max)
+        {
+            super(id, name, defaultValue, new JTextField(32));
+            this.min = min;
+            this.max = max;
+            JPopupMenu cpm = new JPopupMenu();
+            cpm.add("Paste").addActionListener($ -> Optional.ofNullable(MiscUtils.AWTToolkit.get()).ifPresent($$ -> {
+                this.render.setText($$);
+                this.accept();
+            }));
+            this.render.setComponentPopupMenu(cpm);
+            this.render.addActionListener($ -> {
+                this.accept();
+            });
+            this.render.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusLost(FocusEvent e)
+                {
+                    IntSetting.this.accept();
+                }
+            });
+            this.render.getDocument().addDocumentListener(new DocumentListener() {
+                @Override
+                public void removeUpdate(DocumentEvent e)
+                {
+                    IntSetting.this.accept();
+                }
+                @Override
+                public void insertUpdate(DocumentEvent e)
+                {
+                    IntSetting.this.accept();
+                }
+                @Override
+                public void changedUpdate(DocumentEvent e)
+                {
+                    IntSetting.this.accept();
+                }
+            });
+        }
+        final int min, max;
+        @Override
+        public JsonElement serialize()
+        {
+            return new JsonPrimitive(this.value);
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
+            if (!element.isJsonPrimitive())
+                return;
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (!primitive.isNumber())
+                return;
+            this.set(primitive.getAsInt());
+        }
+        @Override
+        protected void update()
+        {
+            this.value = Math.max(this.min, Math.min(this.value, this.max));
+            this.render.setText(String.valueOf(this.value));
+        }
+        Color bg_ok = this.render.getBackground(),
+              bg_err = MiscUtils.lerp(this.bg_ok, Color.RED, 0.1F);
+        void accept()
+        {
+            Integer value;
+            try
+            {
+                value = Integer.parseInt(this.render.getText());
+            }
+            catch (Exception ex)
+            {
+                value = null;
+            }
+            if (value != null && value >= this.min && value <= this.max)
+            {
+                this.render.setBackground(this.bg_ok);
+                this.value = value;
+                this.markDirty();
+            }
+            else
+            {
+                this.render.setBackground(this.bg_err);
+            }
+        }
+    }
+
+    class BoolSetting extends ASetting<Boolean, JCheckBox>
+    {
+        BoolSetting(String id, String name, boolean defaultValue)
+        {
+            super(id, name, defaultValue, new JCheckBox(null, null, defaultValue));
+            this.render.addActionListener($ -> {
+                this.accept();
+                this.markDirty();
+            });
+        }
+        @Override
+        public JsonElement serialize()
+        {
+            return new JsonPrimitive(this.value);
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
+            if (!element.isJsonPrimitive())
+                return;
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (!primitive.isBoolean())
+                return;
+            this.set(primitive.getAsBoolean());
+        }
+        @Override
+        protected void update()
+        {
+            this.render.setSelected(this.value);
+        }
+        void accept()
+        {
+            this.value = this.render.isSelected();
+        }
+    }
+
+//    class ObjSetting<T> extends ASetting<T, JButton>
+//    {
+//        ObjSetting(String id, String name, T defaultValue, Class<T> type)
+//        {
+//            super(id, name, defaultValue, new JButton("Edit"));
+//            this.type = type;
+//            this.render.addActionListener($ -> this.edit());
+//        }
+//        final Class<T> type;
+//        @Override
+//        public JsonElement serialize()
+//        {
+//            return Scarlet.GSON_PRETTY.toJsonTree(this.value, this.type);
+//        }
+//        @Override
+//        public void deserialize(JsonElement element)
+//        {
+//            this.set(Scarlet.GSON_PRETTY.fromJson(element, this.type));
+//        }
+//        @Override
+//        protected void update()
+//        {
+//        }
+//        void edit()
+//        {
+//            ScarletUI.this.scarlet.execModal.execute(() -> {
+//                
+//            });
+//        }
+//    }
 
 }

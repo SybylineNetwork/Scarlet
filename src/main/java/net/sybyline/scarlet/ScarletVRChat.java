@@ -3,6 +3,7 @@ package net.sybyline.scarlet;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.security.GeneralSecurityException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -100,6 +101,7 @@ public class ScarletVRChat implements Closeable
 
     public ScarletVRChat(Scarlet scarlet, File cookieFile)
     {
+        scarlet.splash.splashSubtext("Configuring VRChat Api");
         // ensure default ApiClient initialized
         // the ApiClient constructor resets JSON.gson
         Configuration.getDefaultApiClient();
@@ -154,12 +156,12 @@ public class ScarletVRChat implements Closeable
         return this.localDriftMillis;
     }
 
-    public void login() throws ApiException
+    public void login()
     {
         this.login(false);
     }
 
-    private void login(boolean isRefresh) throws ApiException
+    private void login(boolean isRefresh)
     {
         try
         {
@@ -168,15 +170,15 @@ public class ScarletVRChat implements Closeable
                  timePost = System.currentTimeMillis(),
                  drift = (timePre + timePost) / 2 - timeServer,
                  driftAbs = Math.abs(drift);
-            if (drift >= 1_000L)
+            if (driftAbs >= 1_000L)
             {
                 LOG.warn("Local system time is "+driftAbs+(drift > 0 ? "ms ahead of VRChat servers" : "ms behind VRChat servers"));
             }
             this.localDriftMillis = drift;
         }
-        catch (Exception ex)
+        catch (ApiException apiex)
         {
-            LOG.error("Exception calculating drift", ex);
+            LOG.error("Exception calculating drift", apiex);
         }
         try
         {
@@ -193,9 +195,9 @@ public class ScarletVRChat implements Closeable
                     if (!isRefresh) LOG.info("Auth declared invalid");
                 }
             }
-            catch (Exception ex)
+            catch (ApiException apiex)
             {
-                if (!isRefresh) LOG.info("Auth discovered invalid", ex);
+                if (!isRefresh) LOG.info("Auth discovered invalid", apiex);
             }
             JsonObject data;
             try
@@ -256,14 +258,25 @@ public class ScarletVRChat implements Closeable
                     String code = TimeBasedOneTimePasswordUtil.generateNumberString(secret, now, TimeBasedOneTimePasswordUtil.DEFAULT_TIME_STEP_SECONDS, TimeBasedOneTimePasswordUtil.DEFAULT_OTP_LENGTH);
                     authed = auth.verify2FA(new TwoFactorAuthCode().code(code)).getVerified().booleanValue();
                 }
-                catch (Exception ex)
+                catch (GeneralSecurityException gsex)
                 {
-                    LOG.error("Exception using totp secret");
+                    LOG.error("Exception generating totp secret", gsex);
+                }
+                catch (ApiException apiex)
+                {
+                    LOG.error("Exception using totp secret", apiex);
                 }
             }
             
-            while (!auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
-                LOG.error("Invalid totp code");
+            for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
+            {
+                if (needsTotp = auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
+                    LOG.error("Invalid totp code");
+            }
+            catch (ApiException apiex)
+            {
+                LOG.error("Exception using totp", apiex);
+            }
             
             LOG.info("Logged in (2fa)");
         }
@@ -286,14 +299,14 @@ public class ScarletVRChat implements Closeable
             if (!isRefresh) LOG.info("Log out: "+auth.logout().getSuccess().getMessage());
             return true;
         }
-        catch (Exception ex)
+        catch (ApiException apiex)
         {
-            LOG.error("Error logging out", ex);
+            LOG.error("Error logging out", apiex);
             return false;
         }
     }
 
-    public void refresh() throws ApiException
+    public void refresh()
     {
         LOG.info("Refreshing auth");
         this.logout(true);
@@ -338,6 +351,7 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
+            this.scarlet.checkVrcRefresh(apiex);
             LOG.error("Error during audit query: "+apiex.getMessage());
             return null;
         }
@@ -363,6 +377,7 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
+            this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
                 this.cachedUsers.add404(userId);
             else
@@ -391,6 +406,7 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
+            this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
                 this.cachedGroups.add404(groupId);
             else
@@ -419,6 +435,7 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
+            this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
                 this.cachedUserGroups.add404(userId);
             else

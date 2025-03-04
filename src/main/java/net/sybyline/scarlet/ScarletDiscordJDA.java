@@ -106,9 +106,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     public ScarletDiscordJDA(Scarlet scarlet, File discordBotFile)
     {
+        scarlet.splash.splashSubtext("Configuring Discord");
         this.scarlet = scarlet;
         this.discordBotFile = discordBotFile;
         this.audio = new JDAAudioSendingHandler();
+        this.requestingEmail = scarlet.ui.settingString("vrchat_report_email", "VRChat Help Desk report email", "");
         this.load();
         this.jda = JDABuilder
             .createDefault(this.token)
@@ -144,6 +146,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     final JDAAudioSendingHandler audio;
     final JDA jda;
     String token, guildSf, audioChannelSf, evidenceRoot;
+    final ScarletUI.Setting<String> requestingEmail;
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
     Map<String, String> scarletPermission2roleSf = new HashMap<>();
@@ -1621,6 +1624,26 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     
                 }); break;
+                case "set-tts-voice": this.handleInGuildAsync(event, true, hook -> {
+                    String voiceName = event.getOption("voice-name").getAsString();
+                    
+                    if (!ScarletDiscordJDA.this.scarlet.ttsService.selectVoice(voiceName))
+                    {
+                        hook.sendMessageFormat("Tried to set TTS voice to `%s` (subprocess not responsive)", voiceName).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    ScarletDiscordJDA.this.scarlet.eventListener.ttsVoiceName.set(voiceName);
+                    
+                    if (!ScarletDiscordJDA.this.scarlet.ttsService.getInstalledVoices().contains(voiceName))
+                    {
+                        hook.sendMessageFormat("Attempting to set TTS voice to `%s` (voice might not exist)", voiceName).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    hook.sendMessageFormat("Setting TTS voice to `%s`", voiceName).setEphemeral(true).queue();
+                    
+                }); break;
                 case "set-permission-role": this.handleInGuildAsync(event, true, hook -> {
                     String scarletPermission0 = event.getOption("scarlet-permission").getAsString();
                     ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
@@ -1821,7 +1844,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     String requestingUserId = eventUserId != null ? eventUserId : actorUserId;
                     
-                    String requestingEmail = ScarletDiscordJDA.this.scarlet.settings.getString("vrchat_report_email");
+                    String requestingEmail = ScarletDiscordJDA.this.requestingEmail.get();
                     
                     String link = VRChatHelpDeskURLs.newModerationRequest(
                         requestingEmail,
@@ -2237,7 +2260,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setTitle(target.getDisplayName(), "https://vrchat.com/home/user/"+target.getId())
                 .setImage(MiscUtils.userImageUrl(target))
             ;
-            
+            List<LimitedUserGroups> lugs = null;
             String jsonUser;
             try
             {
@@ -2251,7 +2274,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             String jsonUserGroups;
             try
             {
-                jsonUserGroups = JSON.getGson().toJson(new UsersApi(this.scarlet.vrc.client).getUserGroups(entryMeta.entry.getTargetId()), LIST_LUGROUPS.getType());
+                jsonUserGroups = JSON.getGson().toJson(lugs = new UsersApi(this.scarlet.vrc.client).getUserGroups(entryMeta.entry.getTargetId()), LIST_LUGROUPS.getType());
             }
             catch (Exception ex)
             {
@@ -2270,11 +2293,29 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             
             byte[] fileData = String.format("{\n\"user\":%s,\n\"groups\":%s,\n\"represented\":%s\n}\n", jsonUser, jsonUserGroups, jsonUserRepGroup).getBytes(StandardCharsets.UTF_8);
-            
+
+            if (target != null)
+            {
+                String epochJoined = Long.toUnsignedString(target.getDateJoined().toEpochDay() * 86400L);
+                embed.addField("Account age", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
+                embed.addField("Age verification", "`"+target.getAgeVerificationStatus()+"`", false);
+            }
             if (history != null)
                 embed.addField("History", history, false);
             if (recent != null)
                 embed.addField("Most recent", recent, false);
+            if (lugs != null && !lugs.isEmpty())
+            {
+                List<LimitedUserGroups> wgs = lugs.stream()
+                    .filter(lug -> this.scarlet.watchedGroups.getWatchedGroup(lug.getGroupId()) != null)
+                    .collect(Collectors.toList());
+                if (!wgs.isEmpty())
+                {
+                    StringBuilder sb = new StringBuilder();
+                    wgs.forEach(wg -> sb.append(wg.getName()).append('\n'));
+                    embed.addField("Watched group membership", sb.toString(), false);
+                }
+            }
             
             Message message = channel
                 .sendMessageEmbeds(embed.build())

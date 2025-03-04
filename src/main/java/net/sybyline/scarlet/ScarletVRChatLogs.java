@@ -10,8 +10,10 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -173,8 +175,15 @@ public class ScarletVRChatLogs implements Closeable
         this.currentTail = null;
         try
         {
+            if (!this.scarlet.dirVrc.isDirectory())
+            {
+                this.catchUp(null);
+                LOG.warn("The VRChat Client does not seem to be installed on this machine, disabling log tailer-parser!");
+                return;
+            }
             while (!this.pollTarget())
             {
+                this.catchUp(null);
                 if (!MiscUtils.sleep(10_000L))
                     return;
                 if (!this.running)
@@ -195,12 +204,23 @@ public class ScarletVRChatLogs implements Closeable
                 }
             }
         }
+        catch (Exception ex)
+        {
+            LOG.error("Exception in tailer thread", ex);
+        }
         finally
         {
             this.running = false;
             this.currentTarget = null;
             this.currentTail = null;
         }
+    }
+
+    void catchUp(File file)
+    {
+        if (file != null)
+            LOG.info("Caught up with " + file.getName());
+        this.scarlet.splash.close();
     }
 
     boolean pollTarget()
@@ -215,8 +235,10 @@ public class ScarletVRChatLogs implements Closeable
     static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
     File locateTarget()
     {
-        return Arrays
-            .stream(this.scarlet.dirVrc.listFiles())
+        return Optional
+            .ofNullable(this.scarlet.dirVrc.listFiles())
+            .map(Arrays::stream)
+            .orElseGet(Stream::empty)
             .filter(file -> file.isFile() && file.getName().startsWith("output_log_") && file.getName().endsWith(".txt"))
             .max(Comparator.comparing($ -> LocalDateTime.parse($.getName().substring(11, 30), dtf)))
             .orElse(null);
@@ -251,7 +273,7 @@ public class ScarletVRChatLogs implements Closeable
             }
             this.buffer.add(line);
             if (this.isInPreamble && !inPreamble)
-                LOG.info("Caught up with " + this.file.getName());
+                ScarletVRChatLogs.this.catchUp(this.file);
             this.isInPreamble &= inPreamble;
         }
         @Override
@@ -259,7 +281,7 @@ public class ScarletVRChatLogs implements Closeable
         {
             this.handleCurrentEntry();
             if (this.isInPreamble)
-                LOG.info("Caught up with " + this.file.getName());
+                ScarletVRChatLogs.this.catchUp(this.file);
             this.isInPreamble = false;
         }
         @Override

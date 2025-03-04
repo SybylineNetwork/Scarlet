@@ -1,6 +1,7 @@
 package net.sybyline.scarlet;
 
 import java.io.File;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -9,9 +10,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import io.github.vrchatapi.model.LimitedUserGroups;
+import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.util.TTSService;
 
@@ -33,6 +36,12 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         
         this.isInGroupInstance = false;
         this.isSameAsPreviousInstance = false;
+        
+        this.ttsVoiceName = scarlet.ui.settingString("tts_voice_name", "TTS: Voice name", "");
+        this.ttsUseDefaultAudioDevice = scarlet.ui.settingBool("tts_use_default_audio_device", "TTS: Use default system audio device", false);
+        this.announceWatchedGroups = scarlet.ui.settingBool("tts_announce_watched_groups", "TTS: Announce watched groups", true);
+        this.announceNewPlayers = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce new players", true);
+        this.announcePlayersNewerThan = scarlet.ui.settingInt("tts_announce_players_newer_than_days", "TTS: Announce players newer than (days)", 30, 1, 365);
     }
 
     final Scarlet scarlet;
@@ -47,6 +56,28 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     Set<String> clientLocationPrev_userIds;
     boolean isInGroupInstance,
             isSameAsPreviousInstance;
+
+    final ScarletUI.Setting<String> ttsVoiceName;
+    final ScarletUI.Setting<Boolean> ttsUseDefaultAudioDevice,
+                                     announceWatchedGroups,
+                                     announceNewPlayers;
+    final ScarletUI.Setting<Integer> announcePlayersNewerThan;
+
+    void settingsLoaded()
+    {
+        this.scarlet.exec.scheduleAtFixedRate(() ->
+        {
+            String voiceName = this.ttsVoiceName.get();
+            if (voiceName.trim().isEmpty())
+            {
+                this.scarlet.ttsService.getInstalledVoices().stream().findFirst().ifPresent(this.ttsVoiceName::set);
+            }
+            else
+            {
+                this.scarlet.ttsService.selectVoiceLater(voiceName);
+            }
+        }, 0_000L, 60_000L, TimeUnit.MILLISECONDS);
+    }
 
     // ScarletVRChatLogs.Listener
 
@@ -70,6 +101,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void log_userJoined(boolean preamble, LocalDateTime timestamp, String location)
     {
+        if (preamble)
+        {
+            this.scarlet.splash.splashText("Preamble...");
+            this.scarlet.splash.splashSubtext(location);
+        }
         this.clientLocation = location;
         this.isInGroupInstance = location.contains("~group("+this.scarlet.vrc.groupId+")");
         this.isSameAsPreviousInstance = Objects.equals(this.clientLocationPrev, location);
@@ -119,8 +155,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     List<String> checkPlayer(boolean preamble, String userDisplayName, String userId)
     {
         List<String> ret = new ArrayList<>();
+        long minEpoch = preamble ? Long.MIN_VALUE : System.currentTimeMillis() - 86400_000L; // pull if not preamble and cache more than 1 day old
+        User user = this.scarlet.vrc.getUser(userId, minEpoch);
+        List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId, minEpoch);
         // check groups
-        List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId);
         if (lugs != null)
         {
             List<ScarletWatchedGroups.WatchedGroup> wgs = lugs.stream()
@@ -132,12 +170,22 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             {
                 StringBuilder sb = new StringBuilder();
                 sb.append("User ").append(userDisplayName).append(" joined the lobby.");
-                if (!preamble)
+                if (!preamble && this.announceWatchedGroups.get())
                 {
                     wgs.forEach(wg -> sb.append(' ').append(wg.message));
+                    this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                     this.scarlet.ttsService.submit(sb.toString());
                 }
                 wgs.forEach(wg -> ret.add(wg.message));
+            }
+        }
+        if (!preamble && user != null && this.announceNewPlayers.get())
+        {
+            long acctAgeDays = LocalDate.now().toEpochDay() - user.getDateJoined().toEpochDay();
+            if (acctAgeDays <= this.announcePlayersNewerThan.get().longValue())
+            {
+                this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
+                this.scarlet.ttsService.submit("User "+userDisplayName+" is new to VRChat, joined "+acctAgeDays+" days ago.");
             }
         }
         // check staff
@@ -146,6 +194,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     }
 
     // TTSService.Listener
+
+    @Override
+    public void tts_init(TTSService tts)
+    {
+    }
 
     @Override
     public void tts_ready(int job, File file)
