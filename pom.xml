@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.6</version><!--scarlet-version-->
+  <version>0.4.7</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>

@@ -270,7 +270,7 @@ public class ScarletVRChat implements Closeable
             
             for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
             {
-                if (needsTotp = auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
+                if (needsTotp = !auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
                     LOG.error("Invalid totp code");
             }
             catch (ApiException apiex)
