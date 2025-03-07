@@ -4,6 +4,22 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.8-rc1
+  - Added experimental "staff mode" (discord integration disabled, data like watched groups must be synced manually)
+  - Added ability to ban and unban VRChat users with desktop UI, Discord buttons, and Discord commands
+  - Added ability to disable pings on Discord for moderation audit events
+  - Added priority system to groups
+  - Added default sorting for instance UI
+  - Added colored text based on group watch type for instance UI
+  - Added ability to forward audit event messages to other Discord servers via webhooks
+  - Added AuditID to autopopulation of description field for VRChat Help Desk Links
+  - Added support for Email OTP
+  - Fixed TTS subprocess hang if selected TTS voice isn't installed on the system
+  - Fixed regression: implicit class loading from main class happened before dependencies were downloaded
+
+## 0.4.7
+  - Fixed regression: TOTP codes incorrectly reporting as invalid
+
 ## 0.4.6
   - Added splash screen
   - Added update check popup

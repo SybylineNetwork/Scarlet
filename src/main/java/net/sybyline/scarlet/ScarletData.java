@@ -184,7 +184,7 @@ public class ScarletData
     {
         this.editObj("live.json", LiveInstancesMetadata.class, edit);
     }
-    public String liveInstancesMetadata_getLocationAudit(String location, boolean remove)
+    public synchronized String liveInstancesMetadata_getLocationAudit(String location, boolean remove)
     {
         ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstancesMetadata();
         if (liveInstancesMeta == null)
@@ -194,7 +194,7 @@ public class ScarletData
             this.liveInstancesMetadata(liveInstancesMeta);
         return auditEntryId;
     }
-    public ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationAudit(String location, String auditEntryId)
+    public synchronized ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationAudit(String location, String auditEntryId)
     {
         ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstancesMetadata();
         if (liveInstancesMeta == null)
@@ -392,6 +392,9 @@ public class ScarletData
         public UniqueStrings entryTags = new UniqueStrings();
         public String entryDescription;
         
+        public String auxActorId;
+        public String auxActorDisplayName;
+        
         public boolean hasMessage()
         { return this.guildSnowflake != null && this.channelSnowflake != null && this.messageSnowflake != null; }
         public String getMessageDelineated()
@@ -424,7 +427,10 @@ public class ScarletData
         { return this.hasThread() || this.hasMessage() || this.hasAuxMessage(); }
         public String getSomeUrl()
         { return this.hasThread() ? this.getThreadUrl() : this.hasMessage() ? this.getMessageUrl() : this.hasAuxMessage() ? this.getAuxMessageUrl() : null; }
-        
+
+        public boolean hasAuxActor()
+        { return this.auxActorId != null; }
+
         public boolean hasNonEmptyData()
         { Object data = this.entry.getData(); return data != null && data instanceof Map && !((Map<?, ?>)data).isEmpty(); }
         public Map<String, Object> getData()

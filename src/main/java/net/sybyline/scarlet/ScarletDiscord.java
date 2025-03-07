@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,25 @@ public interface ScarletDiscord extends Closeable
                 entry.setActorDisplayName(actor.getDisplayName());
             }
         }
+        
+        if (scarlet.vrc.botUserId == null || Objects.equals(scarlet.vrc.botUserId, entry.getActorId()))
+        {
+            String pendingActorId = scarlet.pendingModActions.pollPending(latype, entry.getTargetId());
+            if (pendingActorId != null)
+            {
+                entryMeta.auxActorId = pendingActorId;
+                User auxActor = scarlet.vrc.getUser(entry.getActorId());
+                if (auxActor != null)
+                {
+                    entryMeta.auxActorDisplayName = auxActor.getDisplayName();
+                }
+                else
+                {
+                    entryMeta.auxActorDisplayName = pendingActorId;
+                }
+            }
+        }
+        
         try
         {
             switch (latype)
@@ -124,6 +144,11 @@ public interface ScarletDiscord extends Closeable
                //actorDisplayName = entryMeta.entry.getActorDisplayName(),
                targetId = entryMeta.entry.getTargetId();
         OffsetDateTime createdAt = entryMeta.entry.getCreatedAt();
+        
+        if (entryMeta.hasAuxActor())
+        {
+            actorId = entryMeta.auxActorId;
+        }
         
         ScarletData.UserMetadata actorMeta = scarlet.data.userMetadata(actorId),
                                  targetMeta = scarlet.data.userMetadata(targetId);

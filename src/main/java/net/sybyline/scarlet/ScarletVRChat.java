@@ -34,12 +34,18 @@ import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
+import io.github.vrchatapi.api.WorldsApi;
+import io.github.vrchatapi.model.BanGroupMemberRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.GroupLimitedMember;
+import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
+import io.github.vrchatapi.model.TwoFactorEmailCode;
 import io.github.vrchatapi.model.User;
+import io.github.vrchatapi.model.World;
 
 import net.sybyline.scarlet.util.MiscUtils;
 
@@ -121,8 +127,11 @@ public class ScarletVRChat implements Closeable
         this.cookies.setup(this.client);
         this.cookies.load();
         this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
+        this.groupOwnerId = null;
+        this.botUserId = null;
         scarlet.settings.setNamespace(this.groupId);
         this.cachedUsers = new ScarletJsonCache<>("usr", User.class);
+        this.cachedWorlds = new ScarletJsonCache<>("wrld", World.class);
         this.cachedGroups = new ScarletJsonCache<>("grp", Group.class);
         this.cachedUserGroups = new ScarletJsonCache<>("gmem", new TypeToken<List<LimitedUserGroups>>(){});
     }
@@ -131,7 +140,10 @@ public class ScarletVRChat implements Closeable
     final ScarletVRChatCookieJar cookies;
     final ApiClient client;
     final String groupId;
+    String groupOwnerId;
+    String botUserId;
     final ScarletJsonCache<User> cachedUsers;
+    final ScarletJsonCache<World> cachedWorlds;
     final ScarletJsonCache<Group> cachedGroups;
     final ScarletJsonCache<List<LimitedUserGroups>> cachedUserGroups;
     long localDriftMillis = 0L;
@@ -188,6 +200,14 @@ public class ScarletVRChat implements Closeable
                 if (auth.verifyAuthToken().getOk().booleanValue())
                 {
                     LOG.info("Logged in (cached-verified)");
+                    try
+                    {
+                        this.botUserId = auth.getCurrentUser().getId();
+                    }
+                    catch (ApiException apiex)
+                    {
+                        LOG.info("Exception getting current user even though cached auth should be valid", apiex);
+                    }
                     return;
                 }
                 else
@@ -206,6 +226,7 @@ public class ScarletVRChat implements Closeable
                 if (data.has("id"))
                 {
                     LOG.info("Logged in (cached)");
+                    this.botUserId = data.get("id").getAsString();
                     return;
                 }
             }
@@ -220,6 +241,7 @@ public class ScarletVRChat implements Closeable
                     if (data.has("id"))
                     {
                         LOG.info("Logged in (credentials)");
+                        this.botUserId = data.get("id").getAsString();
                         return;
                     }
                 }
@@ -238,51 +260,85 @@ public class ScarletVRChat implements Closeable
                 while (data == null);
             }
             
-            if (data.get("requiresTwoFactorAuth")
+            if (!data.get("requiresTwoFactorAuth")
                     .getAsJsonArray()
                     .asList()
                     .stream()
                     .map(JsonElement::getAsJsonPrimitive)
                     .map(JsonPrimitive::getAsString)
                     .noneMatch("totp"::equals))
-                throw new RuntimeException("Totp-based 2fa is not enabled for this account");
-            
-            String secret = this.scarlet.settings.getString("vrc_secret");
-            if (secret != null && (secret = secret.replaceAll("[^A-Za-z2-7=]", "")).length() == 32)
             {
-                boolean authed = false;
-                for (int tries = 2; !authed && tries --> 0; MiscUtils.sleep(3_000L)) try
+                
+                for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
                 {
-                    // use VRChatAPI time to work around potential local system time drift
-                    long now = new SystemApi(this.client).getSystemTime().toInstant().toEpochMilli();
-                    String code = TimeBasedOneTimePasswordUtil.generateNumberString(secret, now, TimeBasedOneTimePasswordUtil.DEFAULT_TIME_STEP_SECONDS, TimeBasedOneTimePasswordUtil.DEFAULT_OTP_LENGTH);
-                    authed = auth.verify2FA(new TwoFactorAuthCode().code(code)).getVerified().booleanValue();
-                }
-                catch (GeneralSecurityException gsex)
-                {
-                    LOG.error("Exception generating totp secret", gsex);
+                    if (needsTotp = !auth.verify2FAEmailCode(new TwoFactorEmailCode().code(this.scarlet.settings.requireInput("Emailotp code", true))).getVerified().booleanValue())
+                        LOG.error("Invalid emailotp code");
                 }
                 catch (ApiException apiex)
                 {
-                    LOG.error("Exception using totp secret", apiex);
+                    LOG.error("Exception using emailotp", apiex);
                 }
+                
+                LOG.info("Logged in (2fa-emailotp)");
             }
-            
-            for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
+            else
             {
-                if (needsTotp = !auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
-                    LOG.error("Invalid totp code");
+            
+                String secret = this.scarlet.settings.getString("vrc_secret");
+                if (secret != null && (secret = secret.replaceAll("[^A-Za-z2-7=]", "")).length() == 32)
+                {
+                    boolean authed = false;
+                    for (int tries = 2; !authed && tries --> 0; MiscUtils.sleep(3_000L)) try
+                    {
+                        // use VRChatAPI time to work around potential local system time drift
+                        long now = new SystemApi(this.client).getSystemTime().toInstant().toEpochMilli();
+                        String code = TimeBasedOneTimePasswordUtil.generateNumberString(secret, now, TimeBasedOneTimePasswordUtil.DEFAULT_TIME_STEP_SECONDS, TimeBasedOneTimePasswordUtil.DEFAULT_OTP_LENGTH);
+                        authed = auth.verify2FA(new TwoFactorAuthCode().code(code)).getVerified().booleanValue();
+                    }
+                    catch (GeneralSecurityException gsex)
+                    {
+                        LOG.error("Exception generating totp secret", gsex);
+                    }
+                    catch (ApiException apiex)
+                    {
+                        LOG.error("Exception using totp secret", apiex);
+                    }
+                }
+                
+                for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
+                {
+                    if (needsTotp = !auth.verify2FA(new TwoFactorAuthCode().code(this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
+                        LOG.error("Invalid totp code");
+                }
+                catch (ApiException apiex)
+                {
+                    LOG.error("Exception using totp", apiex);
+                }
+                
+                LOG.info("Logged in (2fa-totp)");
+            }
+
+            try
+            {
+                this.botUserId = auth.getCurrentUser().getId();
             }
             catch (ApiException apiex)
             {
-                LOG.error("Exception using totp", apiex);
+                LOG.info("Exception getting current user even though current auth should be valid", apiex);
             }
             
-            LOG.info("Logged in (2fa)");
+            return;
         }
         finally
         {
             this.save();
+            {
+                Group group = this.getGroup(this.groupId);
+                if (group != null)
+                {
+                    this.groupOwnerId = group.getOwnerId();
+                }
+            }
         }
     }
 
@@ -386,6 +442,35 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    public World getWorld(String worldId)
+    {
+        return this.getWorld(worldId, Long.MIN_VALUE);
+    }
+    public World getWorld(String worldId, long minEpoch)
+    {
+        World world = this.cachedWorlds.get(worldId, minEpoch);
+        if (world != null)
+            return world;
+        if (this.cachedWorlds.is404(worldId))
+            return null;
+        WorldsApi worlds = new WorldsApi(this.client);
+        try
+        {
+            world = worlds.getWorld(worldId);
+            this.cachedWorlds.put(worldId, world);
+            return world;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedUsers.add404(worldId);
+            else
+                LOG.error("Error during get world: "+apiex.getMessage());
+            return null;
+        }
+    }
+
     public Group getGroup(String groupId)
     {
         return this.getGroup(groupId, Long.MIN_VALUE);
@@ -397,10 +482,10 @@ public class ScarletVRChat implements Closeable
             return group;
         if (this.cachedGroups.is404(groupId))
             return null;
-        GroupsApi users = new GroupsApi(this.client);
+        GroupsApi groups = new GroupsApi(this.client);
         try
         {
-            group = users.getGroup(groupId, null);
+            group = groups.getGroup(groupId, null);
             this.cachedGroups.put(groupId, group);
             return group;
         }
@@ -441,6 +526,56 @@ public class ScarletVRChat implements Closeable
             else
                 LOG.error("Error during get user groups: "+apiex.getMessage());
             return null;
+        }
+    }
+
+    public GroupMemberStatus getMembership(String targetUserId)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            GroupLimitedMember member = groups.getGroupMember(this.groupId, targetUserId);
+            if (member == null)
+                return null;
+            return member.getMembershipStatus();
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during ban from group: "+apiex.getMessage());
+            return null;
+        }
+    }
+
+    public boolean banFromGroup(String targetUserId)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            groups.banGroupMember(this.groupId, new BanGroupMemberRequest().userId(targetUserId));
+            return true;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during ban from group: "+apiex.getMessage());
+            return false;
+        }
+    }
+
+    public boolean unbanFromGroup(String targetUserId)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            groups.unbanGroupMember(this.groupId, targetUserId);
+            return true;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during ban from group: "+apiex.getMessage());
+            return false;
         }
     }
 

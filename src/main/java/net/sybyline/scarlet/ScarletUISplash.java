@@ -2,12 +2,14 @@ package net.sybyline.scarlet;
 
 import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.ImageIcon;
 import javax.swing.JLabel;
@@ -27,6 +29,72 @@ public class ScarletUISplash implements AutoCloseable
     JPanel splashPanel = new JPanel(null);
     JLabel splashText = new TransparentJLabel("Loading...", JLabel.CENTER),
            splashSubtext = new TransparentJLabel("", JLabel.CENTER);
+
+    public void queueFeedbackPopup(Component component, long durationMillis, String text)
+    {
+        this.queueFeedbackPopup(component, durationMillis, text, "", null, null);
+    }
+    public void queueFeedbackPopup(Component component, long durationMillis, String text, Color color)
+    {
+        this.queueFeedbackPopup(component, durationMillis, text, "", color, color);
+    }
+    public void queueFeedbackPopup(Component component, long durationMillis, String text, String subtext)
+    {
+        this.queueFeedbackPopup(component, durationMillis, text, subtext, null, null);
+    }
+    public void queueFeedbackPopup(Component component, long durationMillis, String text, String subtext, Color color)
+    {
+        this.queueFeedbackPopup(component, durationMillis, text, subtext, color, color);
+    }
+    public void queueFeedbackPopup(Component component, long durationMillis, String text, String subtext, Color textcolor, Color subtextcolor)
+    {
+        if (component == null)
+            component = this.scarlet.ui.jframe;
+        if (durationMillis < 500L)
+            durationMillis = 500L;
+        if (durationMillis > 30_000L)
+            durationMillis = 30_000L;
+        if (textcolor == null)
+            textcolor = Color.WHITE;
+        if (subtextcolor == null)
+            subtextcolor = Color.WHITE;
+        JWindow feedback = new JWindow();
+        this.scarlet.exec.schedule(() ->
+        {
+            feedback.setVisible(false);
+            feedback.dispose();
+        }, durationMillis, TimeUnit.MILLISECONDS);
+        feedback.setSize(200, 50);
+        feedback.setLocationRelativeTo(component);
+        feedback.setFocusable(false);
+        feedback.setBackground(new Color(127, 127, 127, 127));
+        {
+            JPanel feedback_panel = new JPanel(null);
+            feedback_panel.setOpaque(false);
+            {
+                JLabel feedback_text = new JLabel(text, JLabel.CENTER);
+                feedback_text.setFont(new Font("Arial", Font.BOLD, 24));
+                feedback_text.setBackground(new Color(127, 127, 127, 127));
+                feedback_text.setForeground(Color.WHITE);
+                feedback_panel.add(feedback_text);
+                feedback_text.setBounds(0, 0, 200, 30);
+                feedback_panel.setComponentZOrder(feedback_text, 0);
+                feedback_text.revalidate();
+            }
+            {
+                JLabel feedback_subtext = new JLabel(text, JLabel.CENTER);
+                feedback_subtext.setFont(new Font("Arial", Font.BOLD, 16));
+                feedback_subtext.setBackground(new Color(127, 127, 127, 127));
+                feedback_subtext.setForeground(Color.WHITE);
+                feedback_panel.add(feedback_subtext);
+                feedback_subtext.setBounds(0, 30, 200, 20);
+                feedback_panel.setComponentZOrder(feedback_subtext, 0);
+                feedback_subtext.revalidate();
+            }
+            feedback.setContentPane(this.splashPanel);
+        }
+        feedback.setVisible(true);
+    }
 
     class TransparentJLabel extends JLabel
     {
@@ -55,7 +123,6 @@ public class ScarletUISplash implements AutoCloseable
         this.splash.setSize(400, 450);
         this.splash.setLocationRelativeTo(null);
         this.splash.setFocusable(false);
-        this.splash.setAlwaysOnTop(true);
         this.splash.setBackground(new Color(127, 127, 127, 127));
         {
             this.splashPanel.setOpaque(false);

@@ -48,11 +48,23 @@ Settings for the Discord bot account
         "event.submit_evidence": "123456789123456789"
     },
     
+    // Map of auxiliary webhook internal ids to Discord webhook urls
+    "scarletAuxWh2webhookUrl ": {
+        "External Webhook One": "https://discord.com/api/webhooks/123456789123456789/IdzL4t3KvfQQ_CKYWd8Q2NM6Z7IaSOppoTTL4LS1Da_aMZ-eK1MbML-3ILnLjotWcDkp",
+        "External Webhook Two": "https://discord.com/api/webhooks/123456789123456789/irNaGekj1zzccv__Uy4oC7d2GczNDbilnfBtcc5qL41bZ0Ikw1SXoYc7-bJST-yPdUQB"
+    },
+    
     // Map of audit entry event type to Discord channel snowflake id
     "auditType2channelSf": {
         "group.instance.kick": "123456789123456789",
         "group.user.ban": "123456789123456789",
         "group.instance.create": "123456789123456789"
+    },
+    
+    // Map of audit entry event type to auxiliary webhook internal id(s)
+    "auditType2scarletAuxWh": {
+        "group.instance.kick": "External Webhook One",
+        "group.instance.create": [ "External Webhook One", "External Webhook Two" ]
     },
     
     // Map of audit entry event type to hex RGB
@@ -162,7 +174,35 @@ General settings for Scarlet:
     "ui_alert_update": true,
     
     // Whether still to show the above popup if a new preview version is availiable
-    "ui_alert_update_preview": true
+    "ui_alert_update_preview": true,
+    
+    // Whether the UI becomes visible immediately or after loading is complete
+    "ui_show_during_load": false,
+    
+    // Whether to issue a ping to the Discord user whose associated VRChat user issues an Instance Warn
+    "discord_ping_instance_warn": false,
+    
+    // Whether to issue a ping to the Discord user whose associated VRChat user issues an Instance Kick
+    "discord_ping_instance_kick": false,
+    
+    // Whether to issue a ping to the Discord user whose associated VRChat user issues a Member Remove
+    "discord_ping_member_remove": true,
+    
+    // Whether to issue a ping to the Discord user whose associated VRChat user issues a User Ban
+    "discord_ping_user_ban": true,
+    
+    // Whether to issue a ping to the Discord user whose associated VRChat user issues a User Unban
+    "discord_ping_user_unban": false
+}
+```
+
+## file `pending_moderation_actions.json`
+
+Saved pending moderation actions:
+```json
+{
+    // Map of "{auditEntryType}:{targetUserId}" to actorUserIds
+    "group.user.ban:usr_00000000-0000-0000-0000-000000000000": "usr_11111111-1111-1111-1111-111111111111"
 }
 ```
 
@@ -271,7 +311,13 @@ Group audit log event information:
     ],
     
     // Array of submissions of evidence
-    "entryDescription": "Myriad Cirnos fill the sky"
+    "entryDescription": "Myriad Cirnos fill the sky",
+    
+    // User id of the actor who used automation/assistance to effect this event
+    "auxActorId": "usr_00000000-0000-0000-0000-000000000000",
+    
+    // Display name of the actor who used automation/assistance to effect this event
+    "auxActorDisplayName": "Somebody"
 }
 ```
 

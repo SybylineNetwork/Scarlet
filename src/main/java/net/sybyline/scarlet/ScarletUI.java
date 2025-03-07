@@ -18,10 +18,12 @@ import java.awt.event.WindowEvent;
 import java.net.URI;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.Period;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,10 +31,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -60,6 +65,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
+import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.util.MiscUtils;
@@ -70,8 +76,7 @@ public class ScarletUI implements AutoCloseable
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/UI");
-    static final DateTimeFormatter LTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
-                                   DUR = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    static final DateTimeFormatter LTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     static
     {
         try
@@ -118,13 +123,15 @@ public class ScarletUI implements AutoCloseable
         this.jtabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
         this.propstable = new PropsTable<>();
         this.jpanel_settings = new JPanel();
+        this.jlabel_lastSavedAt = new JLabel("", JLabel.LEFT);
         this.ssettings = Collections.synchronizedList(new ArrayList<>());
         this.propstableColumsDirty = false;
         this.connectedPlayers = new HashMap<>();
+        
         this.initUI();
     }
 
-    public synchronized void playerJoin(String id, String name, LocalDateTime joined, String advisory, boolean isRejoinFromPrev)
+    public synchronized void playerJoin(String id, String name, LocalDateTime joined, String advisory, Color text_color, int priority, boolean isRejoinFromPrev)
     {
         User user = this.scarlet.vrc.getUser(id);
         String periodString = null;
@@ -151,6 +158,8 @@ public class ScarletUI implements AutoCloseable
             player.acctdays = periodString;
             player.left = null;
             player.advisory = advisory;
+            player.text_color = text_color;
+            player.priority = priority;
             this.propstable.updateEntry(player);
         }
         else
@@ -164,9 +173,12 @@ public class ScarletUI implements AutoCloseable
             }
             player.acctdays = periodString;
             player.advisory = advisory;
+            player.text_color = text_color;
+            player.priority = priority;
             this.connectedPlayers.put(id, player);
             this.propstable.addEntry(player);
         }
+        this.propstable.sortEntries(COMPARE);
     }
 
     public synchronized void playerLeave(String id, String name, LocalDateTime left)
@@ -187,6 +199,7 @@ public class ScarletUI implements AutoCloseable
             this.connectedPlayers.put(id, player);
             this.propstable.addEntry(player);
         }
+        this.propstable.sortEntries(COMPARE);
     }
 
     public synchronized void clearInstance()
@@ -209,9 +222,17 @@ public class ScarletUI implements AutoCloseable
 
     public synchronized Setting<String> settingString(String id, String name, String defaultValue)
     {
+        return this.settingString(id, name, defaultValue, (Predicate<String>)null);
+    }
+    public synchronized Setting<String> settingString(String id, String name, String defaultValue, String regex)
+    {
+        return this.settingString(id, name, defaultValue, regex == null ? null : Pattern.compile(regex).asPredicate());
+    }
+    public synchronized Setting<String> settingString(String id, String name, String defaultValue, Predicate<String> validator)
+    {
         try
         {
-            return new StringSetting(id, name, defaultValue);
+            return new StringSetting(id, name, defaultValue, validator);
         }
         finally
         {
@@ -243,16 +264,29 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
+    public synchronized Setting<Void> settingVoid(String name, String buttonText, Runnable buttonPressed)
+    {
+        try
+        {
+            return new VoidSetting(name, buttonText, buttonPressed);
+        }
+        finally
+        {
+            this.readdSettingUI();
+        }
+    }
+
     final Scarlet scarlet;
     final JFrame jframe;
     final JTabbedPane jtabs;
     final PropsTable<ConnectedPlayer> propstable;
     final JPanel jpanel_settings;
+    final JLabel jlabel_lastSavedAt;
     final List<SerializableSetting<?>> ssettings;
     boolean propstableColumsDirty;
     final Map<String, ConnectedPlayer> connectedPlayers;
     
-    static class ConnectedPlayer
+    class ConnectedPlayer
     {
         String name;
         String id;
@@ -265,11 +299,46 @@ public class ScarletUI implements AutoCloseable
             @Override
             public void actionPerformed(ActionEvent e)
             {
-                LOG.info("Click on "+ConnectedPlayer.this.id+" "+e);
-//                MiscUtils.AWTDesktop.browse(URI.create("https://vrchat.com/home/user/"+ConnectedPlayer.this.id));
+                MiscUtils.AWTDesktop.browse(URI.create("https://vrchat.com/home/user/"+ConnectedPlayer.this.id));
             }
         };
+        Action ban = new AbstractAction("Ban") {
+            private static final long serialVersionUID = 1L;
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                ScarletUI.this.scarlet.execModal.execute(() ->
+                {
+                    if (JOptionPane.showConfirmDialog(ScarletUI.this.jframe, "Are you sure you want to ban "+ConnectedPlayer.this.name+"?", "Confirm ban", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION)
+                    {
+                        ScarletUI.this.tryBan(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
+                    }
+                });
+            }
+        };
+        Action unban = new AbstractAction("Unban") {
+            private static final long serialVersionUID = 1L;
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                ScarletUI.this.scarlet.execModal.execute(() ->
+                {
+                    if (JOptionPane.showConfirmDialog(ScarletUI.this.jframe, "Are you sure you want to unban "+ConnectedPlayer.this.name+"?", "Confirm unban", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION)
+                    {
+                        ScarletUI.this.tryUnban(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
+                    }
+                });
+            }
+        };
+        Color text_color;
+        int priority;
     }
+    static final Comparator<ConnectedPlayer> COMPARE = Comparator
+        .<ConnectedPlayer>comparingInt($ -> 0) // dummy
+        .thenComparingInt($ -> $.left == null ? 0 : 1)
+        .thenComparingInt($ -> -$.priority)
+        .thenComparing($ -> $.joined, Comparator.nullsLast(Comparator.naturalOrder()))
+        ;
 
     public static final class UIPropsInfo
     {
@@ -296,6 +365,8 @@ public class ScarletUI implements AutoCloseable
             this.propstable.addProperty("Left", false, true, String.class, $ -> $.left);
             this.propstable.addProperty("Advisory", false, true, String.class, $ -> $.advisory);
             this.propstable.addProperty("Profile", true, true, Action.class, $ -> $.profile);
+            this.propstable.addProperty("Ban", true, true, Action.class, $ -> $.ban);
+            this.propstable.addProperty("Unban", true, false, Action.class, $ -> $.unban);
             
             this.propstable.getColumnModel().addColumnModelListener(new TableColumnModelListener()
             {
@@ -320,6 +391,16 @@ public class ScarletUI implements AutoCloseable
                 public void columnAdded(TableColumnModelEvent e)
                 {
                     ScarletUI.this.propstableColumsDirty = true;
+                }
+            });
+            this.propstable.setPropsTableExt(this.propstable.new PropsTableExt()
+            {
+                @Override
+                public Color getOverrideForegroundColor(ConnectedPlayer element, Color prev)
+                {
+                    if (element.text_color != null)
+                        return element.text_color;
+                    return super.getOverrideForegroundColor(element, prev);
                 }
             });
             this.loadInstanceColumns();
@@ -425,7 +506,7 @@ public class ScarletUI implements AutoCloseable
 
     void saveIfDirty()
     {
-        this.saveSettings();
+        this.saveSettings(false);
         if (!this.propstableColumsDirty)
             return;
         this.propstableColumsDirty = false;
@@ -450,10 +531,80 @@ public class ScarletUI implements AutoCloseable
         });
     }
 
+    protected void tryBan(String id, String name)
+    {
+        String ownerId = this.scarlet.vrc.groupOwnerId;
+        
+        if (!this.scarlet.staffMode)
+        if (ownerId == null)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Internal error", "Group owner id missing", Color.PINK);
+            return;
+        }
+        
+        GroupMemberStatus status = this.scarlet.vrc.getMembership(id);
+        
+        if (status == GroupMemberStatus.BANNED)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User already banned");
+            return;
+        }
+        
+        if (!this.scarlet.staffMode)
+        if (this.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, id, ownerId) != null)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User ban pending", name, Color.CYAN);
+            return;
+        }
+        
+        if (!this.scarlet.vrc.banFromGroup(id))
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Failed to ban user", name, Color.PINK);
+            return;
+        }
+        
+        this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Banned user", name);
+    }
+
+    protected void tryUnban(String id, String name)
+    {
+        String ownerId = this.scarlet.vrc.groupOwnerId;
+
+        if (!this.scarlet.staffMode)
+        if (ownerId == null)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Internal error", "Group owner id missing", Color.PINK);
+            return;
+        }
+        
+        GroupMemberStatus status = this.scarlet.vrc.getMembership(id);
+        
+        if (status != GroupMemberStatus.BANNED)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User not banned", name);
+            return;
+        }
+
+        if (!this.scarlet.staffMode)
+        if (this.scarlet.pendingModActions.addPending(GroupAuditType.USER_UNBAN, id, ownerId) != null)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User unban pending", name, Color.CYAN);
+            return;
+        }
+        
+        if (!this.scarlet.vrc.unbanFromGroup(id))
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Failed to unban user", name, Color.PINK);
+            return;
+        }
+        
+        this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Unbanned user", name);
+    }
+
     @Override
     public void close() throws Exception
     {
-        this.saveSettings();
+        this.saveSettings(false);
         this.saveInstanceColumns();
         this.jframe.dispose();
     }
@@ -486,6 +637,27 @@ public class ScarletUI implements AutoCloseable
         
         gbc_settings.gridy++;
         
+        gbc_settings.gridx = 0;
+        gbc_settings.fill = GridBagConstraints.NONE;
+        gbc_settings.gridheight = GridBagConstraints.REMAINDER;
+        gbc_settings.gridwidth = 1;
+        gbc_settings.weightx = 0.0D;
+        gbc_settings.weighty = 0.0D;
+        gbc_settings.anchor = GridBagConstraints.EAST;
+            JButton save = new JButton("Save");
+            save.addActionListener($ -> this.saveSettings(true));
+        this.jpanel_settings.add(save, gbc_settings);
+
+        gbc_settings.gridx = 1;
+        gbc_settings.fill = GridBagConstraints.BOTH;
+        gbc_settings.gridheight = GridBagConstraints.REMAINDER;
+        gbc_settings.gridwidth = 1;
+        gbc_settings.weightx = 0.0D;
+        gbc_settings.weighty = 0.0D;
+        gbc_settings.anchor = GridBagConstraints.WEST;
+        this.jpanel_settings.add(this.jlabel_lastSavedAt, gbc_settings);
+        
+        
         gbc_settings.gridx = 2;
         gbc_settings.fill = GridBagConstraints.BOTH;
         gbc_settings.gridheight = GridBagConstraints.REMAINDER;
@@ -506,9 +678,13 @@ public class ScarletUI implements AutoCloseable
                 ssetting.deserialize(element);
             }
         }
+        if (this.scarlet.showUiDuringLoad.get())
+        {
+            this.jframe.setVisible(true);
+        }
     }
 
-    void saveSettings()
+    void saveSettings(boolean showTimeSaved)
     {
         int saved = 0;
         for (SerializableSetting<?> ssetting : this.ssettings)
@@ -525,6 +701,15 @@ public class ScarletUI implements AutoCloseable
         if (saved > 0)
         {
             this.scarlet.settings.saveJson();
+        }
+        if (showTimeSaved)
+        {
+            String savedAtText = "Saved settings: " + DateTimeFormatter.ISO_LOCAL_TIME.format(LocalTime.now());
+            this.jlabel_lastSavedAt.setText(savedAtText);
+            this.scarlet.exec.schedule(() -> {
+                if (Objects.equals(savedAtText, this.jlabel_lastSavedAt.getText()))
+                    this.jlabel_lastSavedAt.setText("");
+            }, 5_000L, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -663,11 +848,21 @@ public class ScarletUI implements AutoCloseable
 
     class StringSetting extends ASetting<String, JTextField>
     {
-        StringSetting(String id, String name, String defaultValue)
+        StringSetting(String id, String name, String defaultValue, Predicate<String> validator)
         {
             super(id, name, defaultValue, new JTextField(32));
+            this.validator = validator == null ? $ -> true : validator;
+            this.background = this.render.getBackground();
             JPopupMenu cpm = new JPopupMenu();
-            cpm.add("Paste").addActionListener($ -> Optional.ofNullable(MiscUtils.AWTToolkit.get()).ifPresent(this::set));
+            cpm.add("Paste").addActionListener($ -> {
+                String cbc = MiscUtils.AWTToolkit.get();
+                if (cbc != null)
+                {
+                    this.render.setText(cbc);
+                    this.accept();
+                    this.markDirty();
+                }
+            });
             this.render.setComponentPopupMenu(cpm);
             this.render.addActionListener($ -> {
                 this.accept();
@@ -699,6 +894,8 @@ public class ScarletUI implements AutoCloseable
                 }
             });
         }
+        final Predicate<String> validator;
+        final Color background;
         @Override
         public JsonElement serialize()
         {
@@ -720,10 +917,21 @@ public class ScarletUI implements AutoCloseable
             if (Objects.equals(this.value, this.render.getText()))
                 return;
             this.render.setText(this.value);
+            this.testValid(this.value);
         }
         void accept()
         {
-            this.value = this.render.getText();
+            String value = this.render.getText();
+            if (this.testValid(value))
+            {
+                this.value = value;
+            }
+        }
+        boolean testValid(String value)
+        {
+            boolean ret = this.validator.test(value);
+            this.render.setBackground(ret ? this.background : MiscUtils.lerp(this.background, Color.PINK, 0.5F));
+            return ret;
         }
     }
 
@@ -849,6 +1057,76 @@ public class ScarletUI implements AutoCloseable
         void accept()
         {
             this.value = this.render.isSelected();
+        }
+    }
+
+    class VoidSetting implements SerializableSetting<Void>
+    {
+        protected VoidSetting(String name, String buttonText, Runnable buttonPressed)
+        {
+            this.name = name;
+            this.render = new JButton(buttonText);
+            this.render.addActionListener($ ->
+            {
+                try
+                {
+                    buttonPressed.run();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception handling in runnable setting "+name, ex);
+                }
+            });
+            ScarletUI.this.ssettings.add(this);
+        }
+        final String name;
+        final JButton render;
+        @Override
+        public final String id()
+        {
+            return "";
+        }
+        @Override
+        public final String name()
+        {
+            return this.name;
+        }
+        @Override
+        public final Void get()
+        {
+            return null;
+        }
+        @Override
+        public final Void getDefault()
+        {
+            return null;
+        }
+        @Override
+        public final void set(Void value)
+        {
+        }
+        @Override
+        public final Component render()
+        {
+            return this.render;
+        }
+        @Override
+        public final boolean pollDirty()
+        {
+            return false;
+        }
+        @Override
+        public final void markDirty()
+        {
+        }
+        @Override
+        public JsonElement serialize()
+        {
+            return null;
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
         }
     }
 

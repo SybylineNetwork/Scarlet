@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.User;
 
@@ -55,7 +54,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.7",
+        VERSION = "0.4.8-rc1",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -178,6 +177,11 @@ public class Scarlet implements Closeable
     final ScarletUISplash splash = new ScarletUISplash(this);
 
     volatile boolean running = true;
+    boolean staffMode = false;
+    void staffRemoteMode()
+    {
+        
+    }
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
     final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
@@ -187,6 +191,7 @@ public class Scarlet implements Closeable
     final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
     final ScarletUI ui = new ScarletUI(this);
     final ScarletEventListener eventListener = new ScarletEventListener(this);
+    final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(this, new File(dir, "pending_moderation_actions.json"));
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
     final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(dir, "watched_groups.json"));
     final ScarletStaffList staffList = new ScarletStaffList(this, new File(dir, "staff_list.json"));
@@ -197,7 +202,8 @@ public class Scarlet implements Closeable
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
     String[] last25logs = new String[0];
     final ScarletUI.Setting<Boolean> alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
-                                     alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true);
+                                     alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true),
+                                     showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
 
 
     public void run()
@@ -444,9 +450,9 @@ public class Scarlet implements Closeable
     {
         this.wantsVrcRefresh = true;
     }
-    public boolean checkVrcRefresh(ApiException apiex)
+    public boolean checkVrcRefresh(Exception ex)
     {
-        if (!apiex.getMessage().contains("HTTP response code: 401"))
+        if (!ex.getMessage().contains("HTTP response code: 401"))
             return false;
         this.queueVrcRefresh();
         return true;

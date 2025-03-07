@@ -125,6 +125,8 @@ public class TTSService implements Closeable
 
     public boolean selectVoice(String name)
     {
+        if (!this.installedVoices.contains(name))
+            return true;
         return this.instruct('@', name);
     }
 

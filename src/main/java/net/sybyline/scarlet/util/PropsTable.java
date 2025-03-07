@@ -1,10 +1,16 @@
 package net.sybyline.scarlet.util;
 
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.text.DateFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
@@ -12,7 +18,10 @@ import java.util.function.Function;
 import java.util.function.ObjIntConsumer;
 
 import javax.swing.Action;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -41,6 +50,7 @@ public class PropsTable<E> extends JTable
         this.tableHeader.setResizingAllowed(true);
         this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         this.setAutoCreateColumnsFromModel(false);
+        this.setAutoCreateRowSorter(true);
         this.addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(FocusEvent e)
@@ -163,6 +173,11 @@ public class PropsTable<E> extends JTable
         this.getPropsDataModel().clearEntries();
     }
 
+    public synchronized boolean sortEntries(Comparator<? super E> comparator)
+    {
+        return this.getPropsDataModel().sortEntries(comparator);
+    }
+
     public List<E> getEntries()
     {
         return Collections.unmodifiableList(this.getPropsDataModel().entries);
@@ -211,13 +226,212 @@ public class PropsTable<E> extends JTable
     protected void createDefaultRenderers()
     {
         super.createDefaultRenderers();
-        this.defaultRenderersByColumnClass.put(Action.class, (UIDefaults.LazyValue) t -> new ActionRenderer());
+        defaultRenderersByColumnClass.put(Object.class, (UIDefaults.LazyValue) t -> new PropsObjectRenderer());
+        defaultRenderersByColumnClass.put(Number.class, (UIDefaults.LazyValue) t -> new PropsNumberRenderer());
+        defaultRenderersByColumnClass.put(Float.class, (UIDefaults.LazyValue) t -> new PropsDoubleRenderer());
+        defaultRenderersByColumnClass.put(Double.class, (UIDefaults.LazyValue) t -> new PropsDoubleRenderer());
+        defaultRenderersByColumnClass.put(Date.class, (UIDefaults.LazyValue) t -> new PropsDateRenderer());
+        defaultRenderersByColumnClass.put(Icon.class, (UIDefaults.LazyValue) t -> new PropsIconRenderer());
+        defaultRenderersByColumnClass.put(ImageIcon.class, (UIDefaults.LazyValue) t -> new PropsIconRenderer());
+        defaultRenderersByColumnClass.put(Boolean.class, (UIDefaults.LazyValue) t -> new PropsBooleanRenderer());
+        this.defaultRenderersByColumnClass.put(Action.class, (UIDefaults.LazyValue) t -> new PropsActionRenderer());
     }
     private static final Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
-    class ActionRenderer extends JButton implements TableCellRenderer, UIResource
+    class PropsObjectRenderer extends PropsTableCellRenderer.PropsUIResource
+    {
+        private static final long serialVersionUID = 8688842921569726502L;
+        PropsObjectRenderer()
+        {
+            super();
+        }
+        @Override
+        protected void setValue(Object value)
+        {
+            super.setValue(value);
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
+        }
+    }
+    class PropsNumberRenderer extends PropsTableCellRenderer.PropsUIResource
+    {
+        private static final long serialVersionUID = 7068217672892266835L;
+        PropsNumberRenderer()
+        {
+            super();
+            this.setHorizontalAlignment(JLabel.RIGHT);
+        }
+        @Override
+        protected void setValue(Object value)
+        {
+            super.setValue(value);
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
+        }
+    }
+    class PropsDoubleRenderer extends PropsNumberRenderer
+    {
+        private static final long serialVersionUID = 1425063164787487108L;
+        NumberFormat formatter;
+        PropsDoubleRenderer()
+        {
+            super();
+        }
+        @Override
+        public void setValue(Object value)
+        {
+            if (this.formatter == null)
+            {
+                this.formatter = NumberFormat.getInstance();
+            }
+            this.setText((value == null) ? "" : this.formatter.format(value));
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
+        }
+    }
+    class PropsDateRenderer extends PropsTableCellRenderer.PropsUIResource
+    {
+        private static final long serialVersionUID = -6928789909621291528L;
+        DateFormat formatter;
+        PropsDateRenderer()
+        {
+            super();
+        }
+        @Override
+        public void setValue(Object value)
+        {
+            if (this.formatter == null)
+            {
+                this.formatter = DateFormat.getDateInstance();
+            }
+            this.setText((value == null) ? "" : this.formatter.format(value));
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
+        }
+    }
+    class PropsIconRenderer extends PropsTableCellRenderer.PropsUIResource
+    {
+        private static final long serialVersionUID = 1088008190079243567L;
+        PropsIconRenderer()
+        {
+            super();
+            this.setHorizontalAlignment(JLabel.CENTER);
+        }
+        @Override
+        public void setValue(Object value)
+        {
+            this.setIcon((value instanceof Icon) ? (Icon)value : null);
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
+        }
+    }
+    class PropsBooleanRenderer extends JCheckBox implements TableCellRenderer, UIResource
+    {
+        private static final long serialVersionUID = -1826302992763403224L;
+        PropsBooleanRenderer()
+        {
+            super();
+            this.setHorizontalAlignment(JLabel.CENTER);
+            this.setBorderPainted(true);
+        }
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column)
+        {
+            if (isSelected)
+            {
+                this.setForeground(table.getSelectionForeground());
+                this.setBackground(table.getSelectionBackground());
+            }
+            else
+            {
+                this.setForeground(table.getForeground());
+                this.setBackground(table.getBackground());
+            }
+            this.setSelected((value != null && ((Boolean)value).booleanValue()));
+            if (hasFocus)
+            {
+                this.setBorder(UIManager.getBorder("Table.focusCellHighlightBorder"));
+            }
+            else
+            {
+                this.setBorder(noFocusBorder);
+            }
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            return this;
+        }
+    }
+    class PropsActionRenderer extends JButton implements TableCellRenderer, UIResource
     {
         private static final long serialVersionUID = -1357124806959379173L;
-        ActionRenderer()
+        PropsActionRenderer()
         {
             super();
             this.setHorizontalAlignment(JLabel.CENTER);
@@ -244,6 +458,16 @@ public class PropsTable<E> extends JTable
             else
             {
                 this.setBorder(noFocusBorder);
+            }
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
             }
             return this;
         }
@@ -317,6 +541,15 @@ public class PropsTable<E> extends JTable
             this.fireTableRowsDeleted(0, size - 1);
             return true;
         }
+        boolean sortEntries(Comparator<? super E> comparator)
+        {
+            int size = this.entries.size();
+            if (size == 0)
+                return false;
+            this.entries.sort(comparator);
+            this.fireTableRowsUpdated(0, size - 1);
+            return true;
+        }
         @Override
         public int getRowCount()
         {
@@ -355,6 +588,33 @@ public class PropsTable<E> extends JTable
         public Class<?> getColumnClass(int columnIndex)
         {
             return this.props.get(columnIndex).type;
+        }
+    }
+
+    protected PropsTableExt getDefaultPropsTableExt()
+    {
+        return new PropsTableExt();
+    }
+    public PropsTableExt getPropsTableExt()
+    {
+        return this.propsTableExt;
+    }
+    public void setPropsTableExt(PropsTableExt propsTableExt)
+    {
+        this.propsTableExt = propsTableExt == null ? this.getDefaultPropsTableExt() : propsTableExt;
+    }
+
+    protected PropsTableExt propsTableExt;
+
+    public class PropsTableExt
+    {
+        public Font getOverrideFont(E element, Font prev)
+        {
+            return null;
+        }
+        public Color getOverrideForegroundColor(E element, Color prev)
+        {
+            return null;
         }
     }
 

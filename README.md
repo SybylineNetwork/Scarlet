@@ -37,10 +37,21 @@ Discord slash commands:
   - `watched-group`<br>
     Configures watched groups<br>
     Example: `/watched-group add-tag "grp_00000000-0000-0000-0000-000000000000" "trolling"`
+  - `aux-webhooks`<br>
+    Configures auxiliary webhooks<br>
+    Example: `/aux-webhooks add "External Webhook One" "https://discord.com/api/webhooks/123456789123456789/IdzL4t3KvfQQ_CKYWd8Q2NM6Z7IaSOppoTTL4LS1Da_aMZ-eK1MbML-3ILnLjotWcDkp"`
   - `associate-ids <discord-user:user> <vrchat-user:string>`<br>
     Associates a VRChat account with a Discord account<br>
     Example: `/associate-ids <@123456789123456789> "usr_00000000-0000-0000-0000-000000000000"`
     - `discord-user` The Discord user
+    - `vrchat-user` The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)
+  - `vrchat-user-ban <vrchat-user:string>`<br>
+    Ban a specific VRChat user<br>
+    Example: `/vrchat-user-ban "usr_00000000-0000-0000-0000-000000000000"`
+    - `vrchat-user` The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)
+  - `vrchat-user-unban <vrchat-user:string>`<br>
+    Unban a specific VRChat user<br>
+    Example: `/vrchat-user-unban "usr_00000000-0000-0000-0000-000000000000"`
     - `vrchat-user` The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)
   - `vrchat-user-info <vrchat-user:string>`<br>
     Lists internal and audit information for a specific VRChat user<br>
@@ -65,6 +76,10 @@ Discord slash commands:
     Example: `/set-audit-channel "group.instance.kick" <#log-instance-kicks>`
     - `audit-event-type` The VRChat Group Audit Log event type
     - `discord-channel` The Discord channel to use, or omit to remove entry
+  - `set-audit-aux-webhooks <audit-event-type:string>`<br>
+    Sets the given webhooks as the webhooks certain audit event types use<br>
+    Example: `/set-audit-aux-webhooks "group.instance.kick"`
+    - `audit-event-type` The VRChat Group Audit Log event type
   - `set-voice-channel <discord-channel:channel?>`<br>
     Sets a given voice channel as the channel in which to announce TTS messages<br>
     Example: `/set-voice-channel <#staff-in-instance>`

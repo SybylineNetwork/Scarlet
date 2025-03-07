@@ -10,11 +10,13 @@ import java.lang.reflect.Type;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import java.util.Scanner;
 import java.util.prefs.Preferences;
 
 import javax.swing.JOptionPane;
 import javax.swing.JPasswordField;
+import javax.swing.JPopupMenu;
 import javax.swing.JTextField;
 
 import org.slf4j.Logger;
@@ -299,9 +301,12 @@ public class ScarletSettings
     {
         if (!GraphicsEnvironment.isHeadless())
         {
+            JPopupMenu cpm = new JPopupMenu();
             if (sensitive)
             {
                 JPasswordField jpf = new JPasswordField(32);
+                    cpm.add("Paste").addActionListener($ -> Optional.ofNullable(MiscUtils.AWTToolkit.get()).ifPresent(jpf::setText));
+                    jpf.setComponentPopupMenu(cpm);
                 int res = JOptionPane.showConfirmDialog(null, jpf, display, JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
                 if (res == JOptionPane.OK_OPTION)
                     return new String(jpf.getPassword());
@@ -309,6 +314,8 @@ public class ScarletSettings
             else
             {
                 JTextField jtf = new JTextField(32);
+                    cpm.add("Paste").addActionListener($ -> Optional.ofNullable(MiscUtils.AWTToolkit.get()).ifPresent(jtf::setText));
+                    jtf.setComponentPopupMenu(cpm);
                 int res = JOptionPane.showConfirmDialog(null, jtf, display, JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
                 if (res == JOptionPane.OK_OPTION)
                     return jtf.getText();

@@ -1,9 +1,11 @@
 package net.sybyline.scarlet;
 
+import java.awt.Color;
 import java.io.File;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +39,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.isInGroupInstance = false;
         this.isSameAsPreviousInstance = false;
         
-        this.ttsVoiceName = scarlet.ui.settingString("tts_voice_name", "TTS: Voice name", "");
+        this.ttsVoiceName = scarlet.ui.settingString("tts_voice_name", "TTS: Voice name", "", $ -> scarlet.ttsService != null && scarlet.ttsService.getInstalledVoices().contains($));
         this.ttsUseDefaultAudioDevice = scarlet.ui.settingBool("tts_use_default_audio_device", "TTS: Use default system audio device", false);
         this.announceWatchedGroups = scarlet.ui.settingBool("tts_announce_watched_groups", "TTS: Announce watched groups", true);
         this.announceNewPlayers = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce new players", true);
@@ -131,9 +133,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         boolean isRejoinFromPrev = this.clientLocationPrev_userIds.remove(userId) && this.isSameAsPreviousInstance;
         this.clientLocation_userId2userDisplayName.put(userId, userDisplayName);
         this.clientLocation_userDisplayName2userId.put(userDisplayName, userId);
-        List<String> advisories = this.checkPlayer(preamble, userDisplayName, userId);
+        List<String> advisories = new ArrayList<>();
+        int[] priority = new int[]{Integer.MIN_VALUE+1};
+        Color text_color = this.checkPlayer(advisories, priority, preamble, userDisplayName, userId);
         String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
-        this.scarlet.ui.playerJoin(userId, userDisplayName, timestamp, advisory, isRejoinFromPrev);
+        this.scarlet.ui.playerJoin(userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
     }
@@ -152,9 +156,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userDisplayName2avatarDisplayName.put(userDisplayName, avatarDisplayName);
     }
 
-    List<String> checkPlayer(boolean preamble, String userDisplayName, String userId)
+    Color checkPlayer(List<String> advisories, int[] priority, boolean preamble, String userDisplayName, String userId)
     {
-        List<String> ret = new ArrayList<>();
+        ScarletWatchedGroups.WatchedGroup.Type overall_type = null;
         long minEpoch = preamble ? Long.MIN_VALUE : System.currentTimeMillis() - 86400_000L; // pull if not preamble and cache more than 1 day old
         User user = this.scarlet.vrc.getUser(userId, minEpoch);
         List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId, minEpoch);
@@ -166,17 +170,24 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 .map(this.scarlet.watchedGroups::getWatchedGroup)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-            if (!wgs.isEmpty())
+            ScarletWatchedGroups.WatchedGroup wg = wgs.stream()
+                .max(Comparator.naturalOrder())
+                .orElse(null)
+                ;
+            if (wg != null)
             {
                 StringBuilder sb = new StringBuilder();
                 sb.append("User ").append(userDisplayName).append(" joined the lobby.");
                 if (!preamble && this.announceWatchedGroups.get())
                 {
-                    wgs.forEach(wg -> sb.append(' ').append(wg.message));
+                    if (wg.message != null)
+                        sb.append(' ').append(wg.message);
                     this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                     this.scarlet.ttsService.submit(sb.toString());
                 }
-                wgs.forEach(wg -> ret.add(wg.message));
+                wgs.forEach($ -> advisories.add($.message));
+                overall_type = wg.type;
+                priority[0] = wg.priority;
             }
         }
         if (!preamble && user != null && this.announceNewPlayers.get())
@@ -190,7 +201,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         }
         // check staff
         // check avatar
-        return ret;
+        if (overall_type != null)
+            return overall_type.text_color;
+        return null;
     }
 
     // TTSService.Listener

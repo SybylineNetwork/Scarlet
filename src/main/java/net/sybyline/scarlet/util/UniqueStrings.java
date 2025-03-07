@@ -24,6 +24,21 @@ public final class UniqueStrings implements Iterable<String>
     {
     }
 
+    public UniqueStrings(String value)
+    {
+        this.add(value);
+    }
+
+    public UniqueStrings(String... values)
+    {
+        this.addAll(values);
+    }
+
+    public UniqueStrings(Collection<String> values)
+    {
+        this.addAll(values);
+    }
+
     private final Set<String> strings = new LinkedHashSet<>(0);
 
     public Set<String> strings()

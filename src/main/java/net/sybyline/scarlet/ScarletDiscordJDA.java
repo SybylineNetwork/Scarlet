@@ -20,6 +20,9 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import javax.sound.sampled.AudioInputStream;
@@ -38,10 +41,12 @@ import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.RepresentedGroup;
 import io.github.vrchatapi.model.User;
+import io.github.vrchatapi.model.World;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -49,11 +54,14 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.IncomingWebhookClient;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.MessageReference;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.Webhook;
+import net.dv8tion.jda.api.entities.WebhookClient;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
@@ -80,6 +88,7 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
@@ -87,6 +96,7 @@ import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.requests.restaction.AbstractWebhookMessageAction;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
@@ -97,6 +107,7 @@ import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
+import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 
 public class ScarletDiscordJDA implements ScarletDiscord
@@ -111,6 +122,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.discordBotFile = discordBotFile;
         this.audio = new JDAAudioSendingHandler();
         this.requestingEmail = scarlet.ui.settingString("vrchat_report_email", "VRChat Help Desk report email", "");
+        this.pingOnModeration_instanceWarn = scarlet.ui.settingBool("discord_ping_instance_warn", "Discord: Ping on Instance Warn", false);
+        this.pingOnModeration_instanceKick = scarlet.ui.settingBool("discord_ping_instance_kick", "Discord: Ping on Instance Kick", false);
+        this.pingOnModeration_memberRemove = scarlet.ui.settingBool("discord_ping_member_remove", "Discord: Ping on Member Remove", true);
+        this.pingOnModeration_userBan = scarlet.ui.settingBool("discord_ping_user_ban", "Discord: Ping on User Ban", true);
+        this.pingOnModeration_userUnban = scarlet.ui.settingBool("discord_ping_user_unban", "Discord: Ping on User Unban", false);
         this.load();
         this.jda = JDABuilder
             .createDefault(this.token)
@@ -147,10 +163,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
     final JDA jda;
     String token, guildSf, audioChannelSf, evidenceRoot;
     final ScarletUI.Setting<String> requestingEmail;
+    final ScarletUI.Setting<Boolean> pingOnModeration_instanceWarn,
+                                     pingOnModeration_instanceKick,
+                                     pingOnModeration_memberRemove,
+                                     pingOnModeration_userBan,
+                                     pingOnModeration_userUnban;
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
     Map<String, String> scarletPermission2roleSf = new HashMap<>();
+    Map<String, String> scarletAuxWh2webhookUrl = new ConcurrentHashMap<>();
     Map<String, String> auditType2channelSf = new HashMap<>();
+    Map<String, UniqueStrings> auditType2scarletAuxWh = new ConcurrentHashMap<>();
     Map<String, Integer> auditType2color = new HashMap<>();
     @FunctionalInterface interface ImmediateHandler { void handle() throws Exception; }
     @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
@@ -166,6 +189,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         catch (Exception ex)
         {
+            if (ex instanceof IllegalStateException && JDA.Status.FAILED_TO_LOGIN == this.jda.getStatus() && "".equals(ScarletDiscordJDA.this.token))
+            {
+                LOG.warn("No Discord bot token: entering staff mode");
+                this.scarlet.staffMode = true;
+                this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
+                return;
+            }
             throw new RuntimeException("Awaiting JDA", ex);
         }
         
@@ -207,6 +237,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("add", "Adds a watched group")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("delete-watched-group", "Removes a watched group")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
@@ -226,6 +257,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
                         new SubcommandData("set-type-other", "Sets a group's watch type to other")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                        new SubcommandData("set-priority", "Sets a group's watch type to other")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100).setRequired(true)),
                         new SubcommandData("set-tags", "Sets a group's tags")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'"),
@@ -239,12 +273,32 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS")
                     ),
+                Commands.slash("aux-webhooks", "Configures auxiliary webhooks")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(defaultCommandPerms)
+                    .addSubcommands(
+                        new SubcommandData("list", "Lists all auxiliary webhooks")
+                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of webhooks to show per page").setRequiredRange(1L, 10L)),
+                        new SubcommandData("add", "Adds an auxiliary webhook")
+                            .addOption(OptionType.STRING, "aux-webhook-id", "The internal id to give the webhook", true)
+                            .addOption(OptionType.STRING, "aux-webhook-url", "The url of the webhook", true),
+                        new SubcommandData("delete", "Removes an auxiliary webhook")
+                            .addOption(OptionType.STRING, "aux-webhook-id", "The internal id of the webhook", true, true)
+                    ),
                 Commands.slash("associate-ids", "Associates a specific Discord user with a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
                     .addOption(OptionType.USER, "discord-user", "The Discord user", true)
                     .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
                 Commands.slash("vrchat-user-info", "Lists internal and audit information for a specific VRChat user")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(defaultCommandPerms)
+                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                Commands.slash("vrchat-user-ban", "Ban a specific VRChat user")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(defaultCommandPerms)
+                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                Commands.slash("vrchat-user-unban", "Unban a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
                     .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
@@ -267,6 +321,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setDefaultPermissions(defaultCommandPerms)
                     .addOption(OptionType.STRING, "audit-event-type", "The VRChat Group Audit Log event type", true, true)
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
+                Commands.slash("set-audit-aux-webhooks", "Sets the given webhooks as the webhooks certain audit event types use")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(defaultCommandPerms)
+                    .addOption(OptionType.STRING, "audit-event-type", "The VRChat Group Audit Log event type", true, true),
                 Commands.slash("set-voice-channel", "Sets a given voice channel as the channel in which to announce TTS messages")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
@@ -446,7 +504,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                       audioChannelSf = null,
                       evidenceRoot = null;
         public Map<String, String> scarletPermission2roleSf = new HashMap<>();
+        public Map<String, String> scarletAuxWh2webhookUrl = new HashMap<>();
         public Map<String, String> auditType2channelSf = new HashMap<>();
+        public Map<String, UniqueStrings> auditType2scarletAuxWh = new HashMap<>();
         public Map<String, String> auditType2color = new HashMap<>();
     }
 
@@ -470,15 +530,25 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
         if (spec.token == null)
         {
-            spec.token = this.scarlet.settings.requireInput("Discord bot token", true);
+            spec.token = this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true);
             save = true;
         }
+        this.scarlet.ui.settingVoid("Discord bot token", "Reset", () -> this.scarlet.execModal.execute(() ->
+        {
+            this.token = this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true);
+            this.save();
+        }));
         
         if (spec.guildSf == null)
         {
-            spec.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake", false);
+            spec.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
             save = true;
         }
+        this.scarlet.ui.settingVoid("Discord guild snowflake", "Reset", () -> this.scarlet.execModal.execute(() ->
+        {
+            this.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
+            this.save();
+        }));
         
         if (save) this.save(spec);
         
@@ -487,7 +557,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.audioChannelSf = spec.audioChannelSf;
         this.evidenceRoot = spec.evidenceRoot;
         this.scarletPermission2roleSf = spec.scarletPermission2roleSf == null ? new HashMap<>() : new HashMap<>(spec.scarletPermission2roleSf);
+        this.scarletAuxWh2webhookUrl = spec.scarletAuxWh2webhookUrl == null ? new ConcurrentHashMap<>() : new ConcurrentHashMap<>(spec.scarletAuxWh2webhookUrl);
         this.auditType2channelSf = spec.auditType2channelSf == null ? new HashMap<>() : new HashMap<>(spec.auditType2channelSf);
+        this.auditType2scarletAuxWh = spec.auditType2scarletAuxWh == null ? new ConcurrentHashMap<>() : new ConcurrentHashMap<>(spec.auditType2scarletAuxWh);
         Map<String, Integer> auditType2color = new HashMap<>();
         if (spec.auditType2color != null && !spec.auditType2color.isEmpty())
             spec.auditType2color.forEach((auditType, colorString) -> {
@@ -511,7 +583,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         spec.audioChannelSf = this.audioChannelSf;
         spec.evidenceRoot = this.evidenceRoot;
         spec.auditType2channelSf = new HashMap<>(this.auditType2channelSf);
+        spec.auditType2scarletAuxWh = new HashMap<>(this.auditType2scarletAuxWh);
         spec.scarletPermission2roleSf = new HashMap<>(this.scarletPermission2roleSf);
+        spec.scarletAuxWh2webhookUrl = new HashMap<>(this.scarletAuxWh2webhookUrl);
         Map<String, String> auditType2color = new HashMap<>();
         if (this.auditType2color != null && this.auditType2color.isEmpty())
             this.auditType2color.forEach((auditType, color) -> auditType2color.put(auditType, Integer.toHexString(color)));
@@ -777,7 +851,23 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     } break;
                     }
                 } break;
+                case "aux-webhooks": {
+                    switch (event.getFocusedOption().getName())
+                    {
+                    case "aux-webhook-id": {
+                        event.replyChoiceStrings(ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.keySet().stream().limit(25L).toArray(String[]::new)).queue();
+                    } break;
+                    }
+                } break;
                 case "set-audit-channel": {
+                    switch (event.getFocusedOption().getName())
+                    {
+                    case "audit-event-type": {
+                        event.replyChoiceStrings(AUDIT_EVENT_IDS).queue();
+                    } break;
+                    }
+                } break;
+                case "set-audit-aux-webhooks": {
                     switch (event.getFocusedOption().getName())
                     {
                     case "audit-event-type": {
@@ -905,6 +995,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     Attachment importedFile = event.getOption("import-file", OptionMapping::getAsAttachment);
                     String groupTags = event.getOption("group-tags", OptionMapping::getAsString);
                     String groupTag = event.getOption("group-tag", OptionMapping::getAsString);
+                    int priority = event.getOption("group-priority", 0, OptionMapping::getAsInt);
                     String message = event.getOption("message", OptionMapping::getAsString);
                     
                     if (groupId != null && !(groupId = groupId.trim()).isEmpty())
@@ -1005,6 +1096,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
                         if (message != null)
                             watchedGroup.message = message;
+                        watchedGroup.priority = priority;
                         ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
                         hook.sendMessageFormat("Added group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
 
@@ -1143,6 +1235,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         hook.sendMessage("Marking group as other").setEphemeral(true).queue();
                         ScarletDiscordJDA.this.scarlet.watchedGroups.save();
                     } break;
+                    case "set-priority": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup == null)
+                        {
+                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup.priority = priority;
+                        hook.sendMessage("Setting group priority to "+priority).setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
+                    } break;
                     case "set-tags": {
                         ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
                         if (watchedGroup == null)
@@ -1273,6 +1376,62 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     
                 }); break;
+                case "aux-webhooks": this.handleInGuildAsync(event, true, hook -> {
+                    
+                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
+                    String auxWebhookId = event.getOption("aux-webhook-id", OptionMapping::getAsString);
+                    String auxWebhookUrl = event.getOption("aux-webhook-url", OptionMapping::getAsString);
+                    
+                    switch (event.getSubcommandName())
+                    {
+                    case "list": {
+                        MessageEmbed[] embeds = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl
+                            .entrySet()
+                            .stream()
+                            .map($ -> new EmbedBuilder()
+                                .setTitle($.getKey())
+                                .addField("Url", "`"+$.getValue()+"`", false)
+                                .build())
+                            .toArray(MessageEmbed[]::new)
+                        ;
+                        
+                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
+                        
+                    } break;
+                    case "add": {
+                        
+                        String prevWebhookUrl = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.get(auxWebhookId);
+                        if (prevWebhookUrl != null)
+                        {
+                            hook.sendMessage("There is already an auxiliary webhook with that id").setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        if (!Webhook.WEBHOOK_URL.matcher(auxWebhookUrl).matches())
+                        {
+                            hook.sendMessage("Invalid webhook url").setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.put(auxWebhookId, auxWebhookUrl);
+                        hook.sendMessage("Added auxiliary webhook").setEphemeral(true).queue();
+
+                    } break;
+                    case "delete": {
+                        
+                        String prevWebhookUrl = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.remove(auxWebhookId);
+                        if (prevWebhookUrl != null)
+                        {
+                            hook.sendMessage("There is no auxiliary webhook with that id").setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        hook.sendMessage("Removed auxiliary webhook").setEphemeral(true).queue();
+                        
+                    } break;
+                    }
+                    
+                }); break;
                 case "associate-ids": this.handleInGuildAsync(event, true, hook -> {
                     
                     net.dv8tion.jda.api.entities.User user = event.getOption("discord-user").getAsUser();
@@ -1289,6 +1448,110 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     ScarletDiscordJDA.this.scarlet.data.linkIdToSnowflake(vrcId, user.getId());
                     LOG.info(String.format("Linking VRChat user %s (%s) to Discord user %s (<@%s>)", sc.getDisplayName(), vrcId, user.getEffectiveName(), user.getId()));
                     hook.sendMessageFormat("Associating %s with VRChat user [%s](https://vrchat.com/home/user/%s)", user.getEffectiveName(), sc.getDisplayName(), vrcId).setEphemeral(true).queue();
+                    
+                }); break;
+                case "vrchat-user-ban": this.handleInGuildAsync(event, false, hook -> {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_BAN_USER);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+                    
+                    String vrcTargetId = event.getOption("vrchat-user").getAsString();
+                    
+                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+                    if (vrcActorId == null)
+                    {
+                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    long within1day = System.currentTimeMillis() - 86400_000L;
+                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
+                    if (sc == null)
+                    {
+                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getMembership(vrcTargetId);
+                    
+                    if (status == GroupMemberStatus.BANNED)
+                    {
+                        hook.sendMessage("This VRChat user is already banned").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, vrcTargetId, vrcActorId) != null)
+                    {
+                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!ScarletDiscordJDA.this.scarlet.vrc.banFromGroup(vrcTargetId))
+                    {
+                        hook.sendMessageFormat("Failed to ban %s", sc.getDisplayName()).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    hook.sendMessageFormat("Banned %s", sc.getDisplayName()).setEphemeral(false).queue();
+                    
+                }); break;
+                case "vrchat-user-unban": this.handleInGuildAsync(event, false, hook -> {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_UNBAN_USER);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+                    
+                    String vrcTargetId = event.getOption("vrchat-user").getAsString();
+                    
+                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+                    if (vrcActorId == null)
+                    {
+                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    long within1day = System.currentTimeMillis() - 86400_000L;
+                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
+                    if (sc == null)
+                    {
+                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getMembership(vrcTargetId);
+                    
+                    if (status != GroupMemberStatus.BANNED)
+                    {
+                        hook.sendMessage("This VRChat user is not banned").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_UNBAN, vrcTargetId, vrcActorId) != null)
+                    {
+                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!ScarletDiscordJDA.this.scarlet.vrc.unbanFromGroup(vrcTargetId))
+                    {
+                        hook.sendMessageFormat("Failed to unban %s", sc.getDisplayName()).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    hook.sendMessageFormat("Unbanned %s", sc.getDisplayName()).setEphemeral(false).queue();
                     
                 }); break;
                 case "vrchat-user-info": this.handleInGuildAsync(event, true, hook -> {
@@ -1598,6 +1861,34 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     
                 }); break;
+                case "set-audit-aux-webhooks": this.handleInGuildAsync(event, true, hook -> {
+                    String auditType0 = event.getOption("audit-event-type").getAsString();
+                    GroupAuditType auditType = GroupAuditType.of(auditType0);
+                    if (auditType == null)
+                    {
+                        hook.sendMessageFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    SelectOption[] options = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl
+                            .keySet()
+                            .stream()
+                            .limit(25L)
+                            .map($ -> SelectOption.of($, $))
+                            .toArray(SelectOption[]::new);
+                    UniqueStrings scarletAuxWhs = ScarletDiscordJDA.this.auditType2scarletAuxWh.get(auditType0);
+                    String[] defaultOptions = scarletAuxWhs == null ? new String[0] : scarletAuxWhs
+                            .strings()
+                            .stream()
+                            .filter(ScarletDiscordJDA.this.scarletAuxWh2webhookUrl::containsKey)
+                            .toArray(String[]::new);
+                    
+                    hook.sendMessageComponents(ActionRow.of(StringSelectMenu.create("set-audit-aux-webhooks:"+auditType0)
+                            .addOptions(options)
+                            .setDefaultValues(defaultOptions)
+                            .build()));
+                    
+                }); break;
                 case "set-voice-channel": this.handleInGuildAsync(event, true, hook -> {
                     OptionMapping channel0 = event.getOption("discord-channel");
 
@@ -1633,13 +1924,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         return;
                     }
                     
-                    ScarletDiscordJDA.this.scarlet.eventListener.ttsVoiceName.set(voiceName);
-                    
                     if (!ScarletDiscordJDA.this.scarlet.ttsService.getInstalledVoices().contains(voiceName))
                     {
-                        hook.sendMessageFormat("Attempting to set TTS voice to `%s` (voice might not exist)", voiceName).setEphemeral(true).queue();
+                        hook.sendMessageFormat("TTS voice `%s` is not installed on this system", voiceName).setEphemeral(true).queue();
                         return;
                     }
+                    
+                    ScarletDiscordJDA.this.scarlet.eventListener.ttsVoiceName.set(voiceName);
                     
                     hook.sendMessageFormat("Setting TTS voice to `%s`", voiceName).setEphemeral(true).queue();
                     
@@ -1756,6 +2047,108 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         .queue();
                     
                 }); break;
+                case "vrchat-user-ban": this.handleInGuildAsync(event, true, hook -> {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_BAN_USER);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+
+                    String vrcTargetId = parts[1];
+                    
+                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+                    if (vrcActorId == null)
+                    {
+                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    long within1day = System.currentTimeMillis() - 86400_000L;
+                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
+                    if (sc == null)
+                    {
+                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getMembership(vrcTargetId);
+                    
+                    if (status == GroupMemberStatus.BANNED)
+                    {
+                        hook.sendMessage("This VRChat user is already banned").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, vrcTargetId, vrcActorId) != null)
+                    {
+                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!ScarletDiscordJDA.this.scarlet.vrc.banFromGroup(vrcTargetId))
+                    {
+                        hook.sendMessageFormat("Failed to ban %s", sc.getDisplayName()).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    hook.sendMessageFormat("Banned %s", sc.getDisplayName()).setEphemeral(false).queue();
+                }); break;
+                case "vrchat-user-unban": this.handleInGuildAsync(event, true, hook -> {
+                    
+                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_UNBAN_USER);
+                    if (roleSnowflake != null)
+                    {
+                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
+                        {
+                            hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
+                            return;
+                        }
+                    }
+
+                    String vrcTargetId = parts[1];
+                    
+                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+                    if (vrcActorId == null)
+                    {
+                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    long within1day = System.currentTimeMillis() - 86400_000L;
+                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
+                    if (sc == null)
+                    {
+                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getMembership(vrcTargetId);
+                    
+                    if (status != GroupMemberStatus.BANNED)
+                    {
+                        hook.sendMessage("This VRChat user is not banned").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_UNBAN, vrcTargetId, vrcActorId) != null)
+                    {
+                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!ScarletDiscordJDA.this.scarlet.vrc.unbanFromGroup(vrcTargetId))
+                    {
+                        hook.sendMessageFormat("Failed to unban %s", sc.getDisplayName()).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    hook.sendMessageFormat("Unbanned %s", sc.getDisplayName()).setEphemeral(false).queue();
+                }); break;
                 case "edit-desc": { // FIXME : can't defer a modal
                     
                     String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SET_DESCRIPTION);
@@ -1828,18 +2221,43 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     String reportSubject = targetDisplayName;
                     
-                    String reportDesc = metaDescription;
+                    StringBuilder reportDesc = new StringBuilder();
+                    if (metaDescription != null)
+                    {
+                        reportDesc.append(metaDescription);
+                    }
                     if (metaTags != null && metaTags.length > 0)
                     {
-                        if (reportDesc == null)
-                            reportDesc = "";
-                        else
-                            reportDesc = reportDesc + "<br><br>";
-                        reportDesc = reportDesc + "User's Group internal moderation tags:<ul>";
-                        
+                        if (reportDesc.length() != 0)
+                        {
+                            reportDesc.append("<br><br>");
+                        }
+                        reportDesc.append("User's Group internal moderation tags:<ul>");
                         for (String metaTag : metaTags)
-                            reportDesc = reportDesc + "<li>" + ScarletDiscordJDA.this.scarlet.moderationTags.getTagLabel(metaTag) + "</li>";
-                        reportDesc = reportDesc + "</ul>";
+                        {
+                            reportDesc.append("<li>")
+                                      .append(ScarletDiscordJDA.this.scarlet.moderationTags.getTagLabel(metaTag))
+                                      .append("</li>");
+                        }
+                        reportDesc.append("</ul>");
+                    }
+                    // Footer
+                    {
+                        if (reportDesc.length() != 0)
+                        {
+                            reportDesc.append("<br><br>");
+                        }
+                        reportDesc.append("Partially autofilled with ")
+                                  .append(Scarlet.NAME)
+                                  .append(" version ")
+                                  .append(Scarlet.VERSION)
+                                  .append("<br>")
+                                  .append("Group ID: ")
+                                  .append(ScarletDiscordJDA.this.scarlet.vrc.groupId)
+                                  .append("<br>")
+                                  .append("Audit ID: ")
+                                  .append(auditEntryId)
+                                  ;
                     }
                     
                     String requestingUserId = eventUserId != null ? eventUserId : actorUserId;
@@ -1852,19 +2270,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         requestingUserId,
                         targetUserId,
                         reportSubject,
-                        reportDesc
+                        reportDesc.length() == 0 ? null : reportDesc.toString()
                     );
                     
-                    StringBuilder msg = new StringBuilder();
+                    hook.sendMessageFormat("[Open new VRChat User Moderation Request](<%s>)", link).setEphemeral(true).queue();
                     
                     if (eventUserId == null)
                     {
-                        msg.append("## WARNING\nThis link autofills the requesting user id of the **audit actor, not necessarily you**\nAssociate your Discord and VRChat ids with `/associate-ids`.\n\n");
+                        hook.sendMessage("## WARNING\nThis link autofills the requesting user id of the **audit actor, not necessarily you**\nAssociate your Discord and VRChat ids with `/associate-ids`.\n\n").setEphemeral(true).queue();
                     }
-                    
-                    msg.append("[Open new VRChat User Moderation Request](<").append(link).append(">)");
-                    
-                    hook.sendMessage(msg.toString()).setEphemeral(true).queue();
                     
                 }); break;
                 case "submit-evidence": this.handleInGuildAsync(event, true, hook -> {
@@ -2134,6 +2548,25 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata_setTags(parts[1], event.getValues().toArray(new String[0]));
                     this.updateAuxMessage(event.getChannel(), auditEntryMeta);
                 } break;
+                case "set-audit-aux-webhooks": {
+                    String auditType0 = parts[1];
+                    GroupAuditType auditType = GroupAuditType.of(auditType0);
+                    if (auditType == null)
+                    {
+                        event.replyFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
+                        return;
+                    }
+                    if (event.getValues().isEmpty())
+                    {
+                        event.replyFormat("Removing auxiliary webhooks for %s", auditType0).setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.auditType2scarletAuxWh.remove(auditType0);
+                    }
+                    else
+                    {
+                        event.replyFormat("Setting auxiliary webhooks for %s:\n%s", auditType0, event.getValues().stream().collect(Collectors.joining(", "))).setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.auditType2scarletAuxWh.put(auditType0, new UniqueStrings(event.getValues()));
+                    }
+                } break;
                 }
             }
             catch (Exception ex)
@@ -2247,6 +2680,46 @@ public class ScarletDiscordJDA implements ScarletDiscord
         });
     }
 
+    void emitAuxWh(AuditEntryMetadata entryMeta, Function<IncomingWebhookClient, AbstractWebhookMessageAction<?, ?>> function)
+    {
+        this.emitAuxWh(entryMeta.entry.getEventType(), function);
+    }
+    void emitAuxWh(String type, Function<IncomingWebhookClient, AbstractWebhookMessageAction<?, ?>> function)
+    {
+        this.emitAuxWh(type, null, (client, state) -> function.apply(client));
+    }
+    <State> void emitAuxWh(AuditEntryMetadata entryMeta, Supplier<State> state, BiFunction<IncomingWebhookClient, State, AbstractWebhookMessageAction<?, ?>> bifunction)
+    {
+        this.emitAuxWh(entryMeta.entry.getEventType(), state, bifunction);
+    }
+    <State> void emitAuxWh(String type, Supplier<State> state, BiFunction<IncomingWebhookClient, State, AbstractWebhookMessageAction<?, ?>> bifunction)
+    {
+        UniqueStrings scarletAuxWhs = this.auditType2scarletAuxWh.get(type);
+        if (scarletAuxWhs == null || scarletAuxWhs.isEmpty())
+            return;
+        this.scarlet.exec.submit(() ->
+        {
+            State state0 = state == null ? null : state.get();
+            for (String scarletAuxWh : scarletAuxWhs) try
+            {
+                String webhookUrl = this.scarletAuxWh2webhookUrl.get(scarletAuxWh);
+                if (webhookUrl != null)
+                {
+                    IncomingWebhookClient client = WebhookClient.createClient(this.jda, webhookUrl);
+                    AbstractWebhookMessageAction<?, ?> action = bifunction.apply(client, state0);
+                    if (action != null)
+                    {
+                        action.completeAfter(3_000L, TimeUnit.MILLISECONDS);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception emitting aux embed for "+type, ex);
+            }
+        });
+    }
+
     final Pacer userModerationLimiter = new Pacer(3_000L);
     static final TypeToken<List<LimitedUserGroups>> LIST_LUGROUPS = new TypeToken<List<LimitedUserGroups>>(){};
     @Override
@@ -2316,6 +2789,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     embed.addField("Watched group membership", sb.toString(), false);
                 }
             }
+            if (entryMeta.hasAuxActor())
+                embed.addField("Action taken through automation/assistance", "", false);
             
             Message message = channel
                 .sendMessageEmbeds(embed.build())
@@ -2328,13 +2803,28 @@ public class ScarletDiscordJDA implements ScarletDiscord
             
             entryMeta.threadSnowflake = threadChannel.getId();
             
-            String content = actorMeta == null || actorMeta.userSnowflake == null ? ("Unknown Discord id for actor "+entryMeta.entry.getActorDisplayName()) : ("<@"+actorMeta.userSnowflake+">");
+            boolean mention;
+            switch (GroupAuditType.of(entryMeta.entry.getEventType()))
+            {
+            case INSTANCE_WARN: mention = ScarletDiscordJDA.this.pingOnModeration_instanceWarn.get(); break;
+            case INSTANCE_KICK: mention = ScarletDiscordJDA.this.pingOnModeration_instanceKick.get(); break;
+            case MEMBER_REMOVE: mention = ScarletDiscordJDA.this.pingOnModeration_memberRemove.get(); break;
+            case USER_BAN:      mention = ScarletDiscordJDA.this.pingOnModeration_userBan     .get(); break;
+            case USER_UNBAN:    mention = ScarletDiscordJDA.this.pingOnModeration_userUnban   .get(); break;
+            default:            mention = false;                                                      break;
+            }
+            
+            String content = actorMeta == null || actorMeta.userSnowflake == null
+                    ? ("Unknown Discord id for actor "+entryMeta.entry.getActorDisplayName())
+                    : (mention ? ("<@"+actorMeta.userSnowflake+">") : (entryMeta.entry.getActorDisplayName()));
             Message auxMessage = threadChannel.sendMessage(content)
                 .addContent("\nUnclaimed")
                 .addFiles(FileUpload.fromData(fileData, entryMeta.entry.getTargetId()+".json").asSpoiler())
                 .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
                               Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
                               Button.primary("vrchat-report:"+entryMeta.entry.getId(), "Get report link"))
+                .addActionRow(Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
+                              Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"))
                 .completeAfter(1000L, TimeUnit.MILLISECONDS);
             
             entryMeta.auxMessageSnowflake = auxMessage.getId();
@@ -2344,16 +2834,41 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
     }
 
+    String getLocationImage(String location)
+    {
+        try
+        {
+            String worldId = location.substring(0, location.indexOf(':'));
+            long within1day = System.currentTimeMillis() - 86400_000L;
+            World world = this.scarlet.vrc.getWorld(worldId, within1day);
+            if (world != null)
+                return world.getImageUrl();
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception getting world image", ex);
+        }
+        return null;
+    }
+
     @Override
     public void emitInstanceCreate(Scarlet scarlet, AuditEntryMetadata entryMeta, String location)
     {
+        String worldImageUrl = this.getLocationImage(location);
+        
         scarlet.data.liveInstancesMetadata_setLocationAudit(location, entryMeta.entry.getId());
-        this.condEmitEmbed(entryMeta, true, "Instance Open", "https://vrchat.com/home/launch?worldId="+location.replaceFirst(":", "&instanceId="), null, null);
+        this.condEmitEmbed(entryMeta, true, "Instance Open", "https://vrchat.com/home/launch?worldId="+location.replaceFirst(":", "&instanceId="), null, (channelSf, guild, channel, embed) ->
+        {
+            embed.setImage(worldImageUrl);
+            this.emitAuxWh(entryMeta, embed::build, IncomingWebhookClient::sendMessageEmbeds);
+        });
     }
 
     @Override
     public void emitInstanceClose(Scarlet scarlet, AuditEntryMetadata entryMeta, String location)
     {
+        String worldImageUrl = this.getLocationImage(location);
+        
         String prevAuditEntryId = scarlet.data.liveInstancesMetadata_getLocationAudit(location, true);
         AuditEntryMetadata prevEntryMeta = prevAuditEntryId == null ? null : scarlet.data.auditEntryMetadata(prevAuditEntryId);
         this.condEmit(entryMeta, (channelSf, guild, channel) ->
@@ -2362,12 +2877,19 @@ public class ScarletDiscordJDA implements ScarletDiscord
             MessageCreateAction mca = channel
                 .sendMessageEmbeds(this
                     .embed(entryMeta.entry, true)
+                    .setImage(worldImageUrl)
                     .setTitle("Instance Close", hasPrev ? prevEntryMeta.getMessageUrl() : null)
                     .build());
             if (hasPrev && Objects.equals(channelSf, prevEntryMeta.channelSnowflake))
                 mca.mentionRepliedUser(false).setMessageReference(prevEntryMeta.messageSnowflake);
             return mca.complete();
         });
+        this.emitAuxWh(prevEntryMeta,
+            () -> this.embed(entryMeta.entry, true)
+                      .setImage(worldImageUrl)
+                      .setTitle("Instance Close")
+                      .build(),
+            IncomingWebhookClient::sendMessageEmbeds);
     }
 
     @Override
@@ -2386,10 +2908,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
     public void emitPostCreate(Scarlet scarlet, AuditEntryMetadata entryMeta, GroupAuditType.PostCreateComponent post)
     {
         this.condEmitEmbed(entryMeta, false, post.title, "https://vrchat.com/home/group/"+entryMeta.entry.getGroupId()+"/posts", null, (channelSf, guild, channel, embed) ->
+        {
             embed.setDescription(null) // override description
                 .setDescription(post.text)
-                .setImage(MiscUtils.latestContentUrlOrNull(post.imageId))
-        );
+                .setImage(MiscUtils.latestContentUrlOrNull(post.imageId));
+            this.emitAuxWh(entryMeta, embed::build, IncomingWebhookClient::sendMessageEmbeds);
+        });
     }
 
     @Override
@@ -2402,7 +2926,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 role.roleName, entryMeta.entry.getGroupId(), role.roleId,
                 target.getDisplayName(), "https://vrchat.com/home/user/"+target.getId()
             )));
-//        );
     }
 
     @Override

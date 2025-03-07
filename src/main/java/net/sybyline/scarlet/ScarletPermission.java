@@ -10,6 +10,8 @@ public enum ScarletPermission
     EVENT_SET_TAGS("event.set_tags", "Set Tags"),
     EVENT_USE_REPORT_LINK("event.use_report_link", "Use Report Link"),
     EVENT_SUBMIT_EVIDENCE("event.submit_evidence", "Submit Evidence"),
+    EVENT_BAN_USER("event.ban_user", "Ban Users"),
+    EVENT_UNBAN_USER("event.unban_user", "Unban Users"),
     CONFIG_IMPORT_WATCHED_GROUPS("config.import_watched_groups", "Submit Evidence"),
     CONFIG_EXPORT_LOGS("config.export_logs", "Export Logs"),
     ;

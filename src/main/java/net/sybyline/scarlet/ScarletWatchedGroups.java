@@ -1,5 +1,6 @@
 package net.sybyline.scarlet;
 
+import java.awt.Color;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -41,25 +42,31 @@ public class ScarletWatchedGroups
     final File watchedGroupsFile;
     Map<String, WatchedGroup> watchedGroups;
 
-    public static class WatchedGroup
+    public static class WatchedGroup implements Comparable<WatchedGroup>
     {
         public String id;
         public Type type = Type.UNKNOWN;
         public static enum Type
         {
-            UNKNOWN(),
+            UNKNOWN(null),
             
-            MALICIOUS(),
-            NUISANCE(),
+            MALICIOUS(Color.RED),
+            NUISANCE(Color.ORANGE),
             
-            COMMUNITY(),
-            AFFILIATED(),
+            COMMUNITY(Color.GREEN),
+            AFFILIATED(Color.BLUE),
             
-            OTHER(),
+            OTHER(null),
             ;
+            public final Color text_color;
+            private Type(Color text_color)
+            {
+                this.text_color = text_color;
+            }
         }
         public UniqueStrings tags = new UniqueStrings();
         public boolean critical;
+        public int priority = 0;
         public String message;
         
         public EmbedBuilder embed(Group group)
@@ -72,6 +79,7 @@ public class ScarletWatchedGroups
                 .addField("Id", "`"+this.id+"`", false)
                 .addField("Critical", this.critical ? "`true`" : "`false`", false)
                 .addField("Watch type", this.type == null ? "none" : ("`"+this.type.name()+"`"), false)
+                .addField("Priority", "`"+this.priority+"`", false)
                 .addField("Message", this.message == null ? "none" : ("`"+this.message+"`"), false)
                 .addField("Tags", this.tags.isEmpty() ? "none" : this.tags
                     .strings()
@@ -79,6 +87,14 @@ public class ScarletWatchedGroups
                     .filter(Objects::nonNull)
                     .collect(Collectors.joining("`, `", "`", "`")), false)
             ;
+        }
+
+        @Override
+        public int compareTo(WatchedGroup o)
+        {
+            if (this.critical != o.critical)
+                return this.critical ? 1 : -1;
+            return Integer.compare(this.priority, o.priority);
         }
         
     }
