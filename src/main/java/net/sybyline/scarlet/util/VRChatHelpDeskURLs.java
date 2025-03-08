@@ -1,5 +1,8 @@
 package net.sybyline.scarlet.util;
 
+import java.util.Base64;
+import java.util.regex.Pattern;
+
 public interface VRChatHelpDeskURLs
 {
 
@@ -72,6 +75,49 @@ public interface VRChatHelpDeskURLs
         public final String value, label;
     }
 
+    static final Pattern ID_PATTERN = Pattern.compile("[a-zA-Z]+_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    static String shortId(String id)
+    {
+        if (id == null || !ID_PATTERN.matcher(id).matches())
+            return id;
+        byte[] bytes = new byte[16];
+        id.substring(id.indexOf('_') + 1).replaceAll("-", "");
+        for (int i = 0; i < 16; i++)
+            bytes[i] = Byte.decode("0x"+id.substring(i*2, i*2+2));
+        return Base64.getUrlEncoder().encodeToString(bytes);
+    }
+    static String newUserModerationRequest_shortened(String requesterEmail, String requesterUserId, String targetUserId, String subject, String description, String[] modTags, String appName, String appVersion, String groupId, String auditId)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append("https://sybylinenetwork.github.io/vrchdur.html");
+        
+        if (requesterEmail != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("e=").append(escape(requesterEmail, false));
+        if (requesterUserId != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("r=").append(shortId(requesterUserId));
+        if (targetUserId != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("t=").append(shortId(targetUserId));
+        if (subject != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("s=").append(escape(subject, false));
+        if (description != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("d=").append(escape(description, false));
+        if (modTags != null && modTags.length > 0)
+        {
+            int len = modTags.length;
+            sb.append((sb.length() == 46 ? '?' : '&')).append("M=").append(escape(modTags[0], false));
+            for (int i = 1; i < len; i++)
+                sb.append("`").append(escape(modTags[i], false));
+        }
+        if (appName != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("N=").append(escape(appName, false));
+        if (appVersion != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("V=").append(escape(appVersion, false));
+        if (groupId != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("G=").append(shortId(groupId));
+        if (auditId != null)
+            sb.append((sb.length() == 46 ? '?' : '&')).append("A=").append(shortId(auditId));
+        return sb.toString();
+    }
     static String newModerationRequest(String requesterEmail, ModerationCategory moderationCategory, String requesterUserId, String targetUserId, String subject, String description)
     {
         StringBuilder sb = new StringBuilder();

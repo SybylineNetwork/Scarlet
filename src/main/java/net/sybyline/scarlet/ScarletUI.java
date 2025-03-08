@@ -15,7 +15,11 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -39,6 +43,7 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -56,6 +61,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +74,7 @@ import com.google.gson.reflect.TypeToken;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.PropsTable;
 import net.sybyline.scarlet.util.VRChatWebPageURLs;
@@ -309,7 +316,7 @@ public class ScarletUI implements AutoCloseable
             {
                 ScarletUI.this.scarlet.execModal.execute(() ->
                 {
-                    if (JOptionPane.showConfirmDialog(ScarletUI.this.jframe, "Are you sure you want to ban "+ConnectedPlayer.this.name+"?", "Confirm ban", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION)
+                    if (ScarletUI.this.scarlet.ui.confirmModal(null, "Are you sure you want to ban "+ConnectedPlayer.this.name+"?", "Confirm ban"))
                     {
                         ScarletUI.this.tryBan(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
                     }
@@ -323,7 +330,7 @@ public class ScarletUI implements AutoCloseable
             {
                 ScarletUI.this.scarlet.execModal.execute(() ->
                 {
-                    if (JOptionPane.showConfirmDialog(ScarletUI.this.jframe, "Are you sure you want to unban "+ConnectedPlayer.this.name+"?", "Confirm unban", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION)
+                    if (ScarletUI.this.scarlet.ui.confirmModal(null, "Are you sure you want to unban "+ConnectedPlayer.this.name+"?", "Confirm unban"))
                     {
                         ScarletUI.this.tryUnban(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
                     }
@@ -423,6 +430,14 @@ public class ScarletUI implements AutoCloseable
                     JMenu jmenu_props = this.propstable.getColumnSelectMenu();
                     jmenu_props.setText("Columns");
                     jmenu_edit.add(jmenu_props);
+                }
+                {
+                    JMenu jmenu_importwg = new JMenu("Import watched groups");
+                    {
+                        jmenu_importwg.add("From URL").addActionListener($ -> this.importWG(false));
+                        jmenu_importwg.add("From File").addActionListener($ -> this.importWG(true));
+                    }
+                    jmenu_edit.add(jmenu_importwg);
                 }
                 jmenubar.add(jmenu_edit);
             }
@@ -524,11 +539,118 @@ public class ScarletUI implements AutoCloseable
     {
         this.scarlet.execModal.execute(() ->
         {
-            if (JOptionPane.showConfirmDialog(this.jframe, "Are you sure you want to quit?", "Confirm quit", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION)
+            if (this.confirmModal(this.jframe, "Are you sure you want to quit?", "Confirm quit"))
             {
                 this.scarlet.stop();
             }
         });
+    }
+
+    public boolean confirmModal(Component component, Object message, String title)
+    {
+        return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+    }
+
+    public void messageModalAsync(Component component, Object message, String title)
+    { this.messageModalAsync(component, message, title, JOptionPane.PLAIN_MESSAGE); }
+    public void messageModalAsyncQuestion(Component component, Object message, String title)
+    { this.messageModalAsync(component, message, title, JOptionPane.QUESTION_MESSAGE); }
+    public void messageModalAsyncInfo(Component component, Object message, String title)
+    { this.messageModalAsync(component, message, title, JOptionPane.INFORMATION_MESSAGE); }
+    public void messageModalAsyncWarn(Component component, Object message, String title)
+    { this.messageModalAsync(component, message, title, JOptionPane.WARNING_MESSAGE); }
+    public void messageModalAsyncError(Component component, Object message, String title)
+    { this.messageModalAsync(component, message, title, JOptionPane.ERROR_MESSAGE); }
+    public void messageModalAsync(Component component, Object message, String title, int type)
+    {
+        this.scarlet.execModal.execute(() -> JOptionPane.showMessageDialog(component != null ? component : this.jframe, message, title, type));
+    }
+
+    void importWG(boolean isFile)
+    {
+        if (isFile)
+        {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setFileFilter(new FileNameExtensionFilter("CSV or JSON", "csv", "json"));
+            if (chooser.showDialog(this.jframe, "Import") != JFileChooser.APPROVE_OPTION)
+            {
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation canceled", Color.PINK);
+                return;
+            }
+            File file = chooser.getSelectedFile();
+            try (Reader reader = MiscUtils.reader(file))
+            {
+                if (file.getName().endsWith(".csv"))
+                {
+                    if (this.scarlet.watchedGroups.importLegacyCSV(reader, true))
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation succeeded", Color.WHITE);
+                    }
+                    else
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
+                    }
+                }
+                else if (file.getName().endsWith(".json"))
+                {
+                    if (this.scarlet.watchedGroups.importJson(reader, true))
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation succeeded", Color.WHITE);
+                    }
+                    else
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
+                    }
+                }
+                else
+                {
+                    this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Unrecognized file type", Color.PINK);
+                }
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception importing watched groups from "+file, ex);
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
+            }
+        }
+        else
+        {
+            String url = this.scarlet.settings.requireInput("URL of CSV or JSON", false);
+            try (Reader reader = new InputStreamReader(HttpURLInputStream.get(url), StandardCharsets.UTF_8))
+            {
+                if (url.contains(".csv"))
+                {
+                    if (this.scarlet.watchedGroups.importLegacyCSV(reader, true))
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation succeeded", Color.WHITE);
+                    }
+                    else
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
+                    }
+                }
+                else if (url.contains(".json"))
+                {
+                    if (this.scarlet.watchedGroups.importJson(reader, true))
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation succeeded", Color.WHITE);
+                    }
+                    else
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
+                    }
+                }
+                else
+                {
+                    this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Unrecognized file type", Color.PINK);
+                }
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception importing watched groups from "+url, ex);
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
+            }
+        }
     }
 
     protected void tryBan(String id, String name)

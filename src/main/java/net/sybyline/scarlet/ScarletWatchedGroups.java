@@ -66,6 +66,7 @@ public class ScarletWatchedGroups
         }
         public UniqueStrings tags = new UniqueStrings();
         public boolean critical;
+        public boolean silent;
         public int priority = 0;
         public String message;
         
@@ -78,6 +79,7 @@ public class ScarletWatchedGroups
                 .setThumbnail(thumbnail)
                 .addField("Id", "`"+this.id+"`", false)
                 .addField("Critical", this.critical ? "`true`" : "`false`", false)
+                .addField("Silent", this.silent ? "`true`" : "`false`", false)
                 .addField("Watch type", this.type == null ? "none" : ("`"+this.type.name()+"`"), false)
                 .addField("Priority", "`"+this.priority+"`", false)
                 .addField("Message", this.message == null ? "none" : ("`"+this.message+"`"), false)
@@ -94,6 +96,8 @@ public class ScarletWatchedGroups
         {
             if (this.critical != o.critical)
                 return this.critical ? 1 : -1;
+            if (this.silent != o.silent)
+                return this.silent ? 1 : -1;
             return Integer.compare(this.priority, o.priority);
         }
         

@@ -64,7 +64,7 @@ public class ScarletBuild
                
                srcJava = "src/main/java",
                srcRes = "src/main/resources",
-               mainClass = "net.sybyline.scarlet.Scarlet",
+               mainClass = "net.sybyline.scarlet.Main",
                
                pom = "pom.xml",
                meta = "meta.json";

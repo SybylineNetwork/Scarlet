@@ -75,6 +75,7 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.events.session.ShutdownEvent;
+import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.Interaction;
 import net.dv8tion.jda.api.interactions.InteractionHook;
@@ -128,12 +129,21 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.pingOnModeration_userBan = scarlet.ui.settingBool("discord_ping_user_ban", "Discord: Ping on User Ban", true);
         this.pingOnModeration_userUnban = scarlet.ui.settingBool("discord_ping_user_unban", "Discord: Ping on User Unban", false);
         this.load();
-        this.jda = JDABuilder
+        JDA jda = null;
+        if (this.token != null && !this.token.trim().isEmpty()) try
+        {
+            jda = JDABuilder
             .createDefault(this.token)
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
             .enableCache(CacheFlag.VOICE_STATE)
             .build();
+        }
+        catch (InvalidTokenException|IllegalArgumentException ex)
+        {
+            this.scarlet.ui.messageModalAsyncError(null, "You can reset the bot token in the Settings page.", "Invalid bot token");
+        }
+        this.jda = jda;
         this.init();
     }
 
@@ -141,6 +151,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     public void close() throws IOException
     {
         this.save();
+        if (this.jda == null)
+            return;
         this.jda.shutdown();
         try
         {
@@ -183,6 +195,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     void init()
     {
+        if (this.jda == null)
+        {
+            this.setStaffMode();
+            return;
+        }
         try
         {
             this.jda.awaitReady();
@@ -191,9 +208,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             if (ex instanceof IllegalStateException && JDA.Status.FAILED_TO_LOGIN == this.jda.getStatus() && "".equals(ScarletDiscordJDA.this.token))
             {
-                LOG.warn("No Discord bot token: entering staff mode");
-                this.scarlet.staffMode = true;
-                this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
+                this.setStaffMode();
                 return;
             }
             throw new RuntimeException("Awaiting JDA", ex);
@@ -246,6 +261,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("set-critical", "Sets a group's critical status to true")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
                         new SubcommandData("unset-critical", "Sets a group's critical status to false")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                        new SubcommandData("set-silent", "Sets a group's silent status to true")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                        new SubcommandData("unset-silent", "Sets a group's silent status to false")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
                         new SubcommandData("set-type-malicious", "Sets a group's watch type to malicious")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
@@ -353,6 +372,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
             .complete();
         this.audio.init();
         this.scarlet.exec.scheduleAtFixedRate(this::clearDeadPagination, 30_000L, 30_000L, TimeUnit.MILLISECONDS);
+    }
+
+    void setStaffMode()
+    {
+        LOG.warn("No Discord bot token: entering staff mode");
+        this.scarlet.staffMode = true;
+        this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
     }
 
     @Override
@@ -535,6 +561,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         this.scarlet.ui.settingVoid("Discord bot token", "Reset", () -> this.scarlet.execModal.execute(() ->
         {
+            if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the bot token?", "Reset bot token"))
+                return;
             this.token = this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true);
             this.save();
         }));
@@ -546,6 +574,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         this.scarlet.ui.settingVoid("Discord guild snowflake", "Reset", () -> this.scarlet.execModal.execute(() ->
         {
+            if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the guild snowflake?", "Reset guild snowflake"))
+                return;
             this.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
             this.save();
         }));
@@ -1153,6 +1183,38 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         }
                         watchedGroup.critical = false;
                         hook.sendMessage("Unflagged group as critical").setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
+                    } break;
+                    case "set-silent": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup == null)
+                        {
+                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        if (watchedGroup.silent)
+                        {
+                            hook.sendMessage("That group is already flagged as silent").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup.silent = true;
+                        hook.sendMessage("Flagged group as silent").setEphemeral(true).queue();
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
+                    } break;
+                    case "unset-silent": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup == null)
+                        {
+                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        if (!watchedGroup.silent)
+                        {
+                            hook.sendMessage("That group is already not flagged as silent").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup.silent = false;
+                        hook.sendMessage("Unflagged group as silent").setEphemeral(true).queue();
                         ScarletDiscordJDA.this.scarlet.watchedGroups.save();
                     } break;
                     case "set-type-malicious": {
@@ -2636,6 +2698,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @FunctionalInterface interface CondEmit { Message emit(String channelSf, Guild guild, TextChannel channel); }
     void condEmit(ScarletData.AuditEntryMetadata entryMeta, CondEmit condEmit)
     {
+        if (this.jda == null)
+            return;
         String channelSf = this.auditType2channelSf.get(entryMeta.entry.getEventType());
         if (channelSf == null)
             return;

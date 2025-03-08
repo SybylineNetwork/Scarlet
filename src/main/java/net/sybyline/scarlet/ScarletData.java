@@ -6,8 +6,11 @@ import java.io.Writer;
 import java.lang.reflect.Type;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 
 import org.slf4j.Logger;
@@ -19,6 +22,7 @@ import com.google.gson.reflect.TypeToken;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 
+import net.sybyline.scarlet.util.LRUMap;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
 
@@ -30,10 +34,48 @@ public class ScarletData
     public ScarletData(File dir)
     {
         this.dir = dir;
+        this.objs = new ConcurrentHashMap<>();
+        this.subs = new ConcurrentHashMap<>();
     }
 
     final File dir;
+    final Map<String, Datum<?>> objs;
+    final Map<String, Data<?>> subs;
+
+    public <T> Datum<T> getDatum(String name, Class<T> type)
+    {
+        return this.objs.computeIfAbsent(name, _name -> new ObjDatum<>(_name, type)).as(type);
+    }
+    public Datum<?> freeDatum(String name)
+    {
+        return this.objs.remove(name);
+    }
+    public <T> Data<T> getData(String kind, Class<T> type)
+    {
+        return this.subs.computeIfAbsent(kind, _kind -> new SubData<>(_kind, type)).as(type);
+    }
+    public Data<?> freeData(String name)
+    {
+        return this.subs.remove(name);
+    }
+
+    public void saveDirty()
+    {
+        this.objs.values().forEach(Datum::saveIfDirty);
+        this.subs.values().forEach(Data::saveIfDirty);
+    }
+
+    public void saveAll()
+    {
+        this.objs.values().forEach(Datum::save);
+        this.subs.values().forEach(Data::save);
+    }
+
     <T> T readObj(String name, Class<T> type)
+    {
+        return this.readObj(name, type, false);
+    }
+    <T> T readObj(String name, Class<T> type, boolean orNew)
     {
         if (name == null)
             return null;
@@ -49,6 +91,14 @@ public class ScarletData
         catch (Exception ex)
         {
             LOG.error("Exception reading data "+name, ex);
+        }
+        if (orNew) try
+        {
+            return type.getDeclaredConstructor().newInstance();
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception creating data "+name, ex);
         }
         return null;
     }
@@ -85,6 +135,10 @@ public class ScarletData
 
     <T> T readSub(String kind, String id, Class<T> type)
     {
+        return this.readSub(kind, id, type, false);
+    }
+    <T> T readSub(String kind, String id, Class<T> type, boolean orNew)
+    {
         if (kind == null)
             return null;
         if (id == null)
@@ -104,6 +158,14 @@ public class ScarletData
         catch (Exception ex)
         {
             LOG.error("Exception reading sub data "+kind+":"+id, ex);
+        }
+        if (orNew) try
+        {
+            return type.getDeclaredConstructor().newInstance();
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception creating sub data "+kind+":"+id, ex);
         }
         return null;
     }
@@ -140,6 +202,234 @@ public class ScarletData
         finally
         {
             this.writeSub(kind, id, type, data);
+        }
+    }
+
+    public interface Datum<T>
+    {
+        Class<T> getType();
+        default <TT> Datum<TT> as(Class<TT> ttype)
+        {
+            if (this.getType() != ttype)
+                throw new ClassCastException(this.getType()+" is not the same as "+ttype);
+            @SuppressWarnings("unchecked")
+            Datum<TT> tthis = (Datum<TT>)this;
+            return tthis;
+        }
+        boolean free();
+        boolean exists();
+        void markDirty();
+        boolean pollDirty();
+        void save();
+        default void saveIfDirty()
+        {
+            if (this.pollDirty())
+                this.save();
+        }
+        T get();
+    }
+
+    public interface Data<T>
+    {
+        Class<T> getType();
+        default <TT> Data<TT> as(Class<TT> ttype)
+        {
+            if (this.getType() != ttype)
+                throw new ClassCastException(this.getType()+" is not the same as "+ttype);
+            @SuppressWarnings("unchecked")
+            Data<TT> tthis = (Data<TT>)this;
+            return tthis;
+        }
+        boolean free();
+        boolean exists(String id);
+        void flush();
+        void save();
+        void saveIfDirty();
+        Datum<T> get(String id);
+    }
+
+    final class ObjDatum<T> implements Datum<T>
+    {
+        ObjDatum(String name, Class<T> type)
+        {
+            this.name = name;
+            this.type = type;
+            this.value = null;
+            this.dirty = false;
+        }
+        final String name;
+        final Class<T> type;
+        T value;
+        boolean dirty;
+        @Override
+        public Class<T> getType()
+        {
+            return this.type;
+        }
+        @Override
+        public boolean free()
+        {
+            return ScarletData.this.objs.remove(this.name, this);
+        }
+        @Override
+        public boolean exists()
+        {
+            return this.value != null || new File(ScarletData.this.dir, this.name).isFile();
+        }
+        @Override
+        public void markDirty()
+        {
+            this.dirty = true;
+        }
+        @Override
+        public boolean pollDirty()
+        {
+            try
+            {
+                return this.dirty;
+            }
+            finally
+            {
+                this.dirty = false;
+            }
+        }
+        @Override
+        public synchronized void save()
+        {
+            this.dirty = false;
+            T value = this.value;
+            if (value != null)
+            {
+                ScarletData.this.writeObj(this.name, this.type, value);
+            }
+        }
+        @Override
+        public synchronized T get()
+        {
+            T value = this.value;
+            if (value == null)
+            {
+                value = ScarletData.this.readObj(this.name, this.type, true);
+                this.value = value;
+            }
+            return value;
+        }
+    }
+
+    final class SubData<T> implements Data<T>
+    {
+        SubData(String kind, Class<T> type)
+        {
+            this.kind = kind;
+            this.type = type;
+            this.subdir = new File(ScarletData.this.dir, kind);
+            this.values = LRUMap.ofSynchronized(this::save);
+            this.dirties = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        }
+        final String kind;
+        final Class<T> type;
+        final File subdir;
+        final Map<String, T> values;
+        final Set<String> dirties;
+        synchronized void saveIfDirty(String id, T value)
+        {
+            if (this.dirties.remove(id) && value != null)
+            {
+                ScarletData.this.writeSub(this.kind, id, this.type, value);
+            }
+        }
+        synchronized void save(String id, T value)
+        {
+            this.dirties.remove(id);
+            if (value != null)
+            {
+                ScarletData.this.writeSub(this.kind, id, this.type, value);
+            }
+        }
+        synchronized void flush(String id, T value)
+        {
+            this.dirties.remove(id);
+            if (value != null)
+            {
+                this.values.remove(id, value);
+                ScarletData.this.writeSub(this.kind, id, this.type, value);
+            }
+        }
+        T get0(String id)
+        {
+            return this.values.computeIfAbsent(id, _id -> ScarletData.this.readSub(_id, id, this.type, true));
+        }
+        @Override
+        public Class<T> getType()
+        {
+            return this.type;
+        }
+        @Override
+        public boolean free()
+        {
+            return ScarletData.this.subs.remove(this.kind, this);
+        }
+        @Override
+        public boolean exists(String id)
+        {
+            return this.values.containsKey(id) || new File(this.subdir, id).isFile();
+        }
+        @Override
+        public void flush()
+        {
+            new HashMap<>(this.values).forEach(this::flush);
+        }
+        @Override
+        public void save()
+        {
+            this.values.forEach(this::save);
+        }
+        @Override
+        public void saveIfDirty()
+        {
+            this.values.forEach(this::saveIfDirty);
+        }
+        @Override
+        public synchronized Datum<T> get(String id)
+        {
+            return new Datum<T>()
+            {
+                @Override
+                public Class<T> getType()
+                {
+                    return SubData.this.type;
+                }
+                @Override
+                public boolean free()
+                {
+                    return false;
+                }
+                @Override
+                public boolean exists()
+                {
+                    return SubData.this.exists(id);
+                }
+                @Override
+                public void markDirty()
+                {
+                    SubData.this.dirties.add(id);
+                }
+                @Override
+                public boolean pollDirty()
+                {
+                    return SubData.this.dirties.remove(id);
+                }
+                @Override
+                public void save()
+                {
+                    SubData.this.save(id, SubData.this.values.get(id));
+                }
+                @Override
+                public T get()
+                {
+                    return SubData.this.get0(id);
+                }
+            };
         }
     }
 

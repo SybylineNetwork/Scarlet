@@ -2,11 +2,11 @@ package net.sybyline.scarlet;
 
 import java.io.Closeable;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -54,7 +54,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.8-rc1",
+        VERSION = "0.4.8",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -74,11 +74,6 @@ public class Scarlet implements Closeable
         API_URL_2  = "https://"+API_HOST_2+"/",
         API_BASE_2 = API_URL_2+API_VERSION;
 
-    static
-    {
-        MavenDepsLoader.init();
-    }
-
     public static void main(String[] args) throws Exception
     {
         Thread.setDefaultUncaughtExceptionHandler(Scarlet::uncaughtException);
@@ -97,7 +92,7 @@ public class Scarlet implements Closeable
         scarletHome = System.getProperty("SCARLET_HOME", scarletHome);
         File dir0 = scarletHome != null
             ? ";".equals(scarletHome.trim()) && MavenDepsLoader.jarPath() != null
-                ? MavenDepsLoader.jarPath().toFile()
+                ? MavenDepsLoader.jarPath().getParent().toFile()
                 : new File(scarletHome).getAbsoluteFile()
             : localappdata != null
                 ? new File(localappdata, GROUP+"/"+NAME)
@@ -178,10 +173,6 @@ public class Scarlet implements Closeable
 
     volatile boolean running = true;
     boolean staffMode = false;
-    void staffRemoteMode()
-    {
-        
-    }
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
     final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
@@ -346,7 +337,7 @@ public class Scarlet implements Closeable
                         boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
                         
                         LOG.info("Importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from);
-                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from)) : new FileReader(from))
+                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from), StandardCharsets.UTF_8) : MiscUtils.reader(new File(from)))
                         {
                             if (this.watchedGroups.importLegacyCSV(reader, true))
                             {
@@ -367,7 +358,7 @@ public class Scarlet implements Closeable
                         boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
                         
                         LOG.info("Importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from);
-                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from)) : new FileReader(from))
+                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from), StandardCharsets.UTF_8) : MiscUtils.reader(new File(from)))
                         {
                             if (this.watchedGroups.importJson(reader, true))
                             {

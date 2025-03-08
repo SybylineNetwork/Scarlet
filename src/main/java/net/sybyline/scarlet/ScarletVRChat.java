@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,7 +129,7 @@ public class ScarletVRChat implements Closeable
         this.cookies.load();
         this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
         this.groupOwnerId = null;
-        this.botUserId = null;
+        this.currentUserId = null;
         scarlet.settings.setNamespace(this.groupId);
         this.cachedUsers = new ScarletJsonCache<>("usr", User.class);
         this.cachedWorlds = new ScarletJsonCache<>("wrld", World.class);
@@ -141,7 +142,7 @@ public class ScarletVRChat implements Closeable
     final ApiClient client;
     final String groupId;
     String groupOwnerId;
-    String botUserId;
+    String currentUserId;
     final ScarletJsonCache<User> cachedUsers;
     final ScarletJsonCache<World> cachedWorlds;
     final ScarletJsonCache<Group> cachedGroups;
@@ -202,7 +203,7 @@ public class ScarletVRChat implements Closeable
                     LOG.info("Logged in (cached-verified)");
                     try
                     {
-                        this.botUserId = auth.getCurrentUser().getId();
+                        this.currentUserId = auth.getCurrentUser().getId();
                     }
                     catch (ApiException apiex)
                     {
@@ -226,7 +227,7 @@ public class ScarletVRChat implements Closeable
                 if (data.has("id"))
                 {
                     LOG.info("Logged in (cached)");
-                    this.botUserId = data.get("id").getAsString();
+                    this.currentUserId = data.get("id").getAsString();
                     return;
                 }
             }
@@ -241,7 +242,7 @@ public class ScarletVRChat implements Closeable
                     if (data.has("id"))
                     {
                         LOG.info("Logged in (credentials)");
-                        this.botUserId = data.get("id").getAsString();
+                        this.currentUserId = data.get("id").getAsString();
                         return;
                     }
                 }
@@ -260,30 +261,15 @@ public class ScarletVRChat implements Closeable
                 while (data == null);
             }
             
-            if (!data.get("requiresTwoFactorAuth")
+            List<String> twoFactorMethods = data.get("requiresTwoFactorAuth")
                     .getAsJsonArray()
                     .asList()
                     .stream()
                     .map(JsonElement::getAsJsonPrimitive)
                     .map(JsonPrimitive::getAsString)
-                    .noneMatch("totp"::equals))
+                    .collect(Collectors.toList());
+            if (twoFactorMethods.contains("totp"))
             {
-                
-                for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
-                {
-                    if (needsTotp = !auth.verify2FAEmailCode(new TwoFactorEmailCode().code(this.scarlet.settings.requireInput("Emailotp code", true))).getVerified().booleanValue())
-                        LOG.error("Invalid emailotp code");
-                }
-                catch (ApiException apiex)
-                {
-                    LOG.error("Exception using emailotp", apiex);
-                }
-                
-                LOG.info("Logged in (2fa-emailotp)");
-            }
-            else
-            {
-            
                 String secret = this.scarlet.settings.getString("vrc_secret");
                 if (secret != null && (secret = secret.replaceAll("[^A-Za-z2-7=]", "")).length() == 32)
                 {
@@ -317,10 +303,30 @@ public class ScarletVRChat implements Closeable
                 
                 LOG.info("Logged in (2fa-totp)");
             }
+            else if (twoFactorMethods.contains("emailotp"))
+            {
+                for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
+                {
+                    if (needsTotp = !auth.verify2FAEmailCode(new TwoFactorEmailCode().code(this.scarlet.settings.requireInput("Emailotp code", true))).getVerified().booleanValue())
+                        LOG.error("Invalid emailotp code");
+                }
+                catch (ApiException apiex)
+                {
+                    LOG.error("Exception using emailotp", apiex);
+                }
+                
+                LOG.info("Logged in (2fa-emailotp)");
+            }
+            else
+            {
+                String message = "Unsupported 2fa methods: "+twoFactorMethods;
+                LOG.error(message);
+                throw new UnsupportedOperationException(message);
+            }
 
             try
             {
-                this.botUserId = auth.getCurrentUser().getId();
+                this.currentUserId = auth.getCurrentUser().getId();
             }
             catch (ApiException apiex)
             {

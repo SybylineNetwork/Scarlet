@@ -4,6 +4,12 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.8
+  - Added ability to silence TTS messages for particular groups
+  - Added ability to import watched groups from UI
+  - Fixed bug: removed references to restricted/internal api
+  - Fixed regression: switched emailotp and totp auth flows
+
 ## 0.4.8-rc1
   - Added experimental "staff mode" (discord integration disabled, data like watched groups must be synced manually)
   - Added ability to ban and unban VRChat users with desktop UI, Discord buttons, and Discord commands

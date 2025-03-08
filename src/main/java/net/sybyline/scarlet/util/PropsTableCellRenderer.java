@@ -10,9 +10,7 @@ import java.awt.Color;
 import java.awt.Rectangle;
 
 import java.io.Serializable;
-import sun.swing.DefaultLookup;
 
-@SuppressWarnings("restriction")
 public class PropsTableCellRenderer extends JLabel implements TableCellRenderer, Serializable
 {
 
@@ -41,7 +39,7 @@ public class PropsTableCellRenderer extends JLabel implements TableCellRenderer,
 
     private Border getNoFocusBorder()
     {
-        Border border = DefaultLookup.getBorder(this, ui, "Table.cellNoFocusBorder");
+        Border border = UIManager.getBorder("Table.cellNoFocusBorder", this.getLocale());
         if (System.getSecurityManager() != null)
         {
             if (border != null) return border;
@@ -140,8 +138,8 @@ public class PropsTableCellRenderer extends JLabel implements TableCellRenderer,
                 && dropLocation.getColumn() == column)
         {
 
-            fg = DefaultLookup.getColor(this, ui, "Table.dropCellForeground");
-            bg = DefaultLookup.getColor(this, ui, "Table.dropCellBackground");
+            fg = UIManager.getColor("Table.dropCellForeground", this.getLocale());
+            bg = UIManager.getColor("Table.dropCellBackground", this.getLocale());
 
             isSelected = true;
         }
@@ -160,7 +158,7 @@ public class PropsTableCellRenderer extends JLabel implements TableCellRenderer,
                                     : table.getBackground();
             if (background == null || background instanceof UIResource)
             {
-                Color alternateColor = DefaultLookup.getColor(this, ui, "Table.alternateRowColor");
+                Color alternateColor = UIManager.getColor("Table.alternateRowColor", this.getLocale());
                 if (alternateColor != null && row % 2 != 0)
                 {
                     background = alternateColor;
@@ -179,23 +177,23 @@ public class PropsTableCellRenderer extends JLabel implements TableCellRenderer,
             Border border = null;
             if (isSelected)
             {
-                border = DefaultLookup.getBorder(this, ui, "Table.focusSelectedCellHighlightBorder");
+                border = UIManager.getBorder("Table.focusSelectedCellHighlightBorder", this.getLocale());
             }
             if (border == null)
             {
-                border = DefaultLookup.getBorder(this, ui, "Table.focusCellHighlightBorder");
+                border = UIManager.getBorder("Table.focusCellHighlightBorder", this.getLocale());
             }
             setBorder(border);
 
             if (!isSelected && table.isCellEditable(row, column))
             {
                 Color col;
-                col = DefaultLookup.getColor(this, ui, "Table.focusCellForeground");
+                col = UIManager.getColor("Table.focusCellForeground", this.getLocale());
                 if (col != null)
                 {
                     super.setForeground(col);
                 }
-                col = DefaultLookup.getColor(this, ui, "Table.focusCellBackground");
+                col = UIManager.getColor("Table.focusCellBackground", this.getLocale());
                 if (col != null)
                 {
                     super.setBackground(col);

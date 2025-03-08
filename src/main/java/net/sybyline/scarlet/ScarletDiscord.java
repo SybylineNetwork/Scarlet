@@ -40,7 +40,7 @@ public interface ScarletDiscord extends Closeable
             }
         }
         
-        if (scarlet.vrc.botUserId == null || Objects.equals(scarlet.vrc.botUserId, entry.getActorId()))
+        if (scarlet.vrc.currentUserId == null || Objects.equals(scarlet.vrc.currentUserId, entry.getActorId()))
         {
             String pendingActorId = scarlet.pendingModActions.pollPending(latype, entry.getTargetId());
             if (pendingActorId != null)

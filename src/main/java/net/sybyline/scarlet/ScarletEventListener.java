@@ -174,7 +174,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 .max(Comparator.naturalOrder())
                 .orElse(null)
                 ;
-            if (wg != null)
+            if (wg != null && !wg.silent)
             {
                 StringBuilder sb = new StringBuilder();
                 sb.append("User ").append(userDisplayName).append(" joined the lobby.");
@@ -185,10 +185,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                     this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                     this.scarlet.ttsService.submit(sb.toString());
                 }
-                wgs.forEach($ -> advisories.add($.message));
                 overall_type = wg.type;
                 priority[0] = wg.priority;
             }
+            wgs.forEach($ -> advisories.add($.message));
         }
         if (!preamble && user != null && this.announceNewPlayers.get())
         {

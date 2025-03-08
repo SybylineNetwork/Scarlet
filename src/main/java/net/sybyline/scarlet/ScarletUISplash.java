@@ -73,7 +73,7 @@ public class ScarletUISplash implements AutoCloseable
             feedback_panel.setOpaque(false);
             {
                 JLabel feedback_text = new JLabel(text, JLabel.CENTER);
-                feedback_text.setFont(new Font("Arial", Font.BOLD, 24));
+                feedback_text.setFont(new Font("Arial", Font.BOLD, 16));
                 feedback_text.setBackground(new Color(127, 127, 127, 127));
                 feedback_text.setForeground(Color.WHITE);
                 feedback_panel.add(feedback_text);
@@ -82,8 +82,8 @@ public class ScarletUISplash implements AutoCloseable
                 feedback_text.revalidate();
             }
             {
-                JLabel feedback_subtext = new JLabel(text, JLabel.CENTER);
-                feedback_subtext.setFont(new Font("Arial", Font.BOLD, 16));
+                JLabel feedback_subtext = new JLabel(subtext, JLabel.CENTER);
+                feedback_subtext.setFont(new Font("Arial", Font.BOLD, 12));
                 feedback_subtext.setBackground(new Color(127, 127, 127, 127));
                 feedback_subtext.setForeground(Color.WHITE);
                 feedback_panel.add(feedback_subtext);
@@ -91,7 +91,7 @@ public class ScarletUISplash implements AutoCloseable
                 feedback_panel.setComponentZOrder(feedback_subtext, 0);
                 feedback_subtext.revalidate();
             }
-            feedback.setContentPane(this.splashPanel);
+            feedback.setContentPane(feedback_panel);
         }
         feedback.setVisible(true);
     }
