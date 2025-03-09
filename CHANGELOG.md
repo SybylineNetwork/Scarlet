@@ -4,6 +4,10 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.9-rc1
+  - Fixed bug: Discord bot responds properly to the `set-audit-aux-webhooks` command
+  - Updated dependency: com.github.vrchatapi:vrchatapi-java:1.18.9 to version 1.19.1
+
 ## 0.4.8
   - Added ability to silence TTS messages for particular groups
   - Added ability to import watched groups from UI

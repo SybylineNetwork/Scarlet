@@ -1948,7 +1948,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     hook.sendMessageComponents(ActionRow.of(StringSelectMenu.create("set-audit-aux-webhooks:"+auditType0)
                             .addOptions(options)
                             .setDefaultValues(defaultOptions)
-                            .build()));
+                            .build())).setEphemeral(true).queue();
                     
                 }); break;
                 case "set-voice-channel": this.handleInGuildAsync(event, true, hook -> {
