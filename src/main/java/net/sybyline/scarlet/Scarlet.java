@@ -54,7 +54,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.9-rc1",
+        VERSION = "0.4.9-rc2",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -166,6 +166,7 @@ public class Scarlet implements Closeable
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
         MiscUtils.close(this.ui);
+        this.settings.updateRunVersionAndTime();
         LOG.info("Finished shutdown flow");
     }
 
@@ -484,9 +485,13 @@ public class Scarlet implements Closeable
             return;
         }
         
-        for (GroupAuditLogEntry entry : entries)
+        for (GroupAuditLogEntry entry : entries) try
         {
             this.discord.process(this, entry);
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception processing audit entry "+entry.getId()+" of type "+entry.getEventType()+": `"+entry.toJson()+"`", ex);
         }
         
         this.settings.setLastAuditQuery(to);

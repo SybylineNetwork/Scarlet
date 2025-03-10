@@ -35,6 +35,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -138,7 +139,7 @@ public class ScarletUI implements AutoCloseable
         this.initUI();
     }
 
-    public synchronized void playerJoin(String id, String name, LocalDateTime joined, String advisory, Color text_color, int priority, boolean isRejoinFromPrev)
+    public synchronized void playerJoin(boolean initialPreamble, String id, String name, LocalDateTime joined, String advisory, Color text_color, int priority, boolean isRejoinFromPrev)
     {
         User user = this.scarlet.vrc.getUser(id);
         String periodString = null;
@@ -167,7 +168,14 @@ public class ScarletUI implements AutoCloseable
             player.advisory = advisory;
             player.text_color = text_color;
             player.priority = priority;
-            this.propstable.updateEntry(player);
+            if (initialPreamble)
+            {
+                ; // noop
+            }
+            else
+            {
+                this.propstable.updateEntry(player);
+            }
         }
         else
         {
@@ -183,19 +191,40 @@ public class ScarletUI implements AutoCloseable
             player.text_color = text_color;
             player.priority = priority;
             this.connectedPlayers.put(id, player);
-            this.propstable.addEntry(player);
+            if (initialPreamble)
+            {
+                this.propstable.addEntrySilently(player);
+            }
+            else
+            {
+                this.propstable.addEntry(player);
+            }
         }
-        this.propstable.sortEntries(COMPARE);
+        if (initialPreamble)
+        {
+            ; // noop
+        }
+        else
+        {
+            this.fireSort();
+        }
     }
 
-    public synchronized void playerLeave(String id, String name, LocalDateTime left)
+    public synchronized void playerLeave(boolean initialPreamble, String id, String name, LocalDateTime left)
     {
         ConnectedPlayer player = this.connectedPlayers.get(id);
         if (player != null)
         {
             player.name = name;
             player.left = LTF.format(left);
-            this.propstable.updateEntry(player);
+            if (initialPreamble)
+            {
+                ; // noop
+            }
+            else
+            {
+                this.propstable.updateEntry(player);
+            }
         }
         else
         {
@@ -204,15 +233,34 @@ public class ScarletUI implements AutoCloseable
             player.name = name;
             player.left = LTF.format(left);
             this.connectedPlayers.put(id, player);
-            this.propstable.addEntry(player);
+            if (initialPreamble)
+            {
+                this.propstable.addEntrySilently(player);
+            }
+            else
+            {
+                this.propstable.addEntry(player);
+            }
         }
-        this.propstable.sortEntries(COMPARE);
+        if (initialPreamble)
+        {
+            ; // noop
+        }
+        else
+        {
+            this.fireSort();
+        }
     }
 
     public synchronized void clearInstance()
     {
         this.connectedPlayers.clear();
         this.propstable.clearEntries();
+    }
+
+    public synchronized void fireSort()
+    {
+        this.propstable.sortEntries(COMPARE);
     }
 
 //    public synchronized SettingCategory settingCategory(String id, String name)
@@ -439,6 +487,13 @@ public class ScarletUI implements AutoCloseable
                     }
                     jmenu_edit.add(jmenu_importwg);
                 }
+                {
+                    JMenu jmenu_advanced = new JMenu("Advanced");
+                    {
+                        jmenu_advanced.add("Discord: update command list").addActionListener($ -> this.discordUpdateCommandList());
+                    }
+                    jmenu_edit.add(jmenu_advanced);
+                }
                 jmenubar.add(jmenu_edit);
             }
             {
@@ -651,6 +706,25 @@ public class ScarletUI implements AutoCloseable
                 this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation failed", Color.PINK);
             }
         }
+    }
+
+    final AtomicLong discordUpdateCommandListlastUpdated = new AtomicLong();
+    void discordUpdateCommandList()
+    {
+        long then = this.discordUpdateCommandListlastUpdated.get(),
+             now = System.currentTimeMillis();
+        if (then < (now - 3600_000L))
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Skipped, too fast", Color.PINK);
+            return;
+        }
+        if (!this.discordUpdateCommandListlastUpdated.compareAndSet(then, now))
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Skipped, file type", Color.PINK);
+            return;
+        }
+        this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation queued", Color.WHITE);
+        this.scarlet.execModal.execute(this.scarlet.discord::updateCommandList);
     }
 
     protected void tryBan(String id, String name)

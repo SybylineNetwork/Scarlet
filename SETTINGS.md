@@ -326,6 +326,8 @@ Group audit log event information:
 Volatile data:
 ```reg
 [HKEY_CURRENT_USER\Software\JavaSoft\Prefs\net\sybyline\scarlet\grp_00000000-0000-0000-0000-000000000000]
+; The version of Scarlet that had been run previously
+"last/Run/Version"="0.4.9-rc2"
 ; The last time Scarlet queried the audit log
 "last/Audit/Query"="2069-02-31/T12:34:56.789/Z"
 ; The last time Scarlet refreshed VRChat authentication

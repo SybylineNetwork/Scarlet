@@ -184,6 +184,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
     Map<String, String> scarletPermission2roleSf = new HashMap<>();
     Map<String, String> scarletAuxWh2webhookUrl = new ConcurrentHashMap<>();
+    Map<String, IncomingWebhookClient> scarletAuxWh2incomingWebhookClient = new ConcurrentHashMap<>();
     Map<String, String> auditType2channelSf = new HashMap<>();
     Map<String, UniqueStrings> auditType2scarletAuxWh = new ConcurrentHashMap<>();
     Map<String, Integer> auditType2color = new HashMap<>();
@@ -224,6 +225,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             LOG.warn("Guild "+this.guildSf+": "+guild.getName());
         }
+        if (this.scarlet.settings.checkHasVersionChangedSinceLastRun())
+        {
+            this.updateCommandList();
+        }
+        this.audio.init();
+        this.scarlet.exec.scheduleAtFixedRate(this::clearDeadPagination, 30_000L, 30_000L, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public void updateCommandList()
+    {
         DefaultMemberPermissions defaultCommandPerms = DefaultMemberPermissions.enabledFor(
             Permission.ADMINISTRATOR,
             Permission.MANAGE_SERVER,
@@ -250,6 +262,31 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("import", "Imports watched groups from an attached file")
                             .addOption(OptionType.ATTACHMENT, "import-file", "Accepts: JSON, CSV", true),
                         new SubcommandData("add", "Adds a watched group")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
+                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
+                        new SubcommandData("add-malicious", "Adds a watched group with a watch type of malicious")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
+                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
+                        new SubcommandData("add-nuisance", "Adds a watched group with a watch type of nuisance")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
+                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
+                        new SubcommandData("add-community", "Adds a watched group with a watch type of community")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
+                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
+                        new SubcommandData("add-affiliated", "Adds a watched group with a watch type of affiliated")
+                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
+                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
+                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
+                        new SubcommandData("add-other", "Adds a watched group with a watch type of other")
                             .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
@@ -370,8 +407,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setDefaultPermissions(defaultCommandPerms)
             )
             .complete();
-        this.audio.init();
-        this.scarlet.exec.scheduleAtFixedRate(this::clearDeadPagination, 30_000L, 30_000L, TimeUnit.MILLISECONDS);
     }
 
     void setStaffMode()
@@ -379,6 +414,27 @@ public class ScarletDiscordJDA implements ScarletDiscord
         LOG.warn("No Discord bot token: entering staff mode");
         this.scarlet.staffMode = true;
         this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
+    }
+
+    IncomingWebhookClient getOrCreateIWC(String scarletAuxWh)
+    {
+        if (scarletAuxWh == null)
+            return null;
+        IncomingWebhookClient iwc = this.scarletAuxWh2incomingWebhookClient.get(scarletAuxWh);
+        if (iwc != null)
+            return iwc;
+        String iwcUrl = this.scarletAuxWh2webhookUrl.get(scarletAuxWh);
+        if (iwcUrl != null) try
+        {
+            iwc = WebhookClient.createClient(this.jda, iwcUrl);
+            this.scarletAuxWh2incomingWebhookClient.put(scarletAuxWh, iwc);
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Invalid Discord webhook URL for `"+scarletAuxWh+"`: `"+iwcUrl+"`, removing");
+            this.scarletAuxWh2webhookUrl.remove(scarletAuxWh);
+        }
+        return iwc;
     }
 
     @Override
@@ -1122,6 +1178,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             return;
                         }
                         watchedGroup = new ScarletWatchedGroups.WatchedGroup();
+                        watchedGroup.id = groupId;
                         if (groupTags != null)
                             watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
                         if (message != null)
@@ -1129,6 +1186,131 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         watchedGroup.priority = priority;
                         ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
                         hook.sendMessageFormat("Added group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
+
+                    } break;
+                    case "add-malicious": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup != null)
+                        {
+                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
+                        if (group == null)
+                        {
+                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
+                        watchedGroup.id = groupId;
+                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.MALICIOUS;
+                        if (groupTags != null)
+                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
+                        if (message != null)
+                            watchedGroup.message = message;
+                        watchedGroup.priority = priority;
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
+                        hook.sendMessageFormat("Added malicious group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
+
+                    } break;
+                    case "add-nuisance": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup != null)
+                        {
+                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
+                        if (group == null)
+                        {
+                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
+                        watchedGroup.id = groupId;
+                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.NUISANCE;
+                        if (groupTags != null)
+                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
+                        if (message != null)
+                            watchedGroup.message = message;
+                        watchedGroup.priority = priority;
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
+                        hook.sendMessageFormat("Added nuisance group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
+
+                    } break;
+                    case "add-community": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup != null)
+                        {
+                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
+                        if (group == null)
+                        {
+                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
+                        watchedGroup.id = groupId;
+                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.COMMUNITY;
+                        if (groupTags != null)
+                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
+                        if (message != null)
+                            watchedGroup.message = message;
+                        watchedGroup.priority = priority;
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
+                        hook.sendMessageFormat("Added community group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
+
+                    } break;
+                    case "add-affiliated": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup != null)
+                        {
+                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
+                        if (group == null)
+                        {
+                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
+                        watchedGroup.id = groupId;
+                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.AFFILIATED;
+                        if (groupTags != null)
+                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
+                        if (message != null)
+                            watchedGroup.message = message;
+                        watchedGroup.priority = priority;
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
+                        hook.sendMessageFormat("Added affiliated group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
+
+                    } break;
+                    case "add-other": {
+                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
+                        if (watchedGroup != null)
+                        {
+                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
+                            return;
+                        }
+                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
+                        if (group == null)
+                        {
+                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
+                            return;
+                        }
+                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
+                        watchedGroup.id = groupId;
+                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.OTHER;
+                        if (groupTags != null)
+                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
+                        if (message != null)
+                            watchedGroup.message = message;
+                        watchedGroup.priority = priority;
+                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
+                        hook.sendMessageFormat("Added other group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
 
                     } break;
                     case "delete-watched-group": {
@@ -2761,20 +2943,35 @@ public class ScarletDiscordJDA implements ScarletDiscord
         UniqueStrings scarletAuxWhs = this.auditType2scarletAuxWh.get(type);
         if (scarletAuxWhs == null || scarletAuxWhs.isEmpty())
             return;
+        List<IncomingWebhookClient> clients = new ArrayList<>();
+        for (String scarletAuxWh : scarletAuxWhs.toArray())
+        {
+            IncomingWebhookClient client = this.getOrCreateIWC(scarletAuxWh);
+            if (client == null)
+            {
+                LOG.warn("Aux webhook `"+scarletAuxWh+"` referenced by audit event type "+type+" does not exist, removing");
+                scarletAuxWhs.remove(scarletAuxWh);
+                if (scarletAuxWhs.isEmpty())
+                {
+                    this.auditType2scarletAuxWh.remove(type);
+                }
+            }
+            else
+            {
+                clients.add(client);
+            }
+        }
+        if (clients.isEmpty())
+            return;
         this.scarlet.exec.submit(() ->
         {
             State state0 = state == null ? null : state.get();
-            for (String scarletAuxWh : scarletAuxWhs) try
+            for (IncomingWebhookClient client : clients) try
             {
-                String webhookUrl = this.scarletAuxWh2webhookUrl.get(scarletAuxWh);
-                if (webhookUrl != null)
+                AbstractWebhookMessageAction<?, ?> action = bifunction.apply(client, state0);
+                if (action != null)
                 {
-                    IncomingWebhookClient client = WebhookClient.createClient(this.jda, webhookUrl);
-                    AbstractWebhookMessageAction<?, ?> action = bifunction.apply(client, state0);
-                    if (action != null)
-                    {
-                        action.completeAfter(3_000L, TimeUnit.MILLISECONDS);
-                    }
+                    action.completeAfter(3_000L, TimeUnit.MILLISECONDS);
                 }
             }
             catch (Exception ex)
@@ -2948,7 +3145,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 mca.mentionRepliedUser(false).setMessageReference(prevEntryMeta.messageSnowflake);
             return mca.complete();
         });
-        this.emitAuxWh(prevEntryMeta,
+        this.emitAuxWh(entryMeta,
             () -> this.embed(entryMeta.entry, true)
                       .setImage(worldImageUrl)
                       .setTitle("Instance Close")

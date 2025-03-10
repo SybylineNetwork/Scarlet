@@ -22,6 +22,8 @@ public interface ScarletDiscord extends Closeable
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/Discord");
 
+    public void updateCommandList();
+
     public boolean submitAudio(File file);
 
     public default void process(Scarlet scarlet, GroupAuditLogEntry entry)

@@ -33,6 +33,7 @@ public class ScarletVRChatLogs implements Closeable
         
         this.tailThread = new Thread(this::thread);
         this.running = true;
+        this.currentTargetIndex = -1;
         this.currentTarget = null;
         this.currentTail = null;
     }
@@ -41,6 +42,7 @@ public class ScarletVRChatLogs implements Closeable
     {
         
         void log_init(File file);
+        void log_catchUp(File file);
         
         void log_userAuthenticated(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId);
         void log_userQuit(boolean preamble, LocalDateTime timestamp, double lifetimeSeconds);
@@ -56,10 +58,10 @@ public class ScarletVRChatLogs implements Closeable
         
     }
 
-    final Scarlet scarlet;
-    final Listener listener;
+    private final Scarlet scarlet;
+    private final Listener listener;
 
-    void handleEntry(File file, boolean preamble, LocalDateTime timestamp, String level, String text, List<String> lines)
+    private void handleEntry(File file, boolean preamble, LocalDateTime timestamp, String level, String text, List<String> lines)
     {
         int cidx;
         if (text.startsWith("[Behaviour] "))
@@ -126,10 +128,21 @@ public class ScarletVRChatLogs implements Closeable
         }
     }
 
-    final Thread tailThread;
-    volatile boolean running;
-    File currentTarget;
-    VRChatLogTail currentTail;
+    private final Thread tailThread;
+    private volatile boolean running;
+    private volatile int currentTargetIndex;
+    private File currentTarget;
+    private VRChatLogTail currentTail;
+
+    public int currentTargetIndex()
+    {
+        return this.currentTargetIndex;
+    }
+
+    public File currentTarget()
+    {
+        return this.currentTarget;
+    }
 
     public void start()
     {
@@ -166,7 +179,7 @@ public class ScarletVRChatLogs implements Closeable
         }
     }
 
-    void thread()
+    private void thread()
     {
         if (Thread.currentThread() != this.tailThread)
             throw new IllegalStateException();
@@ -192,6 +205,7 @@ public class ScarletVRChatLogs implements Closeable
             }
             while (this.running && !this.tailThread.isInterrupted())
             {
+                this.currentTargetIndex++;
                 LOG.info("Tailing " + this.currentTarget.getName());
                 this.currentTail = new VRChatLogTail(this.currentTarget);
                 try
@@ -216,14 +230,16 @@ public class ScarletVRChatLogs implements Closeable
         }
     }
 
-    void catchUp(File file)
+    private void catchUp(File file)
     {
         if (file != null)
+        {
             LOG.info("Caught up with " + file.getName());
-        this.scarlet.splash.close();
+            this.listener.log_catchUp(file);
+        }
     }
 
-    boolean pollTarget()
+    private boolean pollTarget()
     {
         File nextTarget = this.locateTarget();
         if (Objects.equals(this.currentTarget, nextTarget))
@@ -232,7 +248,7 @@ public class ScarletVRChatLogs implements Closeable
         return true;
     }
 
-    static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+    private static final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
     File locateTarget()
     {
         return Optional

@@ -4,6 +4,14 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.9-rc2
+  - Added application version change detection
+  - Changed Discord bot to only send command list if version changes
+  - Changed instance UI to only sort once the log tailing/parsing has caught up 
+  - Changed watched groups sort order to prioritize `priority` instead of the flags `critical` and `silent`
+  - Fixed NPE when emitting aux webhooks for certain events
+  - Fixed watched groups added via Discord commands missing the `id` field, causing them to magically disappear
+
 ## 0.4.9-rc1
   - Fixed bug: Discord bot responds properly to the `set-audit-aux-webhooks` command
   - Updated dependency: com.github.vrchatapi:vrchatapi-java:1.18.9 to version 1.19.1

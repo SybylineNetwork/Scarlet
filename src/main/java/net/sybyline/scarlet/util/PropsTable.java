@@ -178,6 +178,16 @@ public class PropsTable<E> extends JTable
         return this.getPropsDataModel().sortEntries(comparator);
     }
 
+    public synchronized void addEntrySilently(E entry)
+    {
+        this.getPropsDataModel().addEntrySilently(entry);
+    }
+
+    public synchronized boolean removeEntrySilently(E entry)
+    {
+        return this.getPropsDataModel().removeEntrySilently(entry);
+    }
+
     public List<E> getEntries()
     {
         return Collections.unmodifiableList(this.getPropsDataModel().entries);
@@ -509,14 +519,28 @@ public class PropsTable<E> extends JTable
         }
         final List<E> entries = new CopyOnWriteArrayList<>();
         final List<PropsInfo<?>> props = new CopyOnWriteArrayList<>();
+        boolean pendingSilentOps = false;
+        void queuePendingSilentOps()
+        {
+            this.pendingSilentOps = true;
+        }
+        void pollPendingSilentOps()
+        {
+            if (!this.pendingSilentOps)
+                return;
+            this.pendingSilentOps = false;
+            this.fireTableDataChanged();
+        }
         void addEntry(E entry)
         {
+            this.pollPendingSilentOps();
             int index = this.entries.size();
             this.entries.add(entry);
             this.fireTableRowsInserted(index, index);
         }
         boolean removeEntry(E entry)
         {
+            this.pollPendingSilentOps();
             int index = this.entries.indexOf(entry);
             if (index < 0)
                 return false;
@@ -526,6 +550,7 @@ public class PropsTable<E> extends JTable
         }
         boolean updateEntry(E entry)
         {
+            this.pollPendingSilentOps();
             int index = this.entries.indexOf(entry);
             if (index < 0)
                 return false;
@@ -534,6 +559,7 @@ public class PropsTable<E> extends JTable
         }
         boolean clearEntries()
         {
+            this.pollPendingSilentOps();
             int size = this.entries.size();
             if (size == 0)
                 return false;
@@ -543,11 +569,26 @@ public class PropsTable<E> extends JTable
         }
         boolean sortEntries(Comparator<? super E> comparator)
         {
+            this.pollPendingSilentOps();
             int size = this.entries.size();
             if (size == 0)
                 return false;
             this.entries.sort(comparator);
             this.fireTableRowsUpdated(0, size - 1);
+            return true;
+        }
+        void addEntrySilently(E entry)
+        {
+            this.entries.add(entry);
+            this.queuePendingSilentOps();
+        }
+        boolean removeEntrySilently(E entry)
+        {
+            int index = this.entries.indexOf(entry);
+            if (index < 0)
+                return false;
+            this.entries.remove(index);
+            this.queuePendingSilentOps();
             return true;
         }
         @Override

@@ -10,6 +10,7 @@ import java.lang.reflect.Type;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Scanner;
 import java.util.prefs.Preferences;
@@ -36,9 +37,12 @@ public class ScarletSettings
     public ScarletSettings(File settingsFile)
     {
         this.settingsFile = settingsFile;
+        this.settingsFileLastModified = settingsFile.lastModified();
+        this.hasVersionChangedSinceLastRun = null;
         this.globalPreferences = Preferences.userNodeForPackage(Scarlet.class);
         this.preferences = this.globalPreferences;
         this.json = null;
+        this.lastRunVersion = null;
         this.lastAuditQuery = null;
         this.lastAuthRefresh = null;
         this.lastUpdateCheck = null;
@@ -51,11 +55,101 @@ public class ScarletSettings
     }
 
     final File settingsFile;
+    final long settingsFileLastModified;
+    Boolean hasVersionChangedSinceLastRun;
     final Preferences globalPreferences;
     Preferences preferences;
     private JsonObject json;
-    private OffsetDateTime lastAuditQuery, lastAuthRefresh, lastUpdateCheck;
+    private String lastRunVersion;
+    private OffsetDateTime lastRunTime, lastAuditQuery, lastAuthRefresh, lastUpdateCheck;
     private Rectangle uiBounds;
+
+    public boolean checkHasVersionChangedSinceLastRun()
+    {
+        Boolean hasVersionChangedSinceLastRun = this.hasVersionChangedSinceLastRun;
+        if (hasVersionChangedSinceLastRun != null)
+            return hasVersionChangedSinceLastRun.booleanValue();
+        OffsetDateTime lastRunTime = this.getLastRunTime();
+        if (lastRunTime == null)
+        {
+            this.hasVersionChangedSinceLastRun = Boolean.TRUE;
+            return true;
+        }
+        if (this.settingsFileLastModified > lastRunTime.toInstant().plusMillis(1_000L).toEpochMilli())
+        {
+            this.hasVersionChangedSinceLastRun = Boolean.TRUE;
+            return true;
+        }
+        if (!Objects.equals(Scarlet.VERSION, this.getLastRunVersion()))
+        {
+            this.hasVersionChangedSinceLastRun = Boolean.TRUE;
+            return true;
+        }
+        this.hasVersionChangedSinceLastRun = Boolean.FALSE;
+        return false;
+    }
+
+    public void updateRunVersionAndTime()
+    {
+        this.setLastRunVersion(Scarlet.VERSION);
+        this.setLastRunTime(OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    public synchronized String getLastRunVersion()
+    {
+        String lastRunVersion = this.lastRunVersion;
+        if (lastRunVersion != null)
+            return lastRunVersion;
+        lastRunVersion = this.preferences.get("lastRunVersion", null);
+        if (lastRunVersion != null)
+            return lastRunVersion;
+        lastRunVersion = this.globalPreferences.get("lastRunVersion", null);
+        if (lastRunVersion != null)
+        {
+            this.lastRunVersion = lastRunVersion;
+            this.preferences.put("lastRunVersion", lastRunVersion);
+        }
+        return lastRunVersion;
+    }
+
+    public synchronized void setLastRunVersion(String lastRunVersion)
+    {
+        if (lastRunVersion == null)
+            return;
+        this.lastRunVersion = lastRunVersion;
+        this.preferences.put("lastRunVersion", lastRunVersion);
+    }
+
+    public synchronized OffsetDateTime getLastRunTime()
+    {
+        OffsetDateTime lastRunTime = this.lastRunTime;
+        if (lastRunTime != null)
+            return lastRunTime;
+        String lastRunTimeString = this.preferences.get("lastRunTime", null);
+        if (lastRunTimeString == null) lastRunTimeString = this.globalPreferences.get("lastRunTime", null);
+        if (lastRunTimeString != null) try
+        {
+            lastRunTime = OffsetDateTime.parse(lastRunTimeString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            this.lastRunTime = lastRunTime;
+            this.preferences.put("lastRunTime", lastRunTimeString);
+            return lastRunTime;
+        }
+        catch (RuntimeException ex)
+        {
+        }
+        lastRunTime = OffsetDateTime.now(ZoneOffset.UTC);
+        this.lastRunTime = lastRunTime;
+        this.preferences.put("lastRunTime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastRunTime));
+        return lastRunTime;
+    }
+
+    public synchronized void setLastRunTime(OffsetDateTime lastRunTime)
+    {
+        if (lastRunTime == null)
+            return;
+        this.lastRunTime = lastRunTime;
+        this.preferences.put("lastRunTime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastRunTime));
+    }
 
     public synchronized OffsetDateTime getLastAuditQuery()
     {

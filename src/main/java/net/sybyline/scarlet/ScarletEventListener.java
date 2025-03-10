@@ -36,6 +36,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userDisplayName2avatarDisplayName = new ConcurrentHashMap<>();
         this.clientLocationPrev_userIds = new HashSet<>();
         
+        this.isTailerLive = false;
         this.isInGroupInstance = false;
         this.isSameAsPreviousInstance = false;
         
@@ -56,7 +57,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                               clientLocation_userDisplayName2userId,
                               clientLocation_userDisplayName2avatarDisplayName;
     Set<String> clientLocationPrev_userIds;
-    boolean isInGroupInstance,
+    boolean isTailerLive,
+            isInGroupInstance,
             isSameAsPreviousInstance;
 
     final ScarletUI.Setting<String> ttsVoiceName;
@@ -86,7 +88,18 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void log_init(File file)
     {
-    }  
+    } 
+
+    
+    @Override
+    public void log_catchUp(File file)
+    {
+        if (this.isTailerLive)
+            return;
+        this.isTailerLive = true;
+        this.scarlet.ui.fireSort();
+        this.scarlet.splash.close();
+    }   
 
     @Override
     public void log_userAuthenticated(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId)
@@ -137,7 +150,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         int[] priority = new int[]{Integer.MIN_VALUE+1};
         Color text_color = this.checkPlayer(advisories, priority, preamble, userDisplayName, userId);
         String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
-        this.scarlet.ui.playerJoin(userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
+        this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
     }
@@ -147,7 +160,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     {
         this.clientLocation_userId2userDisplayName.remove(userId);
         this.clientLocation_userDisplayName2avatarDisplayName.remove(userDisplayName);
-        this.scarlet.ui.playerLeave(userId, userDisplayName, timestamp);
+        this.scarlet.ui.playerLeave(!this.isTailerLive, userId, userDisplayName, timestamp);
     }
 
     @Override
@@ -169,26 +182,32 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 .map(LimitedUserGroups::getGroupId)
                 .map(this.scarlet.watchedGroups::getWatchedGroup)
                 .filter(Objects::nonNull)
+                .sorted(Comparator.naturalOrder())
                 .collect(Collectors.toList());
             ScarletWatchedGroups.WatchedGroup wg = wgs.stream()
-                .max(Comparator.naturalOrder())
+                .findFirst()
                 .orElse(null)
                 ;
             if (wg != null && !wg.silent)
             {
-                StringBuilder sb = new StringBuilder();
-                sb.append("User ").append(userDisplayName).append(" joined the lobby.");
                 if (!preamble && this.announceWatchedGroups.get())
                 {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("User ").append(userDisplayName).append(" joined the lobby.");
                     if (wg.message != null)
                         sb.append(' ').append(wg.message);
                     this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                     this.scarlet.ttsService.submit(sb.toString());
                 }
-                overall_type = wg.type;
                 priority[0] = wg.priority;
             }
             wgs.forEach($ -> advisories.add($.message));
+            overall_type = wgs.stream()
+                .filter($ -> $.type.text_color != null)
+                .map($ -> $.type)
+                .findFirst()
+                .orElse(null)
+            ;
         }
         if (!preamble && user != null && this.announceNewPlayers.get())
         {

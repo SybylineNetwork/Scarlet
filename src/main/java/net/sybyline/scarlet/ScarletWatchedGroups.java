@@ -65,10 +65,10 @@ public class ScarletWatchedGroups
             }
         }
         public UniqueStrings tags = new UniqueStrings();
-        public boolean critical;
-        public boolean silent;
         public int priority = 0;
-        public String message;
+        public boolean critical = false;
+        public boolean silent = false;
+        public String message = null;
         
         public EmbedBuilder embed(Group group)
         {
@@ -78,10 +78,10 @@ public class ScarletWatchedGroups
                 .setTitle(name, "https://vrchat.com/home/group/"+this.id)
                 .setThumbnail(thumbnail)
                 .addField("Id", "`"+this.id+"`", false)
-                .addField("Critical", this.critical ? "`true`" : "`false`", false)
-                .addField("Silent", this.silent ? "`true`" : "`false`", false)
                 .addField("Watch type", this.type == null ? "none" : ("`"+this.type.name()+"`"), false)
                 .addField("Priority", "`"+this.priority+"`", false)
+                .addField("Critical", this.critical ? "`true`" : "`false`", false)
+                .addField("Silent", this.silent ? "`true`" : "`false`", false)
                 .addField("Message", this.message == null ? "none" : ("`"+this.message+"`"), false)
                 .addField("Tags", this.tags.isEmpty() ? "none" : this.tags
                     .strings()
@@ -94,11 +94,47 @@ public class ScarletWatchedGroups
         @Override
         public int compareTo(WatchedGroup o)
         {
-            if (this.critical != o.critical)
-                return this.critical ? 1 : -1;
-            if (this.silent != o.silent)
-                return this.silent ? 1 : -1;
-            return Integer.compare(this.priority, o.priority);
+            int cmp;
+            if ((cmp = Integer.compare(this.priority, o.priority)) != 0) return cmp;
+            if ((cmp = Boolean.compare(this.critical, o.critical)) != 0) return cmp;
+            if ((cmp = Boolean.compare(this.silent, o.silent)) != 0) return cmp;
+            return 0;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            int hash = 1;
+            hash = 31 * hash + Objects.hashCode(this.id);
+            hash = 31 * hash + Objects.hashCode(this.type);
+            hash = 31 * hash + Objects.hashCode(this.tags);
+            hash = 31 * hash + Integer.hashCode(this.priority);
+            hash = 31 * hash + Boolean.hashCode(this.critical);
+            hash = 31 * hash + Boolean.hashCode(this.silent);
+            hash = 31 * hash + Objects.hashCode(this.message);
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj)
+        {
+            if (this == obj) return true;
+            if (!(obj instanceof WatchedGroup)) return false;
+            WatchedGroup other = (WatchedGroup)obj;
+            if (!Objects.equals(this.id, other.id)) return false;
+            if (!Objects.equals(this.type, other.type)) return false;
+            if (!Objects.equals(this.tags, other.tags)) return false;
+            if (!Objects.equals(this.priority, other.priority)) return false;
+            if (!Objects.equals(this.critical, other.critical)) return false;
+            if (!Objects.equals(this.silent, other.silent)) return false;
+            if (!Objects.equals(this.message, other.message)) return false;
+            return true;
+        }
+
+        @Override
+        public String toString()
+        {
+            return this.id;
         }
         
     }
