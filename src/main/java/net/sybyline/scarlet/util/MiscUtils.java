@@ -19,6 +19,9 @@ import java.io.Writer;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Duration;
+import java.time.Period;
+import java.time.temporal.TemporalAmount;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -153,6 +156,140 @@ public interface MiscUtils
             if ((offset += bytesRead) == buffer.length)
                 buffer = Arrays.copyOf(buffer, buffer.length + Math.max(input.available(), buffer.length >> 1));
         return offset == buffer.length ? buffer : Arrays.copyOf(buffer, offset);
+    }
+
+    static String stringify_ymd_hms_ms_us_ns(TemporalAmount amount)
+    {
+        if (amount == null)
+            return null;
+        int years,
+            months,
+            days,
+            hours = 0,
+            minutes = 0,
+            seconds = 0,
+            millis = 0,
+            micros = 0,
+            nanos = 0;
+        if (amount instanceof Period)
+        {
+            Period period = (Period)amount;
+            years = period.getYears();
+            months = period.getMonths();
+            days = period.getDays();
+        }
+        else
+        {
+            Duration duration = amount instanceof Duration ? (Duration)amount : Duration.from(amount);
+            Period period = Period.ofDays((int)(duration.getSeconds() / 86400L)).normalized();
+            years = period.getYears();
+            months = period.getMonths();
+            days = period.getDays();
+            seconds = (int)(duration.getSeconds() % 86400L);
+            if (seconds >= 60)
+            {
+                minutes = seconds / 60;
+                seconds = seconds % 60;
+                if (minutes >= 60)
+                {
+                    hours = minutes / 60;
+                    minutes = minutes % 60;
+                }
+            }
+            nanos = duration.getNano();
+            if (nanos >= 1000)
+            {
+                micros = nanos / 1000;
+                nanos = nanos % 1000;
+                if (micros >= 1000)
+                {
+                    millis = micros / 1000;
+                    micros = micros % 1000;
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        if (years != 0) sb.append(years).append("y ");
+        if (months != 0) sb.append(months).append("m ");
+        if (days != 0) sb.append(days).append("d ");
+        sb.append(String.format("%02d:%02d:%02d", hours, minutes, seconds));
+        if (millis != 0 || micros != 0 || nanos != 0) sb.append(String.format(".%03d", millis));
+        if (micros != 0 || nanos != 0) sb.append(String.format(".%03d", micros));
+        if (nanos != 0) sb.append(String.format(".%03d", nanos));
+        return sb.toString();
+    }
+
+    static String stringify_ymd_hms(TemporalAmount amount)
+    {
+        if (amount == null)
+            return null;
+        int years,
+            months,
+            days,
+            hours = 0,
+            minutes = 0,
+            seconds = 0;
+        if (amount instanceof Period)
+        {
+            Period period = (Period)amount;
+            years = period.getYears();
+            months = period.getMonths();
+            days = period.getDays();
+        }
+        else
+        {
+            Duration duration = amount instanceof Duration ? (Duration)amount : Duration.from(amount);
+            Period period = Period.ofDays((int)(duration.getSeconds() / 86400L)).normalized();
+            years = period.getYears();
+            months = period.getMonths();
+            days = period.getDays();
+            seconds = (int)(duration.getSeconds() % 86400L);
+            if (seconds >= 60)
+            {
+                minutes = seconds / 60;
+                seconds = seconds % 60;
+                if (minutes >= 60)
+                {
+                    hours = minutes / 60;
+                    minutes = minutes % 60;
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        if (years != 0) sb.append(years).append("y ");
+        if (months != 0) sb.append(months).append("m ");
+        if (days != 0) sb.append(days).append("d ");
+        sb.append(String.format("%02d:%02d:%02d ", hours, minutes, seconds));
+        return sb.length() == 0 ? "0s" : sb.substring(0, sb.length() - 1);
+    }
+
+    static String stringify_ymd(TemporalAmount amount)
+    {
+        if (amount == null)
+            return null;
+        int years,
+            months,
+            days;
+        if (amount instanceof Period)
+        {
+            Period period = (Period)amount;
+            years = period.getYears();
+            months = period.getMonths();
+            days = period.getDays();
+        }
+        else
+        {
+            Duration duration = amount instanceof Duration ? (Duration)amount : Duration.from(amount);
+            Period period = Period.ofDays((int)(duration.getSeconds() / 86400L)).normalized();
+            years = period.getYears();
+            months = period.getMonths();
+            days = period.getDays();
+        }
+        StringBuilder sb = new StringBuilder();
+        if (years != 0) sb.append(years).append("y ");
+        if (months != 0) sb.append(months).append("m ");
+        if (days != 0) sb.append(days).append("d ");
+        return sb.length() == 0 ? "0D" : sb.substring(0, sb.length() - 1);
     }
 
     static Pattern SEMVER = Pattern.compile("(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)([\\.\\-_]?(?<kind>\\w+))?([\\.\\-_]?(?<build>\\d+))?");

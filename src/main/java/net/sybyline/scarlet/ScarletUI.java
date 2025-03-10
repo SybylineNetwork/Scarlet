@@ -84,12 +84,10 @@ public class ScarletUI implements AutoCloseable
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/UI");
-    static final DateTimeFormatter LTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     static
     {
         try
         {
-//            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             UIManager.setLookAndFeel(new FlatDarkLaf());
         }
         catch (Exception ex)
@@ -142,17 +140,10 @@ public class ScarletUI implements AutoCloseable
     public synchronized void playerJoin(boolean initialPreamble, String id, String name, LocalDateTime joined, String advisory, Color text_color, int priority, boolean isRejoinFromPrev)
     {
         User user = this.scarlet.vrc.getUser(id);
-        String periodString = null;
+        Period period = null;
         if (user != null)
         {
-            Period period = user.getDateJoined().until(LocalDate.now());
-            StringBuilder sb = new StringBuilder();
-            if (period.getYears() != 0)
-                sb.append(period.getYears()).append('y');
-            if (period.getMonths() != 0)
-                (sb.length() == 0 ? sb : sb.append(' ')).append(period.getMonths()).append('m');
-            (sb.length() == 0 ? sb : sb.append(' ')).append(period.getDays()).append('d');
-            periodString = sb.toString();
+            period = user.getDateJoined().until(LocalDate.now());
         }
         
         ConnectedPlayer player = this.connectedPlayers.get(id);
@@ -161,9 +152,9 @@ public class ScarletUI implements AutoCloseable
             player.name = name;
             if (!isRejoinFromPrev)
             {
-                player.joined = LTF.format(joined);
+                player.joined = joined;
             }
-            player.acctdays = periodString;
+            player.acctdays = period;
             player.left = null;
             player.advisory = advisory;
             player.text_color = text_color;
@@ -184,9 +175,9 @@ public class ScarletUI implements AutoCloseable
             player.name = name;
             if (!isRejoinFromPrev)
             {
-                player.joined = LTF.format(joined);
+                player.joined = joined;
             }
-            player.acctdays = periodString;
+            player.acctdays = period;
             player.advisory = advisory;
             player.text_color = text_color;
             player.priority = priority;
@@ -216,7 +207,7 @@ public class ScarletUI implements AutoCloseable
         if (player != null)
         {
             player.name = name;
-            player.left = LTF.format(left);
+            player.left = left;
             if (initialPreamble)
             {
                 ; // noop
@@ -231,7 +222,7 @@ public class ScarletUI implements AutoCloseable
             player = new ConnectedPlayer();
             player.id = id;
             player.name = name;
-            player.left = LTF.format(left);
+            player.left = left;
             this.connectedPlayers.put(id, player);
             if (initialPreamble)
             {
@@ -345,9 +336,9 @@ public class ScarletUI implements AutoCloseable
     {
         String name;
         String id;
-        String acctdays;
-        String joined;
-        String left;
+        Period acctdays;
+        LocalDateTime joined;
+        LocalDateTime left;
         String advisory;
         Action profile = new AbstractAction("Open") {
             private static final long serialVersionUID = -7804449090453940172L;
@@ -415,9 +406,9 @@ public class ScarletUI implements AutoCloseable
         {
             this.propstable.addProperty("Name", false, true, String.class, $ -> $.name);
             this.propstable.addProperty("Id", false, true, String.class, $ -> $.id);
-            this.propstable.addProperty("AcctAge", false, true, String.class, $ -> $.acctdays);
-            this.propstable.addProperty("Joined", false, true, String.class, $ -> $.joined);
-            this.propstable.addProperty("Left", false, true, String.class, $ -> $.left);
+            this.propstable.addProperty("AcctAge", false, true, Period.class, $ -> $.acctdays);
+            this.propstable.addProperty("Joined", false, true, LocalDateTime.class, $ -> $.joined);
+            this.propstable.addProperty("Left", false, true, LocalDateTime.class, $ -> $.left);
             this.propstable.addProperty("Advisory", false, true, String.class, $ -> $.advisory);
             this.propstable.addProperty("Profile", true, true, Action.class, $ -> $.profile);
             this.propstable.addProperty("Ban", true, true, Action.class, $ -> $.ban);

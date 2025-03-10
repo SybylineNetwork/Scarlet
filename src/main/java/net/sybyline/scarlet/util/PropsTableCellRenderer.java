@@ -120,8 +120,8 @@ public class PropsTableCellRenderer extends JLabel implements TableCellRenderer,
     {
         this.gtcrc_selected = isSelected;
         this.gtcrc_focus = hasFocus;
-        this.gtcrc_row = row;
-        this.gtcrc_column = column;
+        this.gtcrc_row = table == null ? row : table.convertRowIndexToModel(row);
+        this.gtcrc_column = table == null ? column : table.convertColumnIndexToModel(column);
         if (table == null)
         {
             return this;

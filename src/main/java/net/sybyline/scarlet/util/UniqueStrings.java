@@ -9,6 +9,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.Spliterator;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import com.google.gson.TypeAdapter;
 import com.google.gson.annotations.JsonAdapter;
@@ -92,6 +93,16 @@ public final class UniqueStrings implements Iterable<String>
     public String[] toArray()
     {
         return this.strings.toArray(new String[this.strings.size()]);
+    }
+
+    public boolean contains(Object o)
+    {
+        return this.strings.contains(o);
+    }
+
+    public Stream<String> stream()
+    {
+        return this.strings.stream();
     }
 
     @Override

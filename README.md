@@ -88,11 +88,11 @@ Discord slash commands:
     Sets the voice in which to announce TTS messages<br>
     Example: `/set-tts-voice "Microsoft David Desktop"`
     - `voice-name` The name of the voice to use
-  - `set-permission-role <scarlet-permission:string> <discord-role:role?>`<br>
-    Sets a given Scarlet-specific permission to be associated with a given Discord role<br>
-    Example: `/set-permission-role "event.set_tags" <@123456789123456789>`
+  - `scarlet-permission`<br> <scarlet-permission:string> <discord-role:role?>
+    Sets a given Scarlet-specific permission to be associated with certain Discord roles<br>
+    Example: `/scarlet-permission add-to-role "event.set_tags" <@123456789123456789>`
     - `scarlet-permission` The Scarlet-specific permission
-    - `discord-role` The Discord role to use, or omit to remove entry
+    - `discord-role` The Discord role being granted or revoked permissions
   - `export-log <file-name:string?>`<br>
     Exports a Scarlet log file as an attachment<br>
     Example: `/export-log`

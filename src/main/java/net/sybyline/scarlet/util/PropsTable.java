@@ -7,6 +7,20 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.text.DateFormat;
 import java.text.NumberFormat;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.Period;
+import java.time.Year;
+import java.time.YearMonth;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
+import java.time.temporal.TemporalAmount;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,6 +39,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
+import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.UIDefaults;
 import javax.swing.UIManager;
@@ -48,6 +63,9 @@ public class PropsTable<E> extends JTable
         super();
         this.tableHeader.setReorderingAllowed(true);
         this.tableHeader.setResizingAllowed(true);
+        JPopupMenu headerPopupMenu = new JPopupMenu();
+        headerPopupMenu.add("Default order").addActionListener($ -> this.getRowSorter().setSortKeys(null));
+        this.tableHeader.setComponentPopupMenu(headerPopupMenu);
         this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         this.setAutoCreateColumnsFromModel(false);
         this.setAutoCreateRowSorter(true);
@@ -236,15 +254,33 @@ public class PropsTable<E> extends JTable
     protected void createDefaultRenderers()
     {
         super.createDefaultRenderers();
-        defaultRenderersByColumnClass.put(Object.class, (UIDefaults.LazyValue) t -> new PropsObjectRenderer());
-        defaultRenderersByColumnClass.put(Number.class, (UIDefaults.LazyValue) t -> new PropsNumberRenderer());
-        defaultRenderersByColumnClass.put(Float.class, (UIDefaults.LazyValue) t -> new PropsDoubleRenderer());
-        defaultRenderersByColumnClass.put(Double.class, (UIDefaults.LazyValue) t -> new PropsDoubleRenderer());
-        defaultRenderersByColumnClass.put(Date.class, (UIDefaults.LazyValue) t -> new PropsDateRenderer());
-        defaultRenderersByColumnClass.put(Icon.class, (UIDefaults.LazyValue) t -> new PropsIconRenderer());
-        defaultRenderersByColumnClass.put(ImageIcon.class, (UIDefaults.LazyValue) t -> new PropsIconRenderer());
-        defaultRenderersByColumnClass.put(Boolean.class, (UIDefaults.LazyValue) t -> new PropsBooleanRenderer());
+        // Default clones
+        this.defaultRenderersByColumnClass.put(Object.class, (UIDefaults.LazyValue) t -> new PropsObjectRenderer());
+        this.defaultRenderersByColumnClass.put(Number.class, (UIDefaults.LazyValue) t -> new PropsNumberRenderer());
+        this.defaultRenderersByColumnClass.put(Float.class, (UIDefaults.LazyValue) t -> new PropsDoubleRenderer());
+        this.defaultRenderersByColumnClass.put(Double.class, (UIDefaults.LazyValue) t -> new PropsDoubleRenderer());
+        this.defaultRenderersByColumnClass.put(Date.class, (UIDefaults.LazyValue) t -> new PropsDateRenderer());
+        this.defaultRenderersByColumnClass.put(Icon.class, (UIDefaults.LazyValue) t -> new PropsIconRenderer());
+        this.defaultRenderersByColumnClass.put(ImageIcon.class, (UIDefaults.LazyValue) t -> new PropsIconRenderer());
+        this.defaultRenderersByColumnClass.put(Boolean.class, (UIDefaults.LazyValue) t -> new PropsBooleanRenderer());
+        // Action
         this.defaultRenderersByColumnClass.put(Action.class, (UIDefaults.LazyValue) t -> new PropsActionRenderer());
+        // TemporalAccessor
+        this.defaultRenderersByColumnClass.put(Instant.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_I));
+        this.defaultRenderersByColumnClass.put(Year.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_LD));
+        this.defaultRenderersByColumnClass.put(YearMonth.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_LD));
+        this.defaultRenderersByColumnClass.put(LocalDate.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_LD));
+        this.defaultRenderersByColumnClass.put(LocalTime.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_LT));
+        this.defaultRenderersByColumnClass.put(LocalDateTime.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_LDT));
+//        this.defaultRenderersByColumnClass.put(OffsetDate.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_OD));
+        this.defaultRenderersByColumnClass.put(OffsetTime.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_OT));
+        this.defaultRenderersByColumnClass.put(OffsetDateTime.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_ODT));
+        this.defaultRenderersByColumnClass.put(ZonedDateTime.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer(FMT_ZDT));
+        this.defaultRenderersByColumnClass.put(TemporalAccessor.class, (UIDefaults.LazyValue) t -> new PropsTemporalAccessorRenderer());
+        // TemporalAmount
+        this.defaultRenderersByColumnClass.put(Period.class, (UIDefaults.LazyValue) t -> new PropsTemporalAmountRenderer());
+        this.defaultRenderersByColumnClass.put(Duration.class, (UIDefaults.LazyValue) t -> new PropsTemporalAmountRenderer());
+        this.defaultRenderersByColumnClass.put(TemporalAmount.class, (UIDefaults.LazyValue) t -> new PropsTemporalAmountRenderer());
     }
     private static final Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
     class PropsObjectRenderer extends PropsTableCellRenderer.PropsUIResource
@@ -480,6 +516,90 @@ public class PropsTable<E> extends JTable
                 this.setForeground(overrideForegroundColor);
             }
             return this;
+        }
+    }
+    static final DateTimeFormatter FMT_I = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"),
+                                   FMT_LD = DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+                                   FMT_LT = DateTimeFormatter.ofPattern("HH:mm:ss"),
+                                   FMT_LDT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                                   FMT_OD = DateTimeFormatter.ofPattern("yyyy-MM-dd Z"),
+                                   FMT_OT = DateTimeFormatter.ofPattern("HH:mm:ss Z"),
+                                   FMT_ODT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss Z"),
+                                   FMT_ZDT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z");
+    class PropsTemporalAccessorRenderer extends PropsTableCellRenderer.PropsUIResource
+    {
+        private static final long serialVersionUID = 8688842921569726502L;
+        PropsTemporalAccessorRenderer()
+        {
+            this(null);
+        }
+        PropsTemporalAccessorRenderer(DateTimeFormatter formatter)
+        {
+            super();
+            this.formatter = formatter;
+        }
+        DateTimeFormatter formatter;
+        @Override
+        protected void setValue(Object value)
+        {
+            if (this.formatter == null)
+            {
+                this.formatter = DateTimeFormatter.ISO_INSTANT;
+            }
+            this.setText((value == null) ? "" : this.formatter.format((TemporalAccessor)value));
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
+        }
+    }
+    class PropsTemporalAmountRenderer extends PropsTableCellRenderer.PropsUIResource
+    {
+        private static final long serialVersionUID = 8688842921569726502L;
+        PropsTemporalAmountRenderer()
+        {
+            super();
+        }
+        @Override
+        protected void setValue(Object value)
+        {
+            if (value == null)
+            {
+                this.setText("");
+            }
+            else if (value instanceof Period)
+            {
+                this.setText(MiscUtils.stringify_ymd((Period)value));
+            }
+            else
+            {
+                this.setText(MiscUtils.stringify_ymd_hms_ms_us_ns((TemporalAmount)value));
+            }
+            
+            Font overrideFont = PropsTable.this.getPropsTableExt().getOverrideFont(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getFont());
+            if (overrideFont != null)
+            {
+                this.setFont(overrideFont);
+            }
+            Color overrideForegroundColor = PropsTable.this.getPropsTableExt().getOverrideForegroundColor(PropsTable.this.getPropsDataModel().entries.get(this.gtcrc_row), this.getForeground());
+            if (overrideForegroundColor != null)
+            {
+                this.setForeground(overrideForegroundColor);
+            }
+            else
+            {
+                this.setForeground(null);
+            }
         }
     }
 

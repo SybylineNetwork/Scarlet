@@ -55,6 +55,7 @@ import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.IncomingWebhookClient;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -182,7 +183,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      pingOnModeration_userUnban;
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
-    Map<String, String> scarletPermission2roleSf = new HashMap<>();
+    Map<String, UniqueStrings> scarletPermission2roleSf = new HashMap<>();
     Map<String, String> scarletAuxWh2webhookUrl = new ConcurrentHashMap<>();
     Map<String, IncomingWebhookClient> scarletAuxWh2incomingWebhookClient = new ConcurrentHashMap<>();
     Map<String, String> auditType2channelSf = new HashMap<>();
@@ -389,11 +390,19 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
                     .addOption(OptionType.STRING, "voice-name", "The name of the installed voice to use", true, true),
-                Commands.slash("set-permission-role", "Sets a given Scarlet-specific permission to be associated with a given Discord role")
+                Commands.slash("scarlet-permission", "Sets a given Scarlet-specific permission to be associated with certain Discord roles")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
-                    .addOption(OptionType.ROLE, "discord-role", "The Discord role to use, or omit to remove entry"),
+                    .addSubcommands(
+                        new SubcommandData("list", "Lists all Scarlet permissions and associated roles")
+                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of permissions to show per page").setRequiredRange(1L, 10L)),
+                        new SubcommandData("add-to-role", "Grants the Scarlet-specific permission to the given role")
+                            .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
+                            .addOption(OptionType.ROLE, "discord-role", "The Discord role to which to grant the Scarlet-specific permission", true),
+                        new SubcommandData("delete-from-role", "Revokes the Scarlet-specific permission for the given role")
+                            .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
+                            .addOption(OptionType.ROLE, "discord-role", "The Discord role for which to revoke the Scarlet-specific permission", true)
+                    ),
                 Commands.slash("config-info", "Shows information about the current configuration")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms),
@@ -585,7 +594,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                       guildSf = null,
                       audioChannelSf = null,
                       evidenceRoot = null;
-        public Map<String, String> scarletPermission2roleSf = new HashMap<>();
+        public Map<String, UniqueStrings> scarletPermission2roleSf = new HashMap<>();
         public Map<String, String> scarletAuxWh2webhookUrl = new HashMap<>();
         public Map<String, String> auditType2channelSf = new HashMap<>();
         public Map<String, UniqueStrings> auditType2scarletAuxWh = new HashMap<>();
@@ -977,7 +986,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     } break;
                     }
                 } break;
-                case "set-permission-role": {
+                case "set-permission-roles": {
                     switch (event.getFocusedOption().getName())
                     {
                     case "scarlet-permission": {
@@ -1696,14 +1705,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "vrchat-user-ban": this.handleInGuildAsync(event, false, hook -> {
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_BAN_USER);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_BAN_USER, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
+                        return;
                     }
                     
                     String vrcTargetId = event.getOption("vrchat-user").getAsString();
@@ -1748,14 +1753,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "vrchat-user-unban": this.handleInGuildAsync(event, false, hook -> {
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_UNBAN_USER);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_UNBAN_USER, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
+                        return;
                     }
                     
                     String vrcTargetId = event.getOption("vrchat-user").getAsString();
@@ -1899,22 +1900,25 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     
                     sb.append("Scarlet permissions: ");
-                    boolean addedAny = false;
                     for (ScarletPermission permission : ScarletPermission.values())
                     {
-                        String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(permission);
-                        if (roleSnowflake == null)
+                        UniqueStrings roleSfs = ScarletDiscordJDA.this.scarletPermission2roleSf.get(permission.id);
+                        sb.append('\n').append(permission.title).append(": from ");
+                        if (roleSfs == null || roleSfs.isEmpty())
                         {
-                            sb.append(permission.title).append(" (due to unset role), ");
-                            addedAny = true;
+                            sb.append("no roles");
                         }
-                        else if (event.getMember().getRoles().stream().map(Role::getId).anyMatch(roleSnowflake::equals))
+                        else
                         {
-                            sb.append(permission.title).append(", ");
-                            addedAny = true;
+                            sb.append(event
+                                .getMember()
+                                .getRoles()
+                                .stream()
+                                .filter(role -> roleSfs.contains(role.getId()))
+                                .map(Role::getAsMention)
+                                .collect(Collectors.joining(", ")));
                         }
                     }
-                    if (addedAny) sb.setLength(sb.length() - 2);
                     sb.append('\n');
 
                     ScarletDiscordJDA.this.new Pagination(event.getId(), sb).queue(hook);
@@ -2179,27 +2183,67 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     hook.sendMessageFormat("Setting TTS voice to `%s`", voiceName).setEphemeral(true).queue();
                     
                 }); break;
-                case "set-permission-role": this.handleInGuildAsync(event, true, hook -> {
-                    String scarletPermission0 = event.getOption("scarlet-permission").getAsString();
-                    ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
-                    if (scarletPermission == null)
+                case "scarlet-permission": this.handleInGuildAsync(event, true, hook -> { // FIXME : can't defer a modal
+                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
+                    String scarletPermission0 = event.getOption("scarlet-permission", null, OptionMapping::getAsString);
+                    Role role = event.getOption("discord-role", null, OptionMapping::getAsRole);
+
+                    switch (event.getSubcommandName())
                     {
-                        hook.sendMessageFormat("%s isn't a valid Scarlet permission", scarletPermission0).setEphemeral(true).queue();
-                        return;
+                    case "list": {
+                        MessageEmbed[] embeds = Arrays
+                            .stream(ScarletPermission.values())
+                            .map(scarletPermission ->
+                            {
+                                UniqueStrings roleSfs = ScarletDiscordJDA.this.scarletPermission2roleSf.get(scarletPermission.id);
+                                String roles = roleSfs == null || roleSfs.isEmpty() 
+                                    ? "<none>"
+                                    : roleSfs.stream().collect(Collectors.joining(">\n<@", "<@", ">"));
+                                return new EmbedBuilder()
+                                    .setTitle(scarletPermission.title)
+                                    .addField("`"+scarletPermission.id+"`", roles, false)
+                                    .build();
+                            })
+                            .toArray(MessageEmbed[]::new);
+                        
+                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
+                        
+                    } break;
+                    case "add-to-role": {
+                        ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
+                        if (scarletPermission == null)
+                        {
+                            event.replyFormat("%s isn't a valid Scarlet permission", scarletPermission0).setEphemeral(true).queue();
+                            return;
+                        }
+                        if (ScarletDiscordJDA.this.checkRoleHasPermission(scarletPermission, role))
+                        {
+                            event.replyFormat("That role already has that permission", scarletPermission0).setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        ScarletDiscordJDA.this.addPermissionRole(scarletPermission, role);
+                        hook.sendMessageFormat("Adding Scarlet permission %s (%s) to %s", scarletPermission.title, scarletPermission.id, role.getAsMention()).setEphemeral(true).queue();
+                        
+                    } break;
+                    case "delete-from-role": {
+                        ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
+                        if (scarletPermission == null)
+                        {
+                            event.replyFormat("%s isn't a valid Scarlet permission", scarletPermission0).setEphemeral(true).queue();
+                            return;
+                        }
+                        if (!ScarletDiscordJDA.this.checkRoleHasPermission(scarletPermission, role))
+                        {
+                            event.replyFormat("That role already doesn't have that permission", scarletPermission0).setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        ScarletDiscordJDA.this.deletePermissionRole(scarletPermission, role);
+                        hook.sendMessageFormat("Removing Scarlet permission %s (%s) from %s", scarletPermission.title, scarletPermission.id, role.getAsMention()).setEphemeral(true).queue();
+                        
+                    } break;
                     }
-                    OptionMapping role0 = event.getOption("discord-role");
-                    
-                    if (role0 == null)
-                    {
-                        ScarletDiscordJDA.this.setPermissionRole(scarletPermission, null);
-                        hook.sendMessageFormat("Unassociating Scarlet permission %s (%s) from any roles", scarletPermission.title, scarletPermission.id).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    Role role = role0.getAsRole();
-                    
-                    ScarletDiscordJDA.this.setPermissionRole(scarletPermission, role);
-                    hook.sendMessageFormat("Associating Scarlet permission %s (%s) with role <@%s>", scarletPermission.title, scarletPermission.id, role.getId()).setEphemeral(true).queue();
                     
                 }); break;
                 }
@@ -2244,14 +2288,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 } break;
                 case "edit-tags": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SET_TAGS);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SET_TAGS, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to select event tags.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to select event tags.").setEphemeral(true).queue();
+                        return;
                     }
                     
                     // TODO : set default selected
@@ -2293,14 +2333,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "vrchat-user-ban": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_BAN_USER);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_BAN_USER, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
+                        return;
                     }
 
                     String vrcTargetId = parts[1];
@@ -2344,14 +2380,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "vrchat-user-unban": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_UNBAN_USER);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_UNBAN_USER, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
+                        return;
                     }
 
                     String vrcTargetId = parts[1];
@@ -2395,14 +2427,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "edit-desc": { // FIXME : can't defer a modal
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SET_DESCRIPTION);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SET_DESCRIPTION, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            event.reply("You do not have permission to set event descriptions.").setEphemeral(true).queue();
-                            return;
-                        }
+                        event.reply("You do not have permission to set event descriptions.").setEphemeral(true).queue();
+                        return;
                     }
                     
                     String auditEntryId = parts[1];
@@ -2426,14 +2454,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 } break;
                 case "vrchat-report": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_USE_REPORT_LINK);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_USE_REPORT_LINK, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to use the event report link.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to use the event report link.").setEphemeral(true).queue();
+                        return;
                     }
                     
                     String auditEntryId = parts[1];
@@ -2529,14 +2553,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     String messageSnowflake = parts[1];
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.EVENT_SUBMIT_EVIDENCE);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SUBMIT_EVIDENCE, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to submit event attachments.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to submit event attachments.").setEphemeral(true).queue();
+                        return;
                     }
                     
                     String evidenceRoot = ScarletDiscordJDA.this.evidenceRoot;
@@ -2663,14 +2683,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     String messageSnowflake = parts[1];
                     
-                    String roleSnowflake = ScarletDiscordJDA.this.getPermissionRole(ScarletPermission.CONFIG_IMPORT_WATCHED_GROUPS);
-                    if (roleSnowflake != null)
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.CONFIG_IMPORT_WATCHED_GROUPS, event.getMember()))
                     {
-                        if (event.getMember().getRoles().stream().map(Role::getId).noneMatch(roleSnowflake::equals))
-                        {
-                            hook.sendMessage("You do not have permission to import watched groups.").setEphemeral(true).queue();
-                            return;
-                        }
+                        hook.sendMessage("You do not have permission to import watched groups.").setEphemeral(true).queue();
+                        return;
                     }
                     Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
                     
@@ -2855,26 +2871,52 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.save();
     }
 
-    public void setPermissionRole(ScarletPermission scarletPermission, Role role)
+    public boolean deletePermissionRole(ScarletPermission scarletPermission, Role role)
     {
-        if (role != null)
-        {
-            this.scarletPermission2roleSf.put(scarletPermission.id, role.getId());
-            LOG.info(String.format("Setting role for Scarlet permission %s (%s) to %s (%s)", scarletPermission.title, scarletPermission.id, role.getName(), "<@"+role.getId()+">"));
-        }
-        else
-        {
-            this.scarletPermission2roleSf.remove(scarletPermission.id);
-            LOG.info(String.format("Unsetting role for Scarlet permission %s (%s)", scarletPermission.title, scarletPermission.id));
-        }
+        if (scarletPermission == null || role == null)
+            return false;
+        UniqueStrings roleSfs = this.scarletPermission2roleSf.computeIfAbsent(scarletPermission.id, $ -> new UniqueStrings());
+        if (roleSfs == null || !roleSfs.remove(role.getId()))
+            return false;
+        LOG.info(String.format("Removed role for Scarlet permission %s (%s): %s (%s)", scarletPermission.title, scarletPermission.id, role.getName(), "<@"+role.getId()+">"));
         this.save();
+        return true;
     }
 
-    public String getPermissionRole(ScarletPermission scarletPermission)
+    public boolean addPermissionRole(ScarletPermission scarletPermission, Role role)
+    {
+        if (scarletPermission == null || role == null)
+            return false;
+        UniqueStrings roleSfs = this.scarletPermission2roleSf.computeIfAbsent(scarletPermission.id, $ -> new UniqueStrings());
+        if (!roleSfs.add(role.getId()))
+            return false;
+        LOG.info(String.format("Adding role for Scarlet permission %s (%s): %s (%s)", scarletPermission.title, scarletPermission.id, role.getName(), "<@"+role.getId()+">"));
+        this.save();
+        return true;
+    }
+
+    public boolean checkMemberHasPermission(ScarletPermission scarletPermission, Member member)
+    {
+        return this.checkRolesHavePermission(scarletPermission, member.getRoles());
+    }
+    public boolean checkRolesHavePermission(ScarletPermission scarletPermission, List<Role> roles)
     {
         if (scarletPermission == null)
-            return null;
-        return this.scarletPermission2roleSf.get(scarletPermission.id);
+            return true;
+        UniqueStrings roleSfs = this.scarletPermission2roleSf.get(scarletPermission.id);
+        if (roleSfs == null || roleSfs.isEmpty())
+            return false;
+        return roles.stream().map(Role::getId).anyMatch(roleSfs::contains);
+    }
+
+    public boolean checkRoleHasPermission(ScarletPermission scarletPermission, Role role)
+    {
+        if (scarletPermission == null)
+            return true;
+        UniqueStrings roleSfs = this.scarletPermission2roleSf.get(scarletPermission.id);
+        if (roleSfs == null || roleSfs.isEmpty())
+            return false;
+        return roleSfs.contains(role.getId());
     }
 
     @FunctionalInterface interface CondEmit { Message emit(String channelSf, Guild guild, TextChannel channel); }
@@ -2919,7 +2961,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
             if (title != null)
                 embed.setTitle(title, url);
             if (updates != null && !updates.isEmpty())
-                updates.forEach((key, sub) -> embed.addField("`"+key+"`", "old: `"+sub.oldValue+"`\nnew :`"+sub.newValue+"`", false));
+                updates.forEach((key, sub) -> {
+                    String oldValue = String.valueOf(sub.oldValue),
+                           newValue = String.valueOf(sub.newValue);
+                    if (oldValue.length() > 480) oldValue = oldValue.substring(0, 480).concat("...");
+                    if (newValue.length() > 480) newValue = newValue.substring(0, 480).concat("...");
+                    embed.addField("`"+key+"`", "old: `"+oldValue+"`\nnew :`"+newValue+"`", false);
+                });
             if (condEmitEmbed != null)
                 condEmitEmbed.emitEmbed(channelSf, guild, channel, embed);
             return channel.sendMessageEmbeds(embed.build()).complete();
@@ -3282,10 +3330,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         JsonObject valueObject = value.getAsJsonObject();
                         if (valueObject.size() == 2 && valueObject.has("old") && valueObject.has("new"))
                         {
-                            valueString = new StringBuilder()
-                                .append("old: `").append(valueObject.get("old"))
-                                .append("`\nnew: `").append(valueObject.get("new")).append("`")
-                                .toString();
+                             String oldValue = String.valueOf(valueObject.get("old")),
+                                    newValue = String.valueOf(valueObject.get("new"));
+                             if (oldValue.length() > 480) oldValue = oldValue.substring(0, 480).concat("...");
+                             if (newValue.length() > 480) newValue = newValue.substring(0, 480).concat("...");
+                             valueString = new StringBuilder()
+                                 .append("old: `").append(oldValue)
+                                 .append("`\nnew: `").append(newValue).append("`")
+                                 .toString();
                         }
                     }
                     if (valueString == null)

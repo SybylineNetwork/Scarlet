@@ -4,6 +4,11 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.9-rc3
+  - Added ability to revert instance UI to default ordering by right clicking header
+  - Changed Discord command `set-permission-role` to `scarlet-permission` and added support for multiple roles
+  - Fixed bug (#9) that tried to set a Discord embed field value to more than 1024 characters
+
 ## 0.4.9-rc2
   - Added application version change detection
   - Changed Discord bot to only send command list if version changes
