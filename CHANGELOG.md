@@ -4,6 +4,11 @@
 ## Unreleased
   - Pending: StaffList
 
+## 0.4.9
+  - Added ability to redact audit events: they do not count in the running sum of moderation events for embeds
+  - Fixed autocomplete for the `scarlet-permission` Discord command not working
+  - Fixed manual command update button not working
+
 ## 0.4.9-rc3
   - Added ability to revert instance UI to default ordering by right clicking header
   - Changed Discord command `set-permission-role` to `scarlet-permission` and added support for multiple roles
