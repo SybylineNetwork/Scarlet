@@ -194,6 +194,8 @@ public interface ScarletDiscord extends Closeable
                 {
                     mostRecent = auditEntryMeta;
                 }
+                if (auditEntryMeta.entryRedacted)
+                    continue;
                 switch (auditEntryMeta.entry.getEventType())
                 {
                 case "group.instance.warn": {

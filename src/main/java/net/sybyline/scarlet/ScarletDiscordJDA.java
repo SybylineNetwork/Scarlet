@@ -51,8 +51,10 @@ import io.github.vrchatapi.model.World;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.IncomingWebhookClient;
 import net.dv8tion.jda.api.entities.Member;
@@ -230,6 +232,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             this.updateCommandList();
         }
+        this.jda.getPresence().setPresence(OnlineStatus.ONLINE, Activity.playing(Scarlet.NAME+", a VRChat group moderation tool").withState(Scarlet.GITHUB_URL));
         this.audio.init();
         this.scarlet.exec.scheduleAtFixedRate(this::clearDeadPagination, 30_000L, 30_000L, TimeUnit.MILLISECONDS);
     }
@@ -986,7 +989,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     } break;
                     }
                 } break;
-                case "set-permission-roles": {
+                case "scarlet-permission": {
                     switch (event.getFocusedOption().getName())
                     {
                     case "scarlet-permission": {
@@ -1835,7 +1838,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             {
                                 sb.append("\n`").append(auditEntryId).append("`");
                                 ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                                if (auditEntryMeta != null && auditEntryMeta.entry != null)
+                                if (auditEntryMeta != null && auditEntryMeta.entry != null && !auditEntryMeta.entryRedacted)
                                 {
                                     String messageLink = auditEntryMeta.getMessageUrl();
                                     sb.append(" <t:").append(Long.toUnsignedString(auditEntryMeta.entry.getCreatedAt().toEpochSecond())).append(":f>: ");
@@ -2425,6 +2428,64 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                     hook.sendMessageFormat("Unbanned %s", sc.getDisplayName()).setEphemeral(false).queue();
                 }); break;
+                case "event-redact": this.handleInGuildAsync(event, true, hook -> {
+                    
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_REDACT, event.getMember()))
+                    {
+                        hook.sendMessage("You do not have permission to redact events.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String auditEntryId = parts[1];
+                    
+                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
+                    if (auditEntryMeta == null)
+                    {
+                        hook.sendMessage("Failed to find the audit event.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (auditEntryMeta.entryRedacted)
+                    {
+                        hook.sendMessage("Event is already redacted.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    auditEntryMeta.entryRedacted = true;
+                    
+                    hook.sendMessage("Event redacted.").setEphemeral(false).queue();
+                    ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId, auditEntryMeta);
+                    this.updateAuxMessage(event.getChannel(), auditEntryMeta);
+                }); break;
+                case "event-unredact": this.handleInGuildAsync(event, true, hook -> {
+                    
+                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_UNREDACT, event.getMember()))
+                    {
+                        hook.sendMessage("You do not have permission to unredact events.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    String auditEntryId = parts[1];
+                    
+                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
+                    if (auditEntryMeta == null)
+                    {
+                        hook.sendMessage("Failed to find the audit event.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    if (!auditEntryMeta.entryRedacted)
+                    {
+                        hook.sendMessage("Event isn't yet redacted.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    auditEntryMeta.entryRedacted = false;
+                    
+                    hook.sendMessage("Event unredacted.").setEphemeral(false).queue();
+                    ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId, auditEntryMeta);
+                    this.updateAuxMessage(event.getChannel(), auditEntryMeta);
+                }); break;
                 case "edit-desc": { // FIXME : can't defer a modal
                     
                     if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SET_DESCRIPTION, event.getMember()))
@@ -2840,7 +2901,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
             if (auditEntryMeta.hasMessage() && auditEntryMeta.auxMessageSnowflake != null && auditEntryMeta.entry != null)
             {
                 ScarletData.UserMetadata actorMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryMeta.entry.getActorId());
-                String content = actorMeta == null || actorMeta.userSnowflake == null ? ("Unknown Discord id for actor "+auditEntryMeta.entry.getActorDisplayName()) : ("<@"+actorMeta.userSnowflake+">");
+                String content = auditEntryMeta.entryRedacted ? "# **__REDACTED__**\n\n" : "";
+                content = content + (actorMeta == null || actorMeta.userSnowflake == null ? ("Unknown Discord id for actor "+auditEntryMeta.entry.getActorDisplayName()) : ("<@"+actorMeta.userSnowflake+">"));
                 if (auditEntryMeta.entryTags != null && auditEntryMeta.entryTags.size() > 0)
                 {
                     String joined = auditEntryMeta.entryTags.strings().stream().map(ScarletDiscordJDA.this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
@@ -3133,7 +3195,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                               Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
                               Button.primary("vrchat-report:"+entryMeta.entry.getId(), "Get report link"))
                 .addActionRow(Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
-                              Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"))
+                              Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"),
+                              Button.primary("event-redact:"+entryMeta.entry.getId(), "Redact event"),
+                              Button.secondary("event-unredact:"+entryMeta.entry.getId(), "Unredact event"))
                 .completeAfter(1000L, TimeUnit.MILLISECONDS);
             
             entryMeta.auxMessageSnowflake = auxMessage.getId();

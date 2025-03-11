@@ -704,7 +704,7 @@ public class ScarletUI implements AutoCloseable
     {
         long then = this.discordUpdateCommandListlastUpdated.get(),
              now = System.currentTimeMillis();
-        if (then < (now - 3600_000L))
+        if (then > (now - 3600_000L))
         {
             this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Skipped, too fast", Color.PINK);
             return;

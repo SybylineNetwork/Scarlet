@@ -12,6 +12,8 @@ public enum ScarletPermission
     EVENT_SUBMIT_EVIDENCE("event.submit_evidence", "Submit Evidence"),
     EVENT_BAN_USER("event.ban_user", "Ban Users"),
     EVENT_UNBAN_USER("event.unban_user", "Unban Users"),
+    EVENT_REDACT("event.redact", "Redact Events"),
+    EVENT_UNREDACT("event.unredact", "Unredact Events"),
     CONFIG_IMPORT_WATCHED_GROUPS("config.import_watched_groups", "Submit Evidence"),
     CONFIG_EXPORT_LOGS("config.export_logs", "Export Logs"),
     ;

@@ -681,6 +681,7 @@ public class ScarletData
         
         public UniqueStrings entryTags = new UniqueStrings();
         public String entryDescription;
+        public boolean entryRedacted;
         
         public String auxActorId;
         public String auxActorDisplayName;
