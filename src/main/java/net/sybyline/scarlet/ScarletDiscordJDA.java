@@ -2292,7 +2292,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     
                 }); break;
                 case "set-audit-ex-channel": this.handleInGuildAsync(event, true, hook -> {
-                    String auditExType0 = event.getOption("auditex-event-type").getAsString();
+                    String auditExType0 = event.getOption("audit-ex-event-type").getAsString();
                     GroupAuditTypeEx auditExType = GroupAuditTypeEx.of(auditExType0);
                     if (auditExType == null)
                     {
@@ -3532,8 +3532,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         String worldImageUrl = this.getLocationImage(location);
         
-        String prevAuditEntryId = scarlet.data.liveInstancesMetadata_getLocationAudit(location, true);
+        String prevAuditEntryId = scarlet.data.liveInstancesMetadata_getLocationAudit(location, false);
         AuditEntryMetadata prevEntryMeta = prevAuditEntryId == null ? null : scarlet.data.auditEntryMetadata(prevAuditEntryId);
+        ScarletData.InstanceEmbedMessage instanceEmbedMessage = scarlet.data.liveInstancesMetadata_getLocationInstanceEmbedMessage(location, false);
+        if (instanceEmbedMessage != null)
+        {
+            instanceEmbedMessage.closedAt = entryMeta.entry.getCreatedAt();
+        }
+        
         this.condEmit(entryMeta, (channelSf, guild, channel) ->
         {
             boolean hasPrev = prevEntryMeta != null && prevEntryMeta.hasMessage();
@@ -3701,6 +3707,20 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     embed.addField("`"+key+"`", valueString, false);
                 }
             }
+        });
+    }
+
+    @Override
+    public void emitExtendedInstanceInactive(Scarlet scarlet, String location, String auditEntryId, ScarletData.InstanceEmbedMessage instanceEmbedMessage)
+    {
+        this.condEmitEx(GroupAuditTypeEx.INSTANCE_INACTIVE, (channelSf, guild, channel) ->
+        {
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                    .setTitle("Instance Inactive")
+                    .setDescription("`"+location+"`")
+                    .setColor(GroupAuditTypeEx.INSTANCE_INACTIVE.color)
+                    .build())
+                .complete();
         });
     }
 

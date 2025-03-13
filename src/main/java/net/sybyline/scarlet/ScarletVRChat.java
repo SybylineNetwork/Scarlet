@@ -39,6 +39,7 @@ import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupRole;
@@ -268,6 +269,7 @@ public class ScarletVRChat implements Closeable
                     .stream()
                     .map(JsonElement::getAsJsonPrimitive)
                     .map(JsonPrimitive::getAsString)
+                    .map(String::toLowerCase)
                     .collect(Collectors.toList());
             if (twoFactorMethods.contains("totp"))
             {
@@ -503,6 +505,26 @@ public class ScarletVRChat implements Closeable
                 this.cachedGroups.add404(groupId);
             else
                 LOG.error("Error during get group: "+apiex.getMessage());
+            return null;
+        }
+    }
+
+    public List<GroupInstance> getGroupInstances(String groupId)
+    {
+        if (this.cachedGroups.is404(groupId))
+            return null;
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            return groups.getGroupInstances(groupId);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedGroups.add404(groupId);
+            else
+                LOG.error("Error during get group instances: "+apiex.getMessage());
             return null;
         }
     }

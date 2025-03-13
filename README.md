@@ -82,7 +82,7 @@ Discord slash commands:
     - `audit-event-type` The VRChat Group Audit Log event type
   - `set-audit-ex-channel <audit-ex-event-type:string> <discord-channel:channel?>`<br>
     Sets a given text channel as the channel certain extended event types use<br>
-    Example: `/set-audit-channel "groupex.instance.vtk" <#log-instance-kicks>`
+    Example: `/set-audit-ex-channel "groupex.instance.vtk" <#log-instance-kicks>`
     - `audit-ex-event-type` The extended event type
     - `discord-channel` The Discord channel to use, or omit to remove entry
   - `set-voice-channel <discord-channel:channel?>`<br>
@@ -141,10 +141,10 @@ Scarlet can generate a link that will autopopulate the fields of the VRChat Help
 
 ### About Extended Events
 
-Extended audit events, like Staff Join, Staff Leave, and Vote-to-Kick Initiated are logged with the Discord command `set-audit-ex-channel`.
-These require that a VRChat Client in a group instance must be running on the same machine in order for them to be logged in Discord channels.
+Extended audit events (Instance Inactive, Staff Join, Staff Leave, Vote-to-Kick Initiated) are logged with the Discord command `set-audit-ex-channel`.
+Some of these require that a VRChat Client in a group instance must be running on the same machine in order for them to be logged in Discord channels.
 This limitation exists because Scarlet reads the VRChat client log file as it gets updated with information.
-At the moment, these events are not of the same degree as the canonical group audit events, but similar functionality may hopefully be added to VRChat's first-party API in the future.
+At the moment, these events are not of the same degree as the canonical group audit events, as they do not have an , but similar functionality may hopefully be added to VRChat's first-party API in the future.
 
 ## Installation
 
@@ -189,7 +189,7 @@ The VRChat account that Scarlet will use must have at least these permissions:
   - `View All Members`
 
 At the moment, Scarlet does not enforce any moderation action against users.
-All such actions (e.g., kicking or banning a user) must be performed via first-party methods.
+All such actions (e.g., kicking or banning a user) must be performed manually, but Scarlet provides some convenience methods like Discord commands and buttons.
 
 ### Installing the Scarlet desktop application
 

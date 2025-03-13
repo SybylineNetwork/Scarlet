@@ -125,7 +125,7 @@ public class ScarletVRChatLogs implements Closeable
 //        }
         else if (text.startsWith("[ModerationManager] "))
         {
-            if (text.startsWith("A vote kick has been initiated against ", 28) && text.endsWith(", do you agree?"))
+            if (text.startsWith("A vote kick has been initiated against ", 20) && text.endsWith(", do you agree?"))
             {
                 String displayName = text.substring(59, text.length() - 15);
                 this.listener.log_vtkInit(preamble, timestamp, displayName);
@@ -243,10 +243,8 @@ public class ScarletVRChatLogs implements Closeable
     private void catchUp(File file)
     {
         if (file != null)
-        {
             LOG.info("Caught up with " + file.getName());
-            this.listener.log_catchUp(file);
-        }
+        this.listener.log_catchUp(file);
     }
 
     private boolean pollTarget()

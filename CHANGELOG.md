@@ -4,6 +4,15 @@
 ## Unreleased
   - Pending: Staff & Instance Analysis, (live infographic?)
 
+## 0.4.10-rc2
+  - Fixed Email OTP (again)
+  - Added Instance Inactive extended event
+  - Staff mode now properly ignores audit log polling and related systems
+  - Fixed app hanging on startup if no VRChat logs were found
+  - Fixed log parsing for Vote-to-Kick Initiated
+  - Fixed data not getting saved
+  - Fixed the `/set-audit-ex-channel` having a typo in one of its options
+
 ## 0.4.10-rc1
   - Added staff list command `/staff-list`
   - Added extended events: Staff Join, Staff Leave, and Vote-to-Kick Initiated

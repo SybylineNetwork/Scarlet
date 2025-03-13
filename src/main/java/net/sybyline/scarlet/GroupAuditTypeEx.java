@@ -6,10 +6,10 @@ import java.util.Map;
 
 public enum GroupAuditTypeEx
 {
-
-    STAFF_JOIN     ("groupex.instance.staff.join" , "Staff Join"            , 0x00_00FF00),
-    STAFF_LEAVE    ("groupex.instance.staff.leave", "Staff Leave"           , 0x00_FFFF00),
-    VTK_START      ("groupex.instance.vtk"        , "Vote-to-Kick Initiated", 0x00_FF7F00),
+    INSTANCE_INACTIVE   ("groupex.instance.inactive"   , "Instance Inactive"     , 0x00_7F7FFF),
+    STAFF_JOIN          ("groupex.instance.staff.join" , "Staff Join"            , 0x00_00FF00),
+    STAFF_LEAVE         ("groupex.instance.staff.leave", "Staff Leave"           , 0x00_FFFF00),
+    VTK_START           ("groupex.instance.vtk"        , "Vote-to-Kick Initiated", 0x00_FF7F00),
     ;
 
     GroupAuditTypeEx(String id, String title, int color)

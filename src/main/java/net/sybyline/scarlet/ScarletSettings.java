@@ -44,6 +44,7 @@ public class ScarletSettings
         this.json = null;
         this.lastRunVersion = null;
         this.lastAuditQuery = null;
+        this.lastInstancesCheck = null;
         this.lastAuthRefresh = null;
         this.lastUpdateCheck = null;
         this.uiBounds = null;
@@ -61,7 +62,7 @@ public class ScarletSettings
     Preferences preferences;
     private JsonObject json;
     private String lastRunVersion;
-    private OffsetDateTime lastRunTime, lastAuditQuery, lastAuthRefresh, lastUpdateCheck;
+    private OffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck;
     private Rectangle uiBounds;
 
     public boolean checkHasVersionChangedSinceLastRun()
@@ -181,6 +182,36 @@ public class ScarletSettings
         this.preferences.put("lastAuditQuery", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuditQuery));
     }
 
+    public synchronized OffsetDateTime getLastInstancesCheck()
+    {
+        OffsetDateTime lastInstancesCheck = this.lastInstancesCheck;
+        if (lastInstancesCheck != null)
+            return lastInstancesCheck;
+        String lastInstancesCheckString = this.preferences.get("lastInstancesCheck", null);
+        if (lastInstancesCheckString == null) lastInstancesCheckString = this.globalPreferences.get("lastInstancesCheck", null);
+        if (lastInstancesCheckString != null) try
+        {
+            lastInstancesCheck = OffsetDateTime.parse(lastInstancesCheckString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+            this.lastInstancesCheck = lastInstancesCheck;
+            return lastInstancesCheck;
+        }
+        catch (RuntimeException ex)
+        {
+        }
+        lastInstancesCheck = OffsetDateTime.now(ZoneOffset.UTC);
+        this.lastInstancesCheck = lastInstancesCheck;
+        this.preferences.put("lastInstancesCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastInstancesCheck));
+        return lastInstancesCheck;
+    }
+
+    public synchronized void setLastInstancesCheck(OffsetDateTime lastInstancesCheck)
+    {
+        if (lastInstancesCheck == null)
+            return;
+        this.lastInstancesCheck = lastInstancesCheck;
+        this.preferences.put("lastInstancesCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastInstancesCheck));
+    }
+
     public synchronized OffsetDateTime getLastAuthRefresh()
     {
         OffsetDateTime lastAuthRefresh = this.lastAuthRefresh;
@@ -278,6 +309,7 @@ public class ScarletSettings
         JsonObject json = this.json;
         if (json != null)
             return json;
+        if (this.settingsFile.exists())
         try (Reader r = MiscUtils.reader(this.settingsFile))
         {
             json = Scarlet.GSON_PRETTY.fromJson(r, JsonObject.class);
@@ -285,6 +317,10 @@ public class ScarletSettings
         catch (Exception ex)
         {
             LOG.error("Exception loading settings", ex);
+            json = new JsonObject();
+        }
+        else
+        {
             json = new JsonObject();
         }
         this.json = json;

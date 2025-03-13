@@ -467,6 +467,26 @@ public class ScarletData
         this.liveInstances.markDirty();
         return liveInstancesMeta;
     }
+    public Set<String> liveInstancesMetadata_getLocations()
+    {
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstances.get();
+        return liveInstancesMeta.getLocations();
+    }
+    public InstanceEmbedMessage liveInstancesMetadata_getLocationInstanceEmbedMessage(String location, boolean remove)
+    {
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstances.get();
+        InstanceEmbedMessage instanceEmbedMessage = liveInstancesMeta.getLocationInstanceEmbedMessage(location, remove);
+        if (remove && instanceEmbedMessage != null)
+            this.liveInstances.markDirty();
+        return instanceEmbedMessage;
+    }
+    public ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake)
+    {
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstances.get();
+        liveInstancesMeta.setLocationInstanceEmbedMessage(location, guildSnowflake, channelSnowflake, messageSnowflake);
+        this.liveInstances.markDirty();
+        return liveInstancesMeta;
+    }
 
     public UserMetadata userMetadata(String userId)
     {
@@ -581,6 +601,13 @@ public class ScarletData
                 ? location2AuditEntryId.remove(location)
                 : location2AuditEntryId.get(location);
         }
+        public synchronized Set<String> getLocations()
+        {
+            Map<String, String> location2AuditEntryId = this.location2AuditEntryId;
+            if (location2AuditEntryId == null)
+                return null;
+            return location2AuditEntryId.keySet();
+        }
         public synchronized void setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake)
         {
             Map<String, InstanceEmbedMessage> location2instanceEmbedMessage = this.location2instanceEmbedMessage;
@@ -607,6 +634,7 @@ public class ScarletData
             this.guildSnowflake = guildSnowflake;
             this.channelSnowflake = channelSnowflake;
             this.messageSnowflake = messageSnowflake;
+            this.closedAt = null;
         }
         public InstanceEmbedMessage()
         {
@@ -615,6 +643,7 @@ public class ScarletData
         public String guildSnowflake;
         public String channelSnowflake;
         public String messageSnowflake;
+        public OffsetDateTime closedAt;
     }
 
     public static class UserMetadata

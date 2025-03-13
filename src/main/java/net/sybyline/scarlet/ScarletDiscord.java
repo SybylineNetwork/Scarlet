@@ -398,6 +398,7 @@ public interface ScarletDiscord extends Closeable
         this.emitDefault(scarlet, entryMeta);
     }
 
+    public void emitExtendedInstanceInactive(Scarlet scarlet, String location, String auditEntryId, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
     public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName);
     public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName);
     public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName);

@@ -12,9 +12,11 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +31,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.User;
 
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
@@ -54,7 +57,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.10-rc1",
+        VERSION = "0.4.10-rc2",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -166,6 +169,7 @@ public class Scarlet implements Closeable
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
         MiscUtils.close(this.ui);
+        this.data.saveAll();
         this.settings.updateRunVersionAndTime();
         LOG.info("Finished shutdown flow");
     }
@@ -235,7 +239,7 @@ public class Scarlet implements Closeable
                     return;
                 }
                 // query & emit
-                try
+                if (!this.staffMode) try
                 {
                     this.queryEmit();
                 }
@@ -263,6 +267,15 @@ public class Scarlet implements Closeable
                     LOG.error("Exception enumerating log files", ex);
                     return;
                 }
+                // maybe check instances
+                if (!this.staffMode) try
+                {
+                    this.maybeCheckInstances();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception maybe checking instances", ex);
+                }
                 // maybe check update
                 try
                 {
@@ -271,6 +284,15 @@ public class Scarlet implements Closeable
                 catch (Exception ex)
                 {
                     LOG.error("Exception maybe checking for update", ex);
+                }
+                // maybe save data
+                try
+                {
+                    this.maybeSaveData();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception maybe saving data", ex);
                 }
             }
         }
@@ -420,6 +442,42 @@ public class Scarlet implements Closeable
         {
             LOG.error("Failed to download meta", ex);
         }
+    }
+
+    void maybeCheckInstances()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (now.isAfter(this.settings.getLastInstancesCheck().plusHours(1)))
+        {
+            this.settings.setLastInstancesCheck(now);
+            this.checkInstances();
+        }
+    }
+
+    void checkInstances()
+    {
+        List<GroupInstance> groupInstances = this.vrc.getGroupInstances(this.vrc.groupId);
+        if (groupInstances == null || groupInstances.isEmpty())
+            return;
+        Set<String> locations = this.data.liveInstancesMetadata_getLocations();
+        if (locations == null || locations.isEmpty())
+            return;
+        locations = new HashSet<>(locations);
+        for (GroupInstance groupInstance : groupInstances)
+            locations.remove(groupInstance.getLocation());
+        if (locations.isEmpty())
+            return;
+        for (String location : locations)
+        {
+            String auditEntryId = this.data.liveInstancesMetadata_getLocationAudit(location, true);
+            ScarletData.InstanceEmbedMessage instanceEmbedMessage = this.data.liveInstancesMetadata_getLocationInstanceEmbedMessage(location, true);
+            this.discord.emitExtendedInstanceInactive(this, location, auditEntryId, instanceEmbedMessage);
+        }
+    }
+
+    void maybeSaveData()
+    {
+        this.data.saveDirty();
     }
 
     void maybeRefresh()
