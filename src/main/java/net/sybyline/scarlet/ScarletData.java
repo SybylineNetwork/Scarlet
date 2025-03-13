@@ -36,11 +36,17 @@ public class ScarletData
         this.dir = dir;
         this.objs = new ConcurrentHashMap<>();
         this.subs = new ConcurrentHashMap<>();
+        
+        this.liveInstances = this.getDatum("live.json", LiveInstancesMetadata.class);
+        this.global = this.getDatum("global.json", GlobalMetadata.class);
     }
 
     final File dir;
     final Map<String, Datum<?>> objs;
     final Map<String, Data<?>> subs;
+
+    final Datum<LiveInstancesMetadata> liveInstances;
+    final Datum<GlobalMetadata> global;
 
     public <T> Datum<T> getDatum(String name, Class<T> type)
     {
@@ -433,64 +439,32 @@ public class ScarletData
         }
     }
 
-    public GlobalMetadata globalMetadata()
-    {
-        return this.readObj("global.json", GlobalMetadata.class);
-    }
-    public void globalMetadata(GlobalMetadata globalMetadata)
-    {
-        this.writeObj("global.json", GlobalMetadata.class, globalMetadata);
-    }
-    public void globalMetadata(UnaryOperator<GlobalMetadata> edit)
-    {
-        this.editObj("global.json", GlobalMetadata.class, edit);
-    }
     public String globalMetadata_getSnowflakeId(String userSnowflake)
     {
-        ScarletData.GlobalMetadata globalMeta = this.globalMetadata();
-        if (globalMeta == null)
-            return null;
+        ScarletData.GlobalMetadata globalMeta = this.global.get();
         return globalMeta.getSnowflakeId(userSnowflake);
     }
     public ScarletData.GlobalMetadata globalMetadata_setSnowflakeId(String userSnowflake, String userId)
     {
-        ScarletData.GlobalMetadata globalMeta = this.globalMetadata();
-        if (globalMeta == null)
-            globalMeta = new ScarletData.GlobalMetadata();
+        ScarletData.GlobalMetadata globalMeta = this.global.get();
         globalMeta.setSnowflakeId(userSnowflake, userId);
-        this.globalMetadata(globalMeta);
+        this.global.markDirty();
         return globalMeta;
     }
 
-    public LiveInstancesMetadata liveInstancesMetadata()
+    public String liveInstancesMetadata_getLocationAudit(String location, boolean remove)
     {
-        return this.readObj("live.json", LiveInstancesMetadata.class);
-    }
-    public void liveInstancesMetadata(LiveInstancesMetadata liveInstancesMeta)
-    {
-        this.writeObj("live.json", LiveInstancesMetadata.class, liveInstancesMeta);
-    }
-    public void liveInstancesMetadata(UnaryOperator<LiveInstancesMetadata> edit)
-    {
-        this.editObj("live.json", LiveInstancesMetadata.class, edit);
-    }
-    public synchronized String liveInstancesMetadata_getLocationAudit(String location, boolean remove)
-    {
-        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstancesMetadata();
-        if (liveInstancesMeta == null)
-            return null;
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstances.get();
         String auditEntryId = liveInstancesMeta.getLocationAudit(location, remove);
         if (remove && auditEntryId != null)
-            this.liveInstancesMetadata(liveInstancesMeta);
+            this.liveInstances.markDirty();
         return auditEntryId;
     }
-    public synchronized ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationAudit(String location, String auditEntryId)
+    public ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationAudit(String location, String auditEntryId)
     {
-        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstancesMetadata();
-        if (liveInstancesMeta == null)
-            liveInstancesMeta = new ScarletData.LiveInstancesMetadata();
+        ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstances.get();
         liveInstancesMeta.setLocationAudit(location, auditEntryId);
-        this.liveInstancesMetadata(liveInstancesMeta);
+        this.liveInstances.markDirty();
         return liveInstancesMeta;
     }
 
@@ -587,6 +561,7 @@ public class ScarletData
         }
         
         public Map<String, String> location2AuditEntryId;
+        public Map<String, InstanceEmbedMessage> location2instanceEmbedMessage;
         
         public synchronized void setLocationAudit(String location, String auditEntryId)
         {
@@ -606,6 +581,40 @@ public class ScarletData
                 ? location2AuditEntryId.remove(location)
                 : location2AuditEntryId.get(location);
         }
+        public synchronized void setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake)
+        {
+            Map<String, InstanceEmbedMessage> location2instanceEmbedMessage = this.location2instanceEmbedMessage;
+            if (location2instanceEmbedMessage == null)
+                this.location2instanceEmbedMessage = location2instanceEmbedMessage = new HashMap<>();
+            if (!(location2instanceEmbedMessage instanceof HashMap))
+                this.location2instanceEmbedMessage = location2instanceEmbedMessage = new HashMap<>(location2instanceEmbedMessage);
+            location2instanceEmbedMessage.put(location, new InstanceEmbedMessage(guildSnowflake, channelSnowflake, messageSnowflake));
+        }
+        public synchronized InstanceEmbedMessage getLocationInstanceEmbedMessage(String location, boolean remove)
+        {
+            Map<String, InstanceEmbedMessage> location2instanceEmbedMessage = this.location2instanceEmbedMessage;
+            if (location2instanceEmbedMessage == null)
+                return null;
+            return remove
+                ? location2instanceEmbedMessage.remove(location)
+                : location2instanceEmbedMessage.get(location);
+        }
+    }
+    public static class InstanceEmbedMessage
+    {
+        public InstanceEmbedMessage(String guildSnowflake, String channelSnowflake, String messageSnowflake)
+        {
+            this.guildSnowflake = guildSnowflake;
+            this.channelSnowflake = channelSnowflake;
+            this.messageSnowflake = messageSnowflake;
+        }
+        public InstanceEmbedMessage()
+        {
+        }
+        
+        public String guildSnowflake;
+        public String channelSnowflake;
+        public String messageSnowflake;
     }
 
     public static class UserMetadata
@@ -686,6 +695,8 @@ public class ScarletData
         public String auxActorId;
         public String auxActorDisplayName;
         
+        public String parentEventId;
+        
         public boolean hasMessage()
         { return this.guildSnowflake != null && this.channelSnowflake != null && this.messageSnowflake != null; }
         public String getMessageDelineated()
@@ -713,15 +724,18 @@ public class ScarletData
         { return !this.hasThread() ? null : String.format("%s/%s", this.guildSnowflake, this.threadSnowflake); }
         public String getThreadUrl()
         { return !this.hasThread() ? null : String.format("https://discord.com/channels/%s/%s", this.guildSnowflake, this.threadSnowflake); }
-
+        
         public boolean hasSomeUrl()
         { return this.hasThread() || this.hasMessage() || this.hasAuxMessage(); }
         public String getSomeUrl()
         { return this.hasThread() ? this.getThreadUrl() : this.hasMessage() ? this.getMessageUrl() : this.hasAuxMessage() ? this.getAuxMessageUrl() : null; }
-
+        
         public boolean hasAuxActor()
         { return this.auxActorId != null; }
-
+        
+        public boolean hasParentEvent()
+        { return this.parentEventId != null; }
+        
         public boolean hasNonEmptyData()
         { Object data = this.entry.getData(); return data != null && data instanceof Map && !((Map<?, ?>)data).isEmpty(); }
         public Map<String, Object> getData()

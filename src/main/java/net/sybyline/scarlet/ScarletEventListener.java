@@ -153,6 +153,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
+        
+        if (!preamble && this.isInGroupInstance && this.scarlet.staffList.isStaffId(userId))
+            this.scarlet.discord.emitExtendedStaffJoin(this.scarlet, timestamp, userId, userDisplayName);
     }
 
     @Override
@@ -161,6 +164,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userId2userDisplayName.remove(userId);
         this.clientLocation_userDisplayName2avatarDisplayName.remove(userDisplayName);
         this.scarlet.ui.playerLeave(!this.isTailerLive, userId, userDisplayName, timestamp);
+        
+        if (!preamble && this.isInGroupInstance && this.scarlet.staffList.isStaffId(userId))
+            this.scarlet.discord.emitExtendedStaffLeave(this.scarlet, timestamp, userId, userDisplayName);
     }
 
     @Override
@@ -223,6 +229,16 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         if (overall_type != null)
             return overall_type.text_color;
         return null;
+    }
+
+    @Override
+    public void log_vtkInit(boolean preamble, LocalDateTime timestamp, String displayName)
+    {
+        if (!preamble && this.isInGroupInstance)
+        {
+            String userId = this.clientLocation_userDisplayName2userId.get(displayName);
+            this.scarlet.discord.emitExtendedVtkInitiated(this.scarlet, timestamp, userId, displayName);
+        }
     }
 
     // TTSService.Listener

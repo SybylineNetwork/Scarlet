@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.gson.reflect.TypeToken;
 
+import net.dv8tion.jda.api.interactions.commands.Command;
 import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletModerationTags
@@ -23,10 +24,12 @@ public class ScarletModerationTags
     {
         this.moderationTagsFile = moderationTagsFile;
         this.tags = null;
+        this.choicesCache = null;
     }
 
     final File moderationTagsFile;
     private List<Tag> tags;
+    private List<Command.Choice> choicesCache;
 
     public static class Tag
     {
@@ -114,6 +117,7 @@ public class ScarletModerationTags
         Tag tag = new Tag(value, label, description);
         if (!tags.add(tag))
             return -1;
+        this.choicesCache = null;
         this.saveJson();
         return 0;
     }
@@ -130,6 +134,7 @@ public class ScarletModerationTags
             return -3;
         if (!tags.remove(old))
             return -1;
+        this.choicesCache = null;
         this.saveJson();
         return 0;
     }
@@ -151,6 +156,21 @@ public class ScarletModerationTags
         for (Tag tag : tags)
             values.add(tag.value);
         return values;
+    }
+
+    public List<Command.Choice> getTagChoices()
+    {
+        List<Command.Choice> choices = this.choicesCache;
+        if (choices != null)
+            return choices;
+        List<Tag> tags = this.getJson();
+        if (tags == null)
+            return new ArrayList<>(0);
+        choices = new ArrayList<>(tags.size());
+        for (Tag tag : tags)
+            choices.add(new Command.Choice(tag.label != null ? tag.label : tag.value, tag.value));
+        this.choicesCache = choices;
+        return choices;
     }
 
     public String getTagLabel(String value)

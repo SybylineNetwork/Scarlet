@@ -272,7 +272,11 @@ public class ScarletUI implements AutoCloseable
     }
     public synchronized Setting<String> settingString(String id, String name, String defaultValue, String regex)
     {
-        return this.settingString(id, name, defaultValue, regex == null ? null : Pattern.compile(regex).asPredicate());
+        return this.settingString(id, name, defaultValue, regex == null ? null : Pattern.compile(regex));
+    }
+    public synchronized Setting<String> settingString(String id, String name, String defaultValue, Pattern pattern)
+    {
+        return this.settingString(id, name, defaultValue, pattern == null ? null : pattern.asPredicate());
     }
     public synchronized Setting<String> settingString(String id, String name, String defaultValue, Predicate<String> validator)
     {
@@ -729,7 +733,7 @@ public class ScarletUI implements AutoCloseable
             return;
         }
         
-        GroupMemberStatus status = this.scarlet.vrc.getMembership(id);
+        GroupMemberStatus status = this.scarlet.vrc.getGroupMembershipStatus(this.scarlet.vrc.groupId, id);
         
         if (status == GroupMemberStatus.BANNED)
         {
@@ -764,7 +768,7 @@ public class ScarletUI implements AutoCloseable
             return;
         }
         
-        GroupMemberStatus status = this.scarlet.vrc.getMembership(id);
+        GroupMemberStatus status = this.scarlet.vrc.getGroupMembershipStatus(this.scarlet.vrc.groupId, id);
         
         if (status != GroupMemberStatus.BANNED)
         {

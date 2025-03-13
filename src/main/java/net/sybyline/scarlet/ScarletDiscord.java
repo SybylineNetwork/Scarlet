@@ -2,6 +2,7 @@ package net.sybyline.scarlet;
 
 import java.io.Closeable;
 import java.io.File;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +49,7 @@ public interface ScarletDiscord extends Closeable
             if (pendingActorId != null)
             {
                 entryMeta.auxActorId = pendingActorId;
-                User auxActor = scarlet.vrc.getUser(entry.getActorId());
+                User auxActor = scarlet.vrc.getUser(pendingActorId);
                 if (auxActor != null)
                 {
                     entryMeta.auxActorDisplayName = auxActor.getDisplayName();
@@ -136,7 +137,7 @@ public interface ScarletDiscord extends Closeable
         }
     }
 
-    public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent);
+    public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent, ScarletData.AuditEntryMetadata parentEntryMeta, boolean reactiveKickFromBan);
     public default void processUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta)
     {
         String //type = entryMeta.entry.getEventType(),
@@ -181,6 +182,8 @@ public interface ScarletDiscord extends Closeable
         }
         
         String history = null, recent = null;
+        boolean reactiveKickFromBan = false;
+        ScarletData.AuditEntryMetadata parentEntryMeta = null;
         if (auditEntryMetas != null)
         {
             int iwarns = 0, imutes = 0, ikicks = 0, gkicks = 0, gbans = 0;
@@ -194,7 +197,7 @@ public interface ScarletDiscord extends Closeable
                 {
                     mostRecent = auditEntryMeta;
                 }
-                if (auditEntryMeta.entryRedacted)
+                if (auditEntryMeta.entryRedacted || auditEntryMeta.hasParentEvent())
                     continue;
                 switch (auditEntryMeta.entry.getEventType())
                 {
@@ -271,9 +274,16 @@ public interface ScarletDiscord extends Closeable
                     prevModStr = String.format("[%s](%s)", prevModStr, prevModUrl);
                 recent = prevModStr;
             }
-            
+            if (Objects.equals(GroupAuditType.INSTANCE_KICK.id, entryMeta.entry.getEventType())
+             && Objects.equals(GroupAuditType.USER_BAN.id, mostRecent.entry.getEventType())
+             && Objects.equals(entryMeta.entry.getActorId(), mostRecent.entry.getActorId())
+             && entryMeta.entry.getCreatedAt().minusMinutes(5L).isBefore(mostRecent.entry.getCreatedAt()))
+            {
+                parentEntryMeta = mostRecent;
+                reactiveKickFromBan = true;
+            }
         }
-        this.emitUserModeration(scarlet, entryMeta, target, actorMeta, targetMeta, history, recent);
+        this.emitUserModeration(scarlet, entryMeta, target, actorMeta, targetMeta, history, recent, parentEntryMeta, reactiveKickFromBan);
     }
 
     public void emitInstanceCreate(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, String location);
@@ -387,5 +397,9 @@ public interface ScarletDiscord extends Closeable
     {
         this.emitDefault(scarlet, entryMeta);
     }
+
+    public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName);
+    public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName);
+    public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName);
 
 }

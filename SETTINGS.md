@@ -61,6 +61,13 @@ Settings for the Discord bot account
         "group.instance.create": "123456789123456789"
     },
     
+    // Map of extended entry event type to Discord channel snowflake id
+    "auditType2channelSf": {
+        "groupex.instance.staff.join": "123456789123456789",
+        "groupex.instance.staff.leave": "123456789123456789",
+        "groupex.instance.vtk": "123456789123456789"
+    },
+    
     // Map of audit entry event type to auxiliary webhook internal id(s)
     "auditType2scarletAuxWh": {
         "group.instance.kick": "External Webhook One",
@@ -234,6 +241,15 @@ Current live instance information:
     // Map of VRChat locations of live group instances to VRChat group audit entry ids
     "location2AuditEntryId": {
         "wrld_00000000-0000-0000-0000-000000000000:00000~group(grp_00000000-0000-0000-0000-000000000000)~groupAccessType(plus)~region(us)": "gaud_00000000-0000-0000-0000-000000000000"
+    },
+    
+    // Map of VRChat locations of live group instances to Discord messages
+    "location2instanceEmbedMessage": {
+        "wrld_00000000-0000-0000-0000-000000000000:00000~group(grp_00000000-0000-0000-0000-000000000000)~groupAccessType(plus)~region(us)": {
+            "guildSnowflake": "123456789123456789",
+            "channelSnowflake": "123456789123456789",
+            "messageSnowflake": "123456789123456789"
+        }
     }
 }
 ```
@@ -317,7 +333,10 @@ Group audit log event information:
     "auxActorId": "usr_00000000-0000-0000-0000-000000000000",
     
     // Display name of the actor who used automation/assistance to effect this event
-    "auxActorDisplayName": "Somebody"
+    "auxActorDisplayName": "Somebody",
+    
+    // Audit entry id of the event that directly and necessarily caused this event
+    "parentEventId": "gaud_00000000-0000-0000-0000-000000000000",
 }
 ```
 

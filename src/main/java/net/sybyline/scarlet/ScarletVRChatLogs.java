@@ -54,6 +54,8 @@ public class ScarletVRChatLogs implements Closeable
         void log_playerLeft(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId);
         void log_playerSwitchAvatar(boolean preamble, LocalDateTime timestamp, String userDisplayName, String avatarDisplayName);
         
+        void log_vtkInit(boolean preamble, LocalDateTime timestamp, String displayName);
+        
 //        void log_explicitTokenRequest(boolean preamble, LocalDateTime timestamp, String fileId, int fileVersion, String fileVariant);
         
     }
@@ -121,6 +123,14 @@ public class ScarletVRChatLogs implements Closeable
 //                this.listener.log_explicitTokenRequest(preamble, timestamp, fileId, fileVersion, fileVariant);
 //            }
 //        }
+        else if (text.startsWith("[ModerationManager] "))
+        {
+            if (text.startsWith("A vote kick has been initiated against ", 28) && text.endsWith(", do you agree?"))
+            {
+                String displayName = text.substring(59, text.length() - 15);
+                this.listener.log_vtkInit(preamble, timestamp, displayName);
+            }
+        }
         else if (text.startsWith("VRCApplication: HandleApplicationQuit at "))
         {
             double lifetimeSeconds = MiscUtils.parseDoubleElse(text.substring(41), Double.NaN);

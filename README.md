@@ -80,6 +80,11 @@ Discord slash commands:
     Sets the given webhooks as the webhooks certain audit event types use<br>
     Example: `/set-audit-aux-webhooks "group.instance.kick"`
     - `audit-event-type` The VRChat Group Audit Log event type
+  - `set-audit-ex-channel <audit-ex-event-type:string> <discord-channel:channel?>`<br>
+    Sets a given text channel as the channel certain extended event types use<br>
+    Example: `/set-audit-channel "groupex.instance.vtk" <#log-instance-kicks>`
+    - `audit-ex-event-type` The extended event type
+    - `discord-channel` The Discord channel to use, or omit to remove entry
   - `set-voice-channel <discord-channel:channel?>`<br>
     Sets a given voice channel as the channel in which to announce TTS messages<br>
     Example: `/set-voice-channel <#staff-in-instance>`
@@ -133,6 +138,13 @@ Scarlet has several commands you can enter via standard input:
 
 Scarlet links to the official VRChat website whenever possible, including for user profiles, group posts, instances, and much more.
 Scarlet can generate a link that will autopopulate the fields of the VRChat Help Desk report form based on custom tags assigned to moderation events, streamlining the reporting process and reducing mistakes from human error.
+
+### About Extended Events
+
+Extended audit events, like Staff Join, Staff Leave, and Vote-to-Kick Initiated are logged with the Discord command `set-audit-ex-channel`.
+These require that a VRChat Client in a group instance must be running on the same machine in order for them to be logged in Discord channels.
+This limitation exists because Scarlet reads the VRChat client log file as it gets updated with information.
+At the moment, these events are not of the same degree as the canonical group audit events, but similar functionality may hopefully be added to VRChat's first-party API in the future.
 
 ## Installation
 

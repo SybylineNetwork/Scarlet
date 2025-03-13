@@ -41,6 +41,7 @@ import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
+import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
@@ -535,20 +536,36 @@ public class ScarletVRChat implements Closeable
         }
     }
 
-    public GroupMemberStatus getMembership(String targetUserId)
+    public GroupMemberStatus getGroupMembershipStatus(String groupId, String targetUserId)
+    {
+        GroupLimitedMember member = this.getGroupMembership(groupId, targetUserId);
+        return member == null ? null : member.getMembershipStatus();
+    }
+    public GroupLimitedMember getGroupMembership(String groupId, String targetUserId)
     {
         GroupsApi groups = new GroupsApi(this.client);
         try
         {
-            GroupLimitedMember member = groups.getGroupMember(this.groupId, targetUserId);
-            if (member == null)
-                return null;
-            return member.getMembershipStatus();
+            return groups.getGroupMember(groupId, targetUserId);
         }
         catch (ApiException apiex)
         {
             this.scarlet.checkVrcRefresh(apiex);
-            LOG.error("Error during ban from group: "+apiex.getMessage());
+            LOG.error("Error getting group member group: "+apiex.getMessage());
+            return null;
+        }
+    }
+    public List<GroupRole> getGroupRoles(String groupId)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            return groups.getGroupRoles(groupId);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error getting group roles: "+apiex.getMessage());
             return null;
         }
     }

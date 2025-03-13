@@ -2,7 +2,15 @@
 # Changelog
 
 ## Unreleased
-  - Pending: StaffList
+  - Pending: Staff & Instance Analysis, (live infographic?)
+
+## 0.4.10-rc1
+  - Added staff list command `/staff-list`
+  - Added extended events: Staff Join, Staff Leave, and Vote-to-Kick Initiated
+  - Added audit event bundling: if a User Ban results in a Instance Kick, then the latter is logged with the former by default
+  - Changed the command suggestions to display more human-friendly names over internal identifiers
+  - Fixed Discord roles being mistakenly formatted like Discord users
+  - Fixed moderation events initiated with commands or buttons not properly referencing the initiating user
 
 ## 0.4.9
   - Added ability to redact audit events: they do not count in the running sum of moderation events for embeds
