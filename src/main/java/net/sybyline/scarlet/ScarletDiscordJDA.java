@@ -65,7 +65,6 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.MessageReference;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.Webhook;
 import net.dv8tion.jda.api.entities.WebhookClient;
@@ -2887,30 +2886,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
                     
-                    MessageReference ref = message.getMessageReference();
-                    
-                    if (ref == null)
-                    {
-                        hook.sendMessage("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    Message replyTarget = ref.getMessage();
-                    
-                    if (replyTarget == null)
-                    {
-                        replyTarget = ref.resolve().complete();
-                    }
-                    
-                    if (replyTarget == null)
-                    {
-                        hook.sendMessage("The target message is no longer available.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String[] partsRef = replyTarget
-                        .getButtons()
+                    String[] partsRef = event.getChannel()
+                        .asThreadChannel()
+                        .getHistoryFromBeginning(2)
+                        .complete()
+                        .getRetrievedHistory()
                         .stream()
+                        .map(Message::getButtons)
+                        .flatMap(List::stream)
                         .filter($ -> $.getId().startsWith("edit-tags:"))
                         .findFirst()
                         .map($ -> $.getId().split(":"))
@@ -3770,7 +3753,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle("Instance Inactive")
-                    .setDescription("`"+location+"`")
+                    .setDescription("Location: `"+location+"`")
                     .setColor(GroupAuditTypeEx.INSTANCE_INACTIVE.color)
                     .build())
                 .complete();
@@ -3778,12 +3761,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
 
     @Override
-    public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName)
+    public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName)
     {
         this.condEmitEx(GroupAuditTypeEx.STAFF_JOIN, false, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(displayName+" joined a group instance", "https://vrchat.com/home/user/"+userId)
+                    .setDescription("Location: `"+location+"`")
                     .setColor(GroupAuditTypeEx.STAFF_JOIN.color)
                     .build())
                 .complete();
@@ -3791,12 +3775,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
 
     @Override
-    public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName)
+    public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName)
     {
         this.condEmitEx(GroupAuditTypeEx.STAFF_LEAVE, false, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(displayName+" left a group instance", "https://vrchat.com/home/user/"+userId)
+                    .setDescription("Location: `"+location+"`")
                     .setColor(GroupAuditTypeEx.STAFF_LEAVE.color)
                     .build())
                 .complete();
@@ -3804,12 +3789,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
 
     @Override
-    public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName)
+    public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName)
     {
         this.condEmitEx(GroupAuditTypeEx.VTK_START, true, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(displayName+" was targeted by a vote-to-kick", "https://vrchat.com/home/user/"+userId)
+                    .setDescription("Location: `"+location+"`")
                     .setColor(GroupAuditTypeEx.VTK_START.color)
                     .build())
                 .complete();

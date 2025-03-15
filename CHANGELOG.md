@@ -4,6 +4,10 @@
 ## Unreleased
   - Pending: Staff & Instance Analysis, (live infographic?)
 
+## 0.4.10-rc4
+  - Added location to extended event embeds
+  - Changed evidence submission to not require a direct reply, but instead to just be in the same thread
+
 ## 0.4.10-rc3
   - Added settings for enabling and selecting the evidence submission folder
   - Added listing auxiliary webhooks to `config-info`

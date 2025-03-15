@@ -155,7 +155,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             this.clientLocationPrev_userIds.clear();
         
         if (!preamble && this.isInGroupInstance && this.scarlet.staffList.isStaffId(userId))
-            this.scarlet.discord.emitExtendedStaffJoin(this.scarlet, timestamp, userId, userDisplayName);
+            this.scarlet.discord.emitExtendedStaffJoin(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName);
     }
 
     @Override
@@ -166,7 +166,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.scarlet.ui.playerLeave(!this.isTailerLive, userId, userDisplayName, timestamp);
         
         if (!preamble && this.isInGroupInstance && this.scarlet.staffList.isStaffId(userId))
-            this.scarlet.discord.emitExtendedStaffLeave(this.scarlet, timestamp, userId, userDisplayName);
+            this.scarlet.discord.emitExtendedStaffLeave(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName);
     }
 
     @Override
@@ -237,7 +237,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         if (!preamble && this.isInGroupInstance)
         {
             String userId = this.clientLocation_userDisplayName2userId.get(displayName);
-            this.scarlet.discord.emitExtendedVtkInitiated(this.scarlet, timestamp, userId, displayName);
+            this.scarlet.discord.emitExtendedVtkInitiated(this.scarlet, timestamp, this.clientLocation, userId, displayName);
         }
     }
 
