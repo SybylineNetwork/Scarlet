@@ -3,13 +3,15 @@
 
 [![discord-widget][]][discord-invite]
 
+<img src="images/sybyline_scarlet.png?raw=true" alt="Scarlet logo" width="300" height="300"/>
+
 # Scarlet
 
 A self-hostable VRChat Group management utility with Discord integration
 
-[Changelog](https://github.com/SybylineNetwork/Scarlet/blob/main/CHANGELOG.md)
+[Changelog](CHANGELOG.md)
 
-[Settings](https://github.com/SybylineNetwork/Scarlet/blob/main/SETTINGS.md)
+[Settings](SETTINGS.md)
 
 [Installation](#installation)
 
@@ -169,17 +171,17 @@ Scarlet requires some permissions above the bare defaults:
 1. In the `Installation` tab for your app:
     - Scarlet only supports installation for servers.<br>
       Ensure that only the `Guild Install` box is checked in the `Installation Contexts` area.<br>
-      ![setup installation contexts](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_installation_contexts.png?raw=true)
+      ![setup installation contexts](images/setup_installation_contexts.png?raw=true)
     - In the `Guild Install` part of the `Default Install Settings` area:
       - Add the `bot` scope.
       - Add the `Attach Files`, `Create Polls`, `Create Public Threads`, `Embed Links`, `Manage Webhooks`, `Read Message History`, `Send Messages`, `Send Messages in Threads`, `Speak`, and `View Channels` permissions.<br>
-        ![setup default install settings](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_default_install_settings.png?raw=true)
+        ![setup default install settings](images/setup_default_install_settings.png?raw=true)
 2. In the `Bot` tab:
     - Enable the `Server Members` and `Message Content` intent in the `Privileged Gateway Intents` area.<br>
-      ![setup privileged gateway intents](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_privileged_gateway_intents.png?raw=true)
+      ![setup privileged gateway intents](images/setup_privileged_gateway_intents.png?raw=true)
 3. Invite the bot to your server
 4. In the `Installation` tab for your app, select the `None` option for the `Install Link` area<br>
-   ![setup install link](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_install_link.png?raw=true)
+   ![setup install link](images/setup_install_link.png?raw=true)
 
 ### Setting up the VRChat group
 
@@ -199,7 +201,7 @@ All such actions (e.g., kicking or banning a user) must be performed manually, b
     - Download and extract a Java 8 JDK, such as this one from [Adoptium](https://adoptium.net/temurin/releases/?os=windows&arch=x64&package=jdk&version=8).
     - Remove the `@rem ` comment syntax from the beginnings of lines 2 and 3 of `run.bat`
     - At the end of line 2, append the path of the directory of the JDK you extracted.<br>
-      ![setup edit runner](https://github.com/SybylineNetwork/Scarlet/blob/main/images/setup_edit_runner.png?raw=true)
+      ![setup edit runner](images/setup_edit_runner.png?raw=true)
     - If you update Scarlet, remember to either update the version of the `.jar` on line 4:<br>
       `java -jar scarlet-?.?.?.jar`.
 4. If you want Scarlet to store data in a specific folder:
