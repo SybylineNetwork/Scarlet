@@ -199,7 +199,10 @@ General settings for Scarlet:
     "discord_ping_user_ban": true,
     
     // Whether to issue a ping to the Discord user whose associated VRChat user issues a User Unban
-    "discord_ping_user_unban": false
+    "discord_ping_user_unban": false,
+    
+    // Whether evidence submission is enabled
+    "evidence_enabled": false
 }
 ```
 

@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
+import javax.swing.JFileChooser;
 
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -135,6 +136,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.pingOnModeration_memberRemove = scarlet.ui.settingBool("discord_ping_member_remove", "Discord: Ping on Member Remove", true);
         this.pingOnModeration_userBan = scarlet.ui.settingBool("discord_ping_user_ban", "Discord: Ping on User Ban", true);
         this.pingOnModeration_userUnban = scarlet.ui.settingBool("discord_ping_user_unban", "Discord: Ping on User Unban", false);
+        this.evidenceEnabled = scarlet.ui.settingBool("evidence_enabled", "Evidence submission", false);
+        this.selectEvidenceRoot = scarlet.ui.settingVoid("Evidence root folder", "Select", this::selectEvidenceRoot);
         this.load();
         JDA jda = null;
         if (this.token != null && !this.token.trim().isEmpty()) try
@@ -187,7 +190,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      pingOnModeration_instanceKick,
                                      pingOnModeration_memberRemove,
                                      pingOnModeration_userBan,
-                                     pingOnModeration_userUnban;
+                                     pingOnModeration_userUnban,
+                                     evidenceEnabled;
+    final ScarletUI.Setting<Void> selectEvidenceRoot;
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
     Map<String, UniqueStrings> scarletPermission2roleSf = new HashMap<>();
@@ -457,6 +462,27 @@ public class ScarletDiscordJDA implements ScarletDiscord
         LOG.warn("No Discord bot token: entering staff mode");
         this.scarlet.staffMode = true;
         this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
+    }
+
+    void selectEvidenceRoot()
+    {
+        this.scarlet.execModal.submit(() ->
+        {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Select a Folder");
+            chooser.setDialogType(JFileChooser.SAVE_DIALOG);
+            chooser.setMultiSelectionEnabled(false);
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (this.evidenceRoot != null && !this.evidenceRoot.trim().isEmpty())
+            {
+                chooser.setSelectedFile(new File(this.evidenceRoot));
+            }
+            int result = chooser.showOpenDialog(null);
+            if (result == JFileChooser.APPROVE_OPTION)
+            {
+                
+            }
+        });
     }
 
     IncomingWebhookClient getOrCreateIWC(String scarletAuxWh)
@@ -2199,6 +2225,23 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             .append(auditType.id)
                             .append("): ")
                             .append(channelSf == null ? "unassigned" : ("<#"+channelSf+">"));
+                        UniqueStrings auxWhs = ScarletDiscordJDA.this.auditType2scarletAuxWh.get(auditType.id);
+                        if (auxWhs != null && !auxWhs.isEmpty())
+                        {
+                            sb.append(auxWhs.stream().collect(Collectors.joining(", ", " (Auxiliary webhooks: ", ")")));
+                        }
+                    }
+                    
+                    sb.append("\n### Extended auditing Channels:");
+                    for (GroupAuditTypeEx auditTypeEx : GroupAuditTypeEx.values())
+                    {
+                        String channelSf = ScarletDiscordJDA.this.auditExType2channelSf.get(auditTypeEx.id);
+                        sb.append("\n")
+                            .append(auditTypeEx.title)
+                            .append(" (")
+                            .append(auditTypeEx.id)
+                            .append("): ")
+                            .append(channelSf == null ? "unassigned" : ("<#"+channelSf+">"));
                     }
                     
                     hook.sendMessage(sb.toString()).setEphemeral(true).queue();
@@ -2823,11 +2866,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         return;
                     }
                     
+                    if (!ScarletDiscordJDA.this.evidenceEnabled.get())
+                    {
+                        hook.sendMessage("This feature is not enabled.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
                     String evidenceRoot = ScarletDiscordJDA.this.evidenceRoot;
                     
                     if (evidenceRoot == null || (evidenceRoot = evidenceRoot.trim()).isEmpty())
                     {
-                        hook.sendMessage("This feature is not enabled.").setEphemeral(true).queue();
+                        hook.sendMessage("The evidence folder hasn't been specified.").setEphemeral(true).queue();
                         return;
                     }
                     
@@ -3245,7 +3294,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         Message message = condEmit.emit(channelSf, guild, channel);
         entryMeta.messageSnowflake = message.getId();
     }
-    void condEmitEx(GroupAuditTypeEx auditExType, CondEmit condEmit)
+    void condEmitEx(GroupAuditTypeEx auditExType, boolean log, CondEmit condEmit)
     {
         if (this.jda == null)
             return;
@@ -3263,6 +3312,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
         Message message = condEmit.emit(channelSf, guild, channel);
         
+        if (log)
+        {
+            LOG.info(String.format("%s (%s/%s/%s)", auditExType.id.replace('.', ' '), this.guildSf, channelSf, message.getId()));
+        }
     }
     EmbedBuilder embed(ScarletData.AuditEntryMetadata entryMeta, boolean addTargetIdField)
     {
@@ -3713,7 +3766,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitExtendedInstanceInactive(Scarlet scarlet, String location, String auditEntryId, ScarletData.InstanceEmbedMessage instanceEmbedMessage)
     {
-        this.condEmitEx(GroupAuditTypeEx.INSTANCE_INACTIVE, (channelSf, guild, channel) ->
+        this.condEmitEx(GroupAuditTypeEx.INSTANCE_INACTIVE, false, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle("Instance Inactive")
@@ -3727,7 +3780,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName)
     {
-        this.condEmitEx(GroupAuditTypeEx.STAFF_JOIN, (channelSf, guild, channel) ->
+        this.condEmitEx(GroupAuditTypeEx.STAFF_JOIN, false, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(displayName+" joined a group instance", "https://vrchat.com/home/user/"+userId)
@@ -3740,7 +3793,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName)
     {
-        this.condEmitEx(GroupAuditTypeEx.STAFF_LEAVE, (channelSf, guild, channel) ->
+        this.condEmitEx(GroupAuditTypeEx.STAFF_LEAVE, false, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(displayName+" left a group instance", "https://vrchat.com/home/user/"+userId)
@@ -3753,7 +3806,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String userId, String displayName)
     {
-        this.condEmitEx(GroupAuditTypeEx.VTK_START, (channelSf, guild, channel) ->
+        this.condEmitEx(GroupAuditTypeEx.VTK_START, true, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(displayName+" was targeted by a vote-to-kick", "https://vrchat.com/home/user/"+userId)

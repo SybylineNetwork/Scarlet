@@ -4,6 +4,11 @@
 ## Unreleased
   - Pending: Staff & Instance Analysis, (live infographic?)
 
+## 0.4.10-rc3
+  - Added settings for enabling and selecting the evidence submission folder
+  - Added listing auxiliary webhooks to `config-info`
+  - Fixed some settings not getting created as default if they didn't exist
+
 ## 0.4.10-rc2
   - Fixed Email OTP (again)
   - Added Instance Inactive extended event

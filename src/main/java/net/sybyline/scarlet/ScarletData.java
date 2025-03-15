@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 import org.slf4j.Logger;
@@ -37,8 +38,8 @@ public class ScarletData
         this.objs = new ConcurrentHashMap<>();
         this.subs = new ConcurrentHashMap<>();
         
-        this.liveInstances = this.getDatum("live.json", LiveInstancesMetadata.class);
-        this.global = this.getDatum("global.json", GlobalMetadata.class);
+        this.liveInstances = this.getDatum("live.json", LiveInstancesMetadata.class, LiveInstancesMetadata::new);
+        this.global = this.getDatum("global.json", GlobalMetadata.class, GlobalMetadata::new);
     }
 
     final File dir;
@@ -48,9 +49,9 @@ public class ScarletData
     final Datum<LiveInstancesMetadata> liveInstances;
     final Datum<GlobalMetadata> global;
 
-    public <T> Datum<T> getDatum(String name, Class<T> type)
+    public <T> Datum<T> getDatum(String name, Class<T> type, Supplier<T> createDefault)
     {
-        return this.objs.computeIfAbsent(name, _name -> new ObjDatum<>(_name, type)).as(type);
+        return this.objs.computeIfAbsent(name, _name -> new ObjDatum<>(_name, type, createDefault)).as(type);
     }
     public Datum<?> freeDatum(String name)
     {
@@ -84,13 +85,21 @@ public class ScarletData
     <T> T readObj(String name, Class<T> type, boolean orNew)
     {
         if (name == null)
+        {
+            LOG.error("Reading data: name == null", new Exception());
             return null;
+        }
         if (type == null)
+        {
+            LOG.error("Reading data `"+name+"`: type == null", new Exception());
             return null;
+        }
         File targetFile = new File(this.dir, name);
         if (!targetFile.isFile())
-            return null;
-        try (Reader reader = MiscUtils.reader(targetFile))
+        {
+            LOG.warn("Reading data `"+name+"`: No such file: "+targetFile.getAbsolutePath());
+        }
+        else try (Reader reader = MiscUtils.reader(targetFile))
         {
             return JSON.getGson().fromJson(reader, type);
         }
@@ -111,12 +120,23 @@ public class ScarletData
     <T> void writeObj(String name, Class<T> type, T data)
     {
         if (name == null)
+        {
+            LOG.error("Writing data: name == null", new Exception());
             return;
+        }
         if (type == null)
+        {
+            LOG.error("Writing data `"+name+"`: type == null", new Exception());
             return;
+        }
         if (data == null)
+        {
+            LOG.error("Writing data `"+name+"`: data == null", new Exception());
             return;
+        }
         File targetFile = new File(this.dir, name);
+        if (!targetFile.getParentFile().isDirectory())
+            targetFile.getParentFile().mkdirs();
         try (Writer writer = MiscUtils.writer(targetFile))
         {
             JSON.getGson().toJson(data, type, writer);
@@ -146,17 +166,25 @@ public class ScarletData
     <T> T readSub(String kind, String id, Class<T> type, boolean orNew)
     {
         if (kind == null)
+        {
+            LOG.error("Reading sub data: kind == null", new Exception());
             return null;
+        }
         if (id == null)
+        {
+            LOG.error("Reading sub data `"+kind+"`: id == null", new Exception());
             return null;
+        }
         if (type == null)
+        {
+            LOG.error("Reading sub data `"+kind+"`: type == null", new Exception());
             return null;
+        }
         File targetDir = new File(this.dir, kind);
         if (!targetDir.isDirectory())
-            return null;
+            targetDir.mkdirs();
         File targetFile = new File(targetDir, id);
-        if (!targetFile.isFile())
-            return null;
+        if (targetFile.isFile())
         try (Reader reader = MiscUtils.reader(targetFile))
         {
             return JSON.getGson().fromJson(reader, type);
@@ -178,13 +206,25 @@ public class ScarletData
     <T> void writeSub(String kind, String id, Class<T> type, T data)
     {
         if (kind == null)
+        {
+            LOG.error("Writing sub data: kind == null", new Exception());
             return;
+        }
         if (id == null)
+        {
+            LOG.error("Writing sub data `"+kind+"`: id == null", new Exception());
             return;
+        }
         if (type == null)
+        {
+            LOG.error("Writing sub data `"+kind+"`: type == null", new Exception());
             return;
+        }
         if (data == null)
+        {
+            LOG.error("Writing sub data `"+kind+"`: data == null", new Exception());
             return;
+        }
         File targetDir = new File(this.dir, kind);
         if (!targetDir.isDirectory())
             targetDir.mkdirs();
@@ -256,15 +296,17 @@ public class ScarletData
 
     final class ObjDatum<T> implements Datum<T>
     {
-        ObjDatum(String name, Class<T> type)
+        ObjDatum(String name, Class<T> type, Supplier<T> createDefault)
         {
             this.name = name;
             this.type = type;
+            this.createDefault = createDefault;
             this.value = null;
             this.dirty = false;
         }
         final String name;
         final Class<T> type;
+        final Supplier<T> createDefault;
         T value;
         boolean dirty;
         @Override
@@ -316,6 +358,10 @@ public class ScarletData
             if (value == null)
             {
                 value = ScarletData.this.readObj(this.name, this.type, true);
+                if (value == null)
+                {
+                    value = this.createDefault.get();
+                }
                 this.value = value;
             }
             return value;
