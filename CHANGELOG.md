@@ -3,6 +3,13 @@
 
 ## Unreleased
   - Pending: Staff & Instance Analysis, (live infographic?)
+  - Pending: Limited Google Drive interoperability
+
+## 0.4.10-rc5
+  - Added daily moderation summary with configurable time-of-day to generate
+  - Added templating for VRChat Help Desk autofill
+  - Added TTS announcements for Votes-to-Kick Initiated
+  - Added tentative search of the system path for different PowerShell executable names
 
 ## 0.4.10-rc4
   - Added location to extended event embeds

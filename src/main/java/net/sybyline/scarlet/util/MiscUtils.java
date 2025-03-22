@@ -20,8 +20,13 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.Period;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.temporal.TemporalAmount;
+import java.time.zone.ZoneRules;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,6 +45,12 @@ import net.sybyline.scarlet.Scarlet;
 
 public interface MiscUtils
 {
+
+    static final ZoneRules DEFAULT_ZONE_RULES = ZoneId.systemDefault().getRules();
+    static OffsetDateTime odt2utc(LocalDateTime ldt)
+    {
+        return OffsetDateTime.of(ldt, DEFAULT_ZONE_RULES.getOffset(ldt)).withOffsetSameInstant(ZoneOffset.UTC);
+    }
 
     static boolean sleep(long millis)
     {

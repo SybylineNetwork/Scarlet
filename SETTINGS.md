@@ -142,6 +142,49 @@ Array of VRChat userIds
 ]
 ```
 
+## file `report_template.txt`
+
+Template for filling out the VRChat Help Desk report form
+```txt
+I am submitting a user report to be sent for {targetName} for {tags} in our group {groupCode}.
+{targetName} entered our {instanceType} instance at {targetJoined}.
+{targetName} was removed/left from our instance at {targetLeft}.
+{description}
+
+Thank you in advance,
+{actorName}
+```
+Parameters are as such:
+| Parameter | Description | Example value |
+| --- | --- | --- |
+| Group | | |
+| `{groupId}` | The group ID | `grp_00000000-0000-0000-0000-000000000000` |
+| `{groupName}` | The group name | `MyGroup` |
+| `{groupUrl}` | The group URL | `https://vrchat.com/home/group/grp_00000000-0000-0000-0000-000000000000` |
+| `{groupCode}` | The group short code | `GROUP.0000` |
+| `{groupCodeUrl}` | The group URL via short code | `https://vrc.group/GROUP.0000` |
+| Location | | |
+| `{worldId}` | The world ID | `wrld_00000000-0000-0000-0000-000000000000` |
+| `{worldName}` | The world name | `WorldName` |
+| `{worldUrl}` | The world URL  | `https://vrchat.com/home/world/wrld_00000000-0000-0000-0000-000000000000` |
+| `{location}` | The entire location string | `wrld_00000000-0000-0000-0000-000000000000:00000~group(grp_00000000-0000-0000-0000-00000000000)~groupAccessType(public)~region(us)` |
+| `{instanceType}` | A formatted representation of the instance type | `18+ Group Public` |
+| Actor | | |
+| `{actorId}` | The actor user ID | `usr_00000000-0000-0000-0000-000000000000` |
+| `{actorName}` | The actor user display name | `DisplayName` |
+| `{actorUrl}` | The actor user URL | `https://vrchat.com/home/user/usr_00000000-0000-0000-0000-000000000000` |
+| Target | | |
+| `{targetId}` | The target user ID | `usr_00000000-0000-0000-0000-000000000000` |
+| `{targetName}` | The target user display name | `DisplayName` |
+| `{targetUrl}` | The target user URL | `https://vrchat.com/home/user/usr_00000000-0000-0000-0000-000000000000` |
+| Target ext. | | |
+| `{targetJoined}` | The formatted time the target joined the relevant instance | `2025-03-04 05:06:07 UTC` |
+| `{targetLeft}` | The formatted time the target left the relevant instance | `2025-03-04 05:06:07 UTC` |
+| Audit | | |
+| `{tags}` | The custom moderation tags | `Trolling, Harassing, and Insufferable Attitude` |
+| `{description}` | The custom moderation description | |
+| `{auditId}` | The audit ID | `gaud_00000000-0000-0000-0000-000000000000` |
+
 ## file `settings.json`
 
 General settings for Scarlet:
@@ -340,6 +383,35 @@ Group audit log event information:
     
     // Audit entry id of the event that directly and necessarily caused this event
     "parentEventId": "gaud_00000000-0000-0000-0000-000000000000",
+}
+```
+
+## file `data/ex/00000000-0000-0000-0000-000000000000`
+
+Extended audit event information:
+```json
+{
+    // Extended event id
+    "id": "00000000-0000-0000-0000-000000000000",
+    
+    // Extended event type
+    "typeEx": "groupex.instance.vtk",
+    
+    // Actor id
+    "actorId": "vrc_admin",
+    
+    // Actor display name
+    "actorDisplayName": "VRChat Admin",
+    
+    // Target id
+    "targetId": "usr_00000000-0000-0000-0000-000000000000",
+    
+    // When this extended event occurred
+    "timestamp": "2069-02-31T12:34:56.789Z",
+    
+    // Data
+    "data": {
+    }
 }
 ```
 

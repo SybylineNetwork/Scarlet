@@ -57,7 +57,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.10-rc4",
+        VERSION = "0.4.10-rc5",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -191,6 +191,7 @@ public class Scarlet implements Closeable
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
     final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(dir, "watched_groups.json"));
     final ScarletStaffList staffList = new ScarletStaffList(this, new File(dir, "staff_list.json"));
+    final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(this, new File(dir, "report_template.txt"));
     final ScarletData data = new ScarletData(new File(dir, "data"));
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
@@ -275,6 +276,15 @@ public class Scarlet implements Closeable
                 catch (Exception ex)
                 {
                     LOG.error("Exception maybe checking instances", ex);
+                }
+                // maybe mod summary
+                if (!this.staffMode) try
+                {
+                    this.maybeModSummary();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception maybe mod summary", ex);
                 }
                 // maybe check update
                 try
@@ -410,9 +420,9 @@ public class Scarlet implements Closeable
     void maybeCheckUpdate()
     {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (now.isAfter(this.settings.getLastUpdateCheck().plusHours(3)))
+        if (now.isAfter(this.settings.lastUpdateCheck.getOrSupply().plusHours(3)))
         {
-            this.settings.setLastUpdateCheck(now);
+            this.settings.lastUpdateCheck.set(now);
             this.checkUpdate();
         }
     }
@@ -447,9 +457,9 @@ public class Scarlet implements Closeable
     void maybeCheckInstances()
     {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (now.isAfter(this.settings.getLastInstancesCheck().plusHours(1)))
+        if (now.isAfter(this.settings.lastInstancesCheck.getOrSupply().plusMinutes(5L)))
         {
-            this.settings.setLastInstancesCheck(now);
+            this.settings.lastInstancesCheck.set(now);
             this.checkInstances();
         }
     }
@@ -464,7 +474,12 @@ public class Scarlet implements Closeable
             return;
         locations = new HashSet<>(locations);
         for (GroupInstance groupInstance : groupInstances)
-            locations.remove(groupInstance.getLocation());
+        {
+            String location = groupInstance.getLocation();
+            locations.remove(location);
+            ScarletData.InstanceEmbedMessage instanceEmbedMessage = this.data.liveInstancesMetadata_getLocationInstanceEmbedMessage(location, false);
+            this.discord.emitExtendedInstanceMonitor(this, location, instanceEmbedMessage);
+        }
         if (locations.isEmpty())
             return;
         for (String location : locations)
@@ -475,6 +490,28 @@ public class Scarlet implements Closeable
         }
     }
 
+    void maybeModSummary()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC),
+                       next = this.settings.nextModSummary.getOrNull();
+        if (next == null)
+        {
+            next = now.withHour(0).withMinute(0).withSecond(0).withNano(0);
+            while (now.isBefore(next))
+                next.minusHours(24L);
+        }
+        if (now.isAfter(next))
+        {
+            this.settings.nextModSummary.set(next.plusHours(24L));
+            this.modSummary(next);
+        }
+    }
+
+    void modSummary(OffsetDateTime endOfDay)
+    {
+        this.discord.emitModSummary(this, endOfDay);
+    }
+
     void maybeSaveData()
     {
         this.data.saveDirty();
@@ -483,9 +520,9 @@ public class Scarlet implements Closeable
     void maybeRefresh()
     {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        if (this.wantsVrcRefresh || now.isAfter(this.settings.getLastAuthRefresh().plusHours(72)))
+        if (this.wantsVrcRefresh || now.isAfter(this.settings.lastAuthRefresh.getOrSupply().plusHours(72)))
         {
-            this.settings.setLastAuthRefresh(now);
+            this.settings.lastAuthRefresh.set(now);
             this.vrc.refresh();
             this.wantsVrcRefresh = false;
         }
@@ -509,7 +546,7 @@ public class Scarlet implements Closeable
     }
     void queryEmit()
     {
-        OffsetDateTime from = this.settings.getLastAuditQuery(),
+        OffsetDateTime from = this.settings.lastAuditQuery.getOrSupply(),
                        to = OffsetDateTime.now(ZoneOffset.UTC);
         switch (this.catchupMode)
         {
@@ -552,7 +589,7 @@ public class Scarlet implements Closeable
             LOG.error("Exception processing audit entry "+entry.getId()+" of type "+entry.getEventType()+": `"+entry.toJson()+"`", ex);
         }
         
-        this.settings.setLastAuditQuery(to);
+        this.settings.lastAuditQuery.set(to);
     }
 
 }

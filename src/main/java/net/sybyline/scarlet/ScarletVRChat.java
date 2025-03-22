@@ -131,6 +131,7 @@ public class ScarletVRChat implements Closeable
         this.cookies.load();
         this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
         this.groupOwnerId = null;
+        this.group = null;
         this.currentUserId = null;
         scarlet.settings.setNamespace(this.groupId);
         this.cachedUsers = new ScarletJsonCache<>("usr", User.class);
@@ -144,6 +145,7 @@ public class ScarletVRChat implements Closeable
     final ApiClient client;
     final String groupId;
     String groupOwnerId;
+    Group group;
     String currentUserId;
     final ScarletJsonCache<User> cachedUsers;
     final ScarletJsonCache<World> cachedWorlds;
@@ -346,6 +348,7 @@ public class ScarletVRChat implements Closeable
                 if (group != null)
                 {
                     this.groupOwnerId = group.getOwnerId();
+                    this.group = group;
                 }
             }
         }

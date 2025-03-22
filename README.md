@@ -106,6 +106,9 @@ Discord slash commands:
   - `config-info`<br>
     Shows information about the current configuration<br>
     Example: `/config-info`
+  - `config-set`<br>
+    Configures miscellaneous settings<br>
+    Example: `/config-set mod-summary-time-of-day "-06:00"`
 
 Discord message command:
   - `submit-attachments`<br>

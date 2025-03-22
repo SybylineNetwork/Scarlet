@@ -402,5 +402,7 @@ public interface ScarletDiscord extends Closeable
     public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
     public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
     public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
+    public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
+    public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay);
 
 }

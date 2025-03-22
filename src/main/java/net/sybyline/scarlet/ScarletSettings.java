@@ -13,6 +13,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Scanner;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.prefs.Preferences;
 
 import javax.swing.JOptionPane;
@@ -42,12 +44,14 @@ public class ScarletSettings
         this.globalPreferences = Preferences.userNodeForPackage(Scarlet.class);
         this.preferences = this.globalPreferences;
         this.json = null;
-        this.lastRunVersion = null;
-        this.lastAuditQuery = null;
-        this.lastInstancesCheck = null;
-        this.lastAuthRefresh = null;
-        this.lastUpdateCheck = null;
-        this.uiBounds = null;
+        this.lastRunVersion = new RegistryString("lastRunVersion");
+        this.lastRunTime = new RegistryOffsetDateTime("lastRunTime");
+        this.lastAuditQuery = new RegistryOffsetDateTime("lastAuditQuery");
+        this.lastInstancesCheck = new RegistryOffsetDateTime("lastInstancesCheck");
+        this.lastAuthRefresh = new RegistryOffsetDateTime("lastAuthRefresh");
+        this.lastUpdateCheck = new RegistryOffsetDateTime("lastUpdateCheck");
+        this.nextModSummary = new RegistryOffsetDateTime("nextModSummary");
+        this.uiBounds = new RegistryRectangle("uiBounds");
     }
 
     public void setNamespace(String namespace)
@@ -61,16 +65,16 @@ public class ScarletSettings
     final Preferences globalPreferences;
     Preferences preferences;
     private JsonObject json;
-    private String lastRunVersion;
-    private OffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck;
-    private Rectangle uiBounds;
+    public final RegistryString lastRunVersion;
+    public final RegistryOffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck, nextModSummary;
+    public final RegistryRectangle uiBounds;
 
     public boolean checkHasVersionChangedSinceLastRun()
     {
         Boolean hasVersionChangedSinceLastRun = this.hasVersionChangedSinceLastRun;
         if (hasVersionChangedSinceLastRun != null)
             return hasVersionChangedSinceLastRun.booleanValue();
-        OffsetDateTime lastRunTime = this.getLastRunTime();
+        OffsetDateTime lastRunTime = this.lastRunTime.getOrNull();
         if (lastRunTime == null)
         {
             this.hasVersionChangedSinceLastRun = Boolean.TRUE;
@@ -81,7 +85,7 @@ public class ScarletSettings
             this.hasVersionChangedSinceLastRun = Boolean.TRUE;
             return true;
         }
-        if (!Objects.equals(Scarlet.VERSION, this.getLastRunVersion()))
+        if (!Objects.equals(Scarlet.VERSION, this.lastRunVersion.getOrNull()))
         {
             this.hasVersionChangedSinceLastRun = Boolean.TRUE;
             return true;
@@ -92,216 +96,108 @@ public class ScarletSettings
 
     public void updateRunVersionAndTime()
     {
-        this.setLastRunVersion(Scarlet.VERSION);
-        this.setLastRunTime(OffsetDateTime.now(ZoneOffset.UTC));
+        this.lastRunVersion.set(Scarlet.VERSION);
+        this.lastRunTime.set(OffsetDateTime.now(ZoneOffset.UTC));
     }
 
-    public synchronized String getLastRunVersion()
+    public class RegistryStringValued<T>
     {
-        String lastRunVersion = this.lastRunVersion;
-        if (lastRunVersion != null)
-            return lastRunVersion;
-        lastRunVersion = this.preferences.get("lastRunVersion", null);
-        if (lastRunVersion != null)
-            return lastRunVersion;
-        lastRunVersion = this.globalPreferences.get("lastRunVersion", null);
-        if (lastRunVersion != null)
+        RegistryStringValued(String name, Supplier<T> ifNull, Function<String, T> parse, Function<T, String> stringify)
         {
-            this.lastRunVersion = lastRunVersion;
-            this.preferences.put("lastRunVersion", lastRunVersion);
+            this.name = name;
+            this.ifNull = ifNull != null ? ifNull : () -> null;
+            this.parse = parse;
+            this.stringify = stringify;
+            this.cached = null;
         }
-        return lastRunVersion;
-    }
-
-    public synchronized void setLastRunVersion(String lastRunVersion)
-    {
-        if (lastRunVersion == null)
-            return;
-        this.lastRunVersion = lastRunVersion;
-        this.preferences.put("lastRunVersion", lastRunVersion);
-    }
-
-    public synchronized OffsetDateTime getLastRunTime()
-    {
-        OffsetDateTime lastRunTime = this.lastRunTime;
-        if (lastRunTime != null)
-            return lastRunTime;
-        String lastRunTimeString = this.preferences.get("lastRunTime", null);
-        if (lastRunTimeString == null) lastRunTimeString = this.globalPreferences.get("lastRunTime", null);
-        if (lastRunTimeString != null) try
+        final String name;
+        final Supplier<T> ifNull;
+        final Function<String, T> parse;
+        final Function<T, String> stringify;
+        T cached;
+        public T getOrNull()
         {
-            lastRunTime = OffsetDateTime.parse(lastRunTimeString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            this.lastRunTime = lastRunTime;
-            this.preferences.put("lastRunTime", lastRunTimeString);
-            return lastRunTime;
+            return this.get(false);
         }
-        catch (RuntimeException ex)
+        public T getOrSupply()
         {
+            return this.get(true);
         }
-        lastRunTime = OffsetDateTime.now(ZoneOffset.UTC);
-        this.lastRunTime = lastRunTime;
-        this.preferences.put("lastRunTime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastRunTime));
-        return lastRunTime;
+        private T get(boolean orNow)
+        {
+            T cached_ = this.cached;
+            if (cached_ != null)
+                return cached_;
+            synchronized (ScarletSettings.this)
+            {
+                String string = ScarletSettings.this.preferences.get(this.name, null);
+                if (string == null) string = ScarletSettings.this.globalPreferences.get(this.name, null);
+                if (string != null) try
+                {
+                    cached_ = this.parse.apply(string);
+                    this.cached = cached_;
+                    ScarletSettings.this.preferences.put(this.name, string);
+                    return cached_;
+                }
+                catch (RuntimeException ex)
+                {
+                }
+                if (orNow)
+                {
+                    cached_ = this.ifNull.get();
+                    this.cached = cached_;
+                    ScarletSettings.this.preferences.put(this.name, this.stringify.apply(cached_));
+                }
+                return cached_;
+            }
+        }
+        public void set(T value_)
+        {
+            if (value_ == null)
+                return;
+            this.cached = value_;
+            synchronized (ScarletSettings.this)
+            {
+                ScarletSettings.this.preferences.put(this.name, this.stringify.apply(value_));
+            }
+        }
     }
 
-    public synchronized void setLastRunTime(OffsetDateTime lastRunTime)
+    public class RegistryOffsetDateTime extends RegistryStringValued<OffsetDateTime>
     {
-        if (lastRunTime == null)
-            return;
-        this.lastRunTime = lastRunTime;
-        this.preferences.put("lastRunTime", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastRunTime));
+        RegistryOffsetDateTime(String name)
+        {
+            super(name,
+                () -> OffsetDateTime.now(ZoneOffset.UTC),
+                string -> OffsetDateTime.parse(string, DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                DateTimeFormatter.ISO_OFFSET_DATE_TIME::format);
+        }
     }
 
-    public synchronized OffsetDateTime getLastAuditQuery()
+    public class RegistryRectangle extends RegistryStringValued<Rectangle>
     {
-        OffsetDateTime lastAuditQuery = this.lastAuditQuery;
-        if (lastAuditQuery != null)
-            return lastAuditQuery;
-        String lastAuditQueryString = this.preferences.get("lastAuditQuery", null);
-        if (lastAuditQueryString == null) lastAuditQueryString = this.globalPreferences.get("lastAuditQuery", null);
-        if (lastAuditQueryString != null) try
+        RegistryRectangle(String name)
         {
-            lastAuditQuery = OffsetDateTime.parse(lastAuditQueryString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            this.lastAuditQuery = lastAuditQuery;
-            return lastAuditQuery;
+            super(name, null,
+                string ->
+                {
+                    String[] values = string.split(",");
+                    return new Rectangle(
+                        Integer.parseInt(values[0]),
+                        Integer.parseInt(values[1]),
+                        Integer.parseInt(values[2]),
+                        Integer.parseInt(values[3]));
+                },
+                value -> String.format("%d,%d,%d,%d", value.x, value.y, value.width, value.height));
         }
-        catch (RuntimeException ex)
-        {
-        }
-        lastAuditQuery = OffsetDateTime.now(ZoneOffset.UTC);
-        this.lastAuditQuery = lastAuditQuery;
-        this.preferences.put("lastAuditQuery", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuditQuery));
-        return lastAuditQuery;
     }
 
-    public synchronized void setLastAuditQuery(OffsetDateTime lastAuditQuery)
+    public class RegistryString extends RegistryStringValued<String>
     {
-        if (lastAuditQuery == null)
-            return;
-        this.lastAuditQuery = lastAuditQuery;
-        this.preferences.put("lastAuditQuery", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuditQuery));
-    }
-
-    public synchronized OffsetDateTime getLastInstancesCheck()
-    {
-        OffsetDateTime lastInstancesCheck = this.lastInstancesCheck;
-        if (lastInstancesCheck != null)
-            return lastInstancesCheck;
-        String lastInstancesCheckString = this.preferences.get("lastInstancesCheck", null);
-        if (lastInstancesCheckString == null) lastInstancesCheckString = this.globalPreferences.get("lastInstancesCheck", null);
-        if (lastInstancesCheckString != null) try
+        RegistryString(String name)
         {
-            lastInstancesCheck = OffsetDateTime.parse(lastInstancesCheckString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            this.lastInstancesCheck = lastInstancesCheck;
-            return lastInstancesCheck;
+            super(name, null, Function.identity(), Function.identity());
         }
-        catch (RuntimeException ex)
-        {
-        }
-        lastInstancesCheck = OffsetDateTime.now(ZoneOffset.UTC);
-        this.lastInstancesCheck = lastInstancesCheck;
-        this.preferences.put("lastInstancesCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastInstancesCheck));
-        return lastInstancesCheck;
-    }
-
-    public synchronized void setLastInstancesCheck(OffsetDateTime lastInstancesCheck)
-    {
-        if (lastInstancesCheck == null)
-            return;
-        this.lastInstancesCheck = lastInstancesCheck;
-        this.preferences.put("lastInstancesCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastInstancesCheck));
-    }
-
-    public synchronized OffsetDateTime getLastAuthRefresh()
-    {
-        OffsetDateTime lastAuthRefresh = this.lastAuthRefresh;
-        if (lastAuthRefresh != null)
-            return lastAuthRefresh;
-        String lastAuthRefreshString = this.preferences.get("lastAuthRefresh", null);
-        if (lastAuthRefreshString == null) lastAuthRefreshString = this.globalPreferences.get("lastAuthRefresh", null);
-        if (lastAuthRefreshString != null) try
-        {
-            lastAuthRefresh = OffsetDateTime.parse(lastAuthRefreshString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            this.lastAuthRefresh = lastAuthRefresh;
-            return lastAuthRefresh;
-        }
-        catch (RuntimeException ex)
-        {
-        }
-        lastAuthRefresh = OffsetDateTime.now(ZoneOffset.UTC);
-        this.lastAuthRefresh = lastAuthRefresh;
-        this.preferences.put("lastAuthRefresh", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuthRefresh));
-        return lastAuthRefresh;
-    }
-
-    public synchronized void setLastAuthRefresh(OffsetDateTime lastAuthRefresh)
-    {
-        if (lastAuthRefresh == null)
-            return;
-        this.lastAuthRefresh = lastAuthRefresh;
-        this.preferences.put("lastAuthRefresh", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastAuthRefresh));
-    }
-
-    public synchronized OffsetDateTime getLastUpdateCheck()
-    {
-        OffsetDateTime lastUpdateCheck = this.lastUpdateCheck;
-        if (lastUpdateCheck != null)
-            return lastUpdateCheck;
-        String lastUpdateCheckString = this.preferences.get("lastUpdateCheck", null);
-        if (lastUpdateCheckString == null) lastUpdateCheckString = this.globalPreferences.get("lastUpdateCheck", null);
-        if (lastUpdateCheckString != null) try
-        {
-            lastUpdateCheck = OffsetDateTime.parse(lastUpdateCheckString, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-            this.lastUpdateCheck = lastUpdateCheck;
-            return lastUpdateCheck;
-        }
-        catch (RuntimeException ex)
-        {
-        }
-        lastUpdateCheck = OffsetDateTime.now(ZoneOffset.UTC);
-        this.lastUpdateCheck = lastUpdateCheck;
-        this.preferences.put("lastUpdateCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastUpdateCheck));
-        return lastUpdateCheck;
-    }
-
-    public synchronized void setLastUpdateCheck(OffsetDateTime lastUpdateCheck)
-    {
-        if (lastUpdateCheck == null)
-            return;
-        this.lastUpdateCheck = lastUpdateCheck;
-        this.preferences.put("lastUpdateCheck", DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(lastUpdateCheck));
-    }
-
-    public synchronized Rectangle getUIBounds()
-    {
-        Rectangle uiBounds = this.uiBounds;
-        if (uiBounds != null)
-            return uiBounds;
-        String uiBoundsString = this.preferences.get("uiBounds", null);
-        if (uiBoundsString == null) uiBoundsString = this.globalPreferences.get("uiBoundsString", null);
-        if (uiBoundsString != null) try
-        {
-            String[] values = uiBoundsString.split(",");
-            uiBounds = new Rectangle(
-                Integer.parseInt(values[0]),
-                Integer.parseInt(values[1]),
-                Integer.parseInt(values[2]),
-                Integer.parseInt(values[3]));
-            this.uiBounds = uiBounds;
-            return uiBounds;
-        }
-        catch (RuntimeException ex)
-        {
-        }
-        return uiBounds;
-    }
-
-    public synchronized void setUIBounds(Rectangle uiBounds)
-    {
-        if (uiBounds == null)
-            return;
-        this.uiBounds = uiBounds;
-        this.preferences.put("uiBounds", String.format("%d,%d,%d,%d", uiBounds.x, uiBounds.y, uiBounds.width, uiBounds.height));
     }
 
     synchronized JsonObject getJson()

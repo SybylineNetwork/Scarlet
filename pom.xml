@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.10-rc4</version><!--scarlet-version-->
+  <version>0.4.10-rc5</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -52,6 +52,21 @@
       <groupId>com.formdev</groupId>
       <artifactId>flatlaf</artifactId>
       <version>3.5.4</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.api-client</groupId>
+      <artifactId>google-api-client</artifactId>
+      <version>1.35.2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.oauth-client</groupId>
+      <artifactId>google-oauth-client-jetty</artifactId>
+      <version>1.39.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.apis</groupId>
+      <artifactId>google-api-services-drive</artifactId>
+      <version>v3-rev20250220-2.0.0</version>
     </dependency>
   </dependencies>
 </project>

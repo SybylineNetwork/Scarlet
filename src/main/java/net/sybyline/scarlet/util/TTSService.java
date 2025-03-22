@@ -30,6 +30,14 @@ public class TTSService implements Closeable
         this.dir = dir;
         this.listener = listener;
         this.installedVoices = new CopyOnWriteArrayList<>();
+        
+        String psname = Sys.searchPath("powershell", "pwsh").orElse(null);
+        if (psname == null)
+        {
+            LOG.error("Powershell not found on this system, TTSService will be broken");
+            psname = "powershell";
+        }
+        
         byte[] srcBytes = MiscUtils.readAllBytes(TTSService.class.getResourceAsStream("TTSService.ps1"));
         String sourceString = new String(srcBytes, StandardCharsets.UTF_8);
         String psb64 = Base64.getEncoder().encodeToString(sourceString.getBytes(StandardCharsets.UTF_16LE));
@@ -38,7 +46,7 @@ public class TTSService implements Closeable
         
         this.proc = Runtime.getRuntime().exec(new String[]
         {
-            "powershell",
+            psname,
             "-Version", "5.0",
             "-NoLogo",
 //            "-NoExit",

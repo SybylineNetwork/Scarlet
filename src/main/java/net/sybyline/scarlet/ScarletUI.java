@@ -532,15 +532,15 @@ public class ScarletUI implements AutoCloseable
                 @Override
                 public void componentResized(ComponentEvent evt)
                 {
-                    ScarletUI.this.scarlet.settings.setUIBounds(ScarletUI.this.jframe.getBounds());
+                    ScarletUI.this.scarlet.settings.uiBounds.set(ScarletUI.this.jframe.getBounds());
                 }
                 @Override
                 public void componentMoved(ComponentEvent evt)
                 {
-                    ScarletUI.this.scarlet.settings.setUIBounds(ScarletUI.this.jframe.getBounds());
+                    ScarletUI.this.scarlet.settings.uiBounds.set(ScarletUI.this.jframe.getBounds());
                 }
             });
-            Rectangle uiBounds = this.scarlet.settings.getUIBounds();
+            Rectangle uiBounds = this.scarlet.settings.uiBounds.getOrNull();
             if (uiBounds != null)
                 this.jframe.setBounds(uiBounds);
             else

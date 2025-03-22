@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.io.File;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.TTSService;
 
 public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSService.Listener
@@ -34,6 +36,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userId2userDisplayName = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2userId = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2avatarDisplayName = new ConcurrentHashMap<>();
+        this.clientLocation_userId2userJoined = new ConcurrentHashMap<>();
         this.clientLocationPrev_userIds = new HashSet<>();
         
         this.isTailerLive = false;
@@ -44,6 +47,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.ttsUseDefaultAudioDevice = scarlet.ui.settingBool("tts_use_default_audio_device", "TTS: Use default system audio device", false);
         this.announceWatchedGroups = scarlet.ui.settingBool("tts_announce_watched_groups", "TTS: Announce watched groups", true);
         this.announceNewPlayers = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce new players", true);
+        this.announceVotesToKick = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce Votes-to-Kick", true);
         this.announcePlayersNewerThan = scarlet.ui.settingInt("tts_announce_players_newer_than_days", "TTS: Announce players newer than (days)", 30, 1, 365);
     }
 
@@ -56,6 +60,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     final Map<String, String> clientLocation_userId2userDisplayName,
                               clientLocation_userDisplayName2userId,
                               clientLocation_userDisplayName2avatarDisplayName;
+    final Map<String, OffsetDateTime> clientLocation_userId2userJoined;
     Set<String> clientLocationPrev_userIds;
     boolean isTailerLive,
             isInGroupInstance,
@@ -64,7 +69,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     final ScarletUI.Setting<String> ttsVoiceName;
     final ScarletUI.Setting<Boolean> ttsUseDefaultAudioDevice,
                                      announceWatchedGroups,
-                                     announceNewPlayers;
+                                     announceNewPlayers,
+                                     announceVotesToKick;
     final ScarletUI.Setting<Integer> announcePlayersNewerThan;
 
     void settingsLoaded()
@@ -81,6 +87,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 this.scarlet.ttsService.selectVoiceLater(voiceName);
             }
         }, 0_000L, 60_000L, TimeUnit.MILLISECONDS);
+    }
+
+    public OffsetDateTime getJoinedOrNull(String userId)
+    {
+        return this.clientLocation_userId2userJoined.get(userId);
     }
 
     // ScarletVRChatLogs.Listener
@@ -127,6 +138,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         if (!this.isSameAsPreviousInstance)
         {
             this.scarlet.ui.clearInstance();
+            this.clientLocation_userId2userJoined.clear();
         }
     }
 
@@ -143,6 +155,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void log_playerJoined(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId)
     {
+        OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+        this.clientLocation_userId2userJoined.put(userId, odt);
         boolean isRejoinFromPrev = this.clientLocationPrev_userIds.remove(userId) && this.isSameAsPreviousInstance;
         this.clientLocation_userId2userDisplayName.put(userId, userDisplayName);
         this.clientLocation_userDisplayName2userId.put(userDisplayName, userId);
@@ -155,7 +169,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             this.clientLocationPrev_userIds.clear();
         
         if (!preamble && this.isInGroupInstance && this.scarlet.staffList.isStaffId(userId))
+        {
             this.scarlet.discord.emitExtendedStaffJoin(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName);
+            this.scarlet.data.customEvent_new(GroupAuditTypeEx.STAFF_JOIN, odt, userId, userDisplayName, this.clientLocation);
+        }
     }
 
     @Override
@@ -166,7 +183,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.scarlet.ui.playerLeave(!this.isTailerLive, userId, userDisplayName, timestamp);
         
         if (!preamble && this.isInGroupInstance && this.scarlet.staffList.isStaffId(userId))
+        {
             this.scarlet.discord.emitExtendedStaffLeave(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName);
+            OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+            this.scarlet.data.customEvent_new(GroupAuditTypeEx.STAFF_LEAVE, odt, userId, userDisplayName, this.clientLocation);
+        }
     }
 
     @Override
@@ -234,10 +255,19 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void log_vtkInit(boolean preamble, LocalDateTime timestamp, String displayName)
     {
+        if (!preamble)
+        {
+            Scarlet.LOG.info("Vote-to-Kick initiated: "+displayName+" ("+this.clientLocation_userDisplayName2userId.get(displayName)+")");
+        }
         if (!preamble && this.isInGroupInstance)
         {
             String userId = this.clientLocation_userDisplayName2userId.get(displayName);
             this.scarlet.discord.emitExtendedVtkInitiated(this.scarlet, timestamp, this.clientLocation, userId, displayName);
+            if (this.announceVotesToKick.get())
+            {
+                this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
+                this.scarlet.ttsService.submit("A vote to kick was initiated against "+displayName+".");
+            }
         }
     }
 

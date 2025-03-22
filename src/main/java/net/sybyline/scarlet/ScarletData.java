@@ -10,7 +10,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -18,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.JSON;
@@ -159,6 +162,17 @@ public class ScarletData
         }
     }
 
+    String[] listSub(String kind, Predicate<File> condition)
+    {
+        File targetDir = new File(this.dir, kind);
+        if (!targetDir.isDirectory())
+            return new String[0];
+        return targetDir.list((targetDir0, targetFileName) ->
+        {
+            File targetFile = new File(targetDir0, targetFileName);
+            return targetFile.isFile() && condition.test(targetFile);
+        });
+    }
     <T> T readSub(String kind, String id, Class<T> type)
     {
         return this.readSub(kind, id, type, false);
@@ -594,6 +608,19 @@ public class ScarletData
         return auditEntryMeta;
     }
 
+    public CustomEvent customEvent(String customEventId)
+    {
+        return this.readSub("ex", customEventId, CustomEvent.class);
+    }
+    public void customEvent(String customEventId, CustomEvent customEvent)
+    {
+        this.writeSub("ex", customEventId, CustomEvent.class, customEvent);
+    }
+    public void customEvent(String customEventId, UnaryOperator<CustomEvent> edit)
+    {
+        this.editSub("ex", customEventId, CustomEvent.class, edit);
+    }
+
     public static class GlobalMetadata
     {
         public GlobalMetadata()
@@ -815,6 +842,8 @@ public class ScarletData
         { Object data = this.entry.getData(); return data != null && data instanceof Map && !((Map<?, ?>)data).isEmpty(); }
         public Map<String, Object> getData()
         { @SuppressWarnings("unchecked") Map<String, Object> data = (Map<String, Object>)this.entry.getData(); return data; }
+        public <T> T getData(String name)
+        { @SuppressWarnings("unchecked") Map<String, Object> data = (Map<String, Object>)this.entry.getData(); if (data == null) return null; @SuppressWarnings("unchecked") T value = (T)data.get(name); return value; }
         public <T> T getData(Type type)
         { Gson gson = JSON.getGson(); return gson.fromJson(gson.toJsonTree(this.entry.getData()), type); }
         public <T> T getData(Class<T> type)
@@ -826,6 +855,33 @@ public class ScarletData
     {
         this.userMetadata_setSnowflake(userId, userSnowflake);
         this.globalMetadata_setSnowflakeId(userSnowflake, userId);
+    }
+
+    public static class CustomEvent
+    {
+        public String id, typeEx;
+        public String actorId, actorDisplayName;
+        public String targetId;
+        public OffsetDateTime timestamp;
+        public JsonObject data;
+    }
+    public synchronized void customEvent_new(GroupAuditTypeEx typeEx, OffsetDateTime timestamp, String actorId, String actorDisplayName, String targetId)
+    {
+        String id;
+        {
+            UUID uuid;
+            do uuid = UUID.randomUUID();
+            while (new File(this.dir, "ex/"+uuid).isFile());
+            id = uuid.toString();
+        }
+        CustomEvent ce = new CustomEvent();
+        ce.id = id;
+        ce.typeEx = typeEx.id;
+        ce.actorId = actorId;
+        ce.actorDisplayName = actorDisplayName;
+        ce.targetId = targetId;
+        ce.timestamp = timestamp;
+        this.customEvent(id, ce);
     }
 
 }
