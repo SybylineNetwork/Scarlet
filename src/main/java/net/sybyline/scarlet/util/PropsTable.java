@@ -5,6 +5,7 @@ import java.awt.Component;
 import java.awt.Font;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.text.Collator;
 import java.text.DateFormat;
 import java.text.NumberFormat;
 import java.time.Duration;
@@ -32,6 +33,7 @@ import java.util.function.Function;
 import java.util.function.ObjIntConsumer;
 
 import javax.swing.Action;
+import javax.swing.DefaultRowSorter;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -50,6 +52,7 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableModel;
+import javax.swing.table.TableStringConverter;
 
 import com.google.gson.internal.Primitives;
 
@@ -68,7 +71,6 @@ public class PropsTable<E> extends JTable
         this.tableHeader.setComponentPopupMenu(headerPopupMenu);
         this.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         this.setAutoCreateColumnsFromModel(false);
-        this.setAutoCreateRowSorter(true);
         this.addFocusListener(new FocusAdapter() {
             @Override
             public void focusLost(FocusEvent e)
@@ -76,6 +78,7 @@ public class PropsTable<E> extends JTable
                 PropsTable.this.clearSelection();
             }
         });
+        this.setRowSorter(new PropsRowSorter());
     }
 
     protected final JMenu columnSelectMenu = new JMenu();
@@ -93,6 +96,7 @@ public class PropsTable<E> extends JTable
             this.type = Primitives.wrap(type);
             this.getFrom = getFrom;
             this.enabled = enabled;
+            this.sortable = true;
             this.modelIndex = PropsTable.this.getPropsDataModel().props.size();
             this.checkbox = new JCheckBoxMenuItem(name, enabled);
             this.checkbox.addActionListener($ -> this.setEnabled(this.checkbox.isSelected()));
@@ -106,6 +110,20 @@ public class PropsTable<E> extends JTable
                 PropsTable.this.addColumn(this.column);
                 PropsTable.this.getPropsDataModel().fireTableStructureChanged();
             }
+            
+            this.defaultSort();
+        }
+        @SuppressWarnings("unchecked")
+        private void defaultSort()
+        {
+            if (this.type == Period.class)
+            {
+                this.setComparator((Comparator<P>)Comparator.comparingLong((Period $) -> $.toTotalMonths() * 31 + $.getDays()));
+            }
+            else if (this.type == Action.class)
+            {
+                this.setSortable(false);
+            }
         }
         final String name;
         final boolean editable;
@@ -114,7 +132,16 @@ public class PropsTable<E> extends JTable
         final int modelIndex;
         final JCheckBoxMenuItem checkbox;
         final TableColumn column;
-        boolean enabled;
+        boolean enabled, sortable;
+        Comparator<P> comparator;
+        public void setSortable(boolean sortable)
+        {
+            this.sortable = sortable;
+        }
+        public void setComparator(Comparator<P> comparator)
+        {
+            this.comparator = comparator;
+        }
         public String getName()
         {
             return this.name;
@@ -749,6 +776,98 @@ public class PropsTable<E> extends JTable
         public Class<?> getColumnClass(int columnIndex)
         {
             return this.props.get(columnIndex).type;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public PropsRowSorter getPropsRowSorter()
+    {
+        return (PropsRowSorter)this.getRowSorter();
+    }
+    class PropsRowSorter extends DefaultRowSorter<PropsTableModel, Integer>
+    {
+        PropsRowSorter()
+        {
+            super();
+            this.setModelWrapper(new PropsRowSorterModelWrapper());
+        }
+        public boolean isSortable(int column)
+        {
+            return super.isSortable(column) && this.getModel().props.get(column).sortable;
+        }
+        public Comparator<?> getComparator(int column)
+        {
+            Comparator<?> comparator = super.getComparator(column);
+            if (comparator != null)
+                return comparator;
+            comparator = this.getModel().props.get(column).comparator;
+            if (comparator != null)
+                return comparator;
+            Class<?> columnClass = this.getModel().getColumnClass(column);
+            if (columnClass == String.class)
+                return Collator.getInstance();
+            if (Comparable.class.isAssignableFrom(columnClass))
+                return Comparator.naturalOrder();
+            return Collator.getInstance();
+        }
+        protected boolean useToString(int column)
+        {
+            Comparator<?> comparator = super.getComparator(column);
+            if (comparator != null)
+                return false;
+            comparator = this.getModel().props.get(column).comparator;
+            if (comparator != null)
+                return false;
+            Class<?> columnClass = this.getModel().getColumnClass(column);
+            if (columnClass == String.class)
+                return false;
+            if (Comparable.class.isAssignableFrom(columnClass))
+                return false;
+            return true;
+        }
+        class PropsRowSorterModelWrapper extends ModelWrapper<PropsTableModel, Integer>
+        {
+            TableStringConverter converter = null;
+            public PropsTableModel getModel()
+            {
+                return PropsTable.this.getPropsDataModel();
+            }
+            public int getColumnCount()
+            {
+                return this.getModel().getColumnCount();
+            }
+            public int getRowCount()
+            {
+                return this.getModel().getRowCount();
+            }
+            public Object getValueAt(int row, int column)
+            {
+                return this.getModel().getValueAt(row, column);
+            }
+            public String getStringValueAt(int row, int column)
+            {
+                TableStringConverter converter = this.converter;
+                if (converter != null)
+                {
+                    String value = converter.toString(this.getModel(), row, column);
+                    if (value != null)
+                        return value;
+                    return "";
+                }
+
+                // No converter, use getValueAt followed by toString
+                Object o = this.getValueAt(row, column);
+                if (o == null)
+                    return "";
+                String string = o.toString();
+                if (string == null)
+                    return "";
+                return string;
+            }
+            public Integer getIdentifier(int index)
+            {
+                return index;
+            }
         }
     }
 

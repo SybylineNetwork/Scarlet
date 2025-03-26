@@ -13,6 +13,8 @@ A self-hostable VRChat Group management utility with Discord integration
 
 [Settings](SETTINGS.md)
 
+[Frequently Asked Questions](FAQ.md)
+
 [Installation](#installation)
 
 ## Why Scarlet?
@@ -150,6 +152,12 @@ Extended audit events (Instance Inactive, Staff Join, Staff Leave, Vote-to-Kick 
 Some of these require that a VRChat Client in a group instance must be running on the same machine in order for them to be logged in Discord channels.
 This limitation exists because Scarlet reads the VRChat client log file as it gets updated with information.
 At the moment, these events are not of the same degree as the canonical group audit events, as they do not have an , but similar functionality may hopefully be added to VRChat's first-party API in the future.
+
+### About Actors and Targets
+
+Actors are the users that *initiated or performed* an event, like a group staff member.
+Targets are the users that had an event *performed on them*, like the user a group staff member kicks from an instance.
+For some events, the target may not be a user, like for when a group instance is created.
 
 ## Installation
 

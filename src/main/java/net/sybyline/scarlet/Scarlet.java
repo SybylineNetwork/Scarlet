@@ -57,7 +57,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.10-rc5",
+        VERSION = "0.4.10",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -185,6 +185,10 @@ public class Scarlet implements Closeable
     final File dirVrc = new File(System.getProperty("user.home"), "AppData/LocalLow/VRChat/VRChat");
     
     final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
+    {
+        Float uiScale = this.settings.getObject("ui_scale", Float.class);
+        if (uiScale != null) ScarletUI.scaleAll(uiScale.floatValue());
+    }
     final ScarletUI ui = new ScarletUI(this);
     final ScarletEventListener eventListener = new ScarletEventListener(this);
     final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(this, new File(dir, "pending_moderation_actions.json"));
@@ -195,13 +199,15 @@ public class Scarlet implements Closeable
     final ScarletData data = new ScarletData(new File(dir, "data"));
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
+    final ScarletEvidence evidence = new ScarletEvidence(this);
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
     String[] last25logs = new String[0];
     final ScarletUI.Setting<Boolean> alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
                                      alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true),
                                      showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
-
+    final ScarletUI.Setting<Void> uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
+    
 
     public void run()
     {
@@ -211,6 +217,7 @@ public class Scarlet implements Closeable
         try
         {
             this.vrc.login();
+            this.staffList.populateStaffNames();
         }
         catch (Exception ex)
         {

@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -739,7 +740,11 @@ public class ScarletData
             else
                 (this.auditEntryIds = Arrays.copyOf(auditEntryIds, auditEntryIds.length + 1))[auditEntryIds.length] = auditEntryId;
         }
-        
+        public int getUserCaseEvidenceCount()
+        {
+            String[] auditEntryIds = this.auditEntryIds;
+            return auditEntryIds == null ? 0 : auditEntryIds.length;
+        }
         public synchronized void addUserCaseEvidence(EvidenceSubmission evidenceSubmission)
         {
             if (evidenceSubmission == null)
@@ -753,13 +758,14 @@ public class ScarletData
     }
     public static class EvidenceSubmission
     {
-        public EvidenceSubmission(String auditEntryId, String submitterSnowflake, String submitterDisplayName, OffsetDateTime submissionTime, String fileName, String url, String proxyUrl)
+        public EvidenceSubmission(String auditEntryId, String submitterSnowflake, String submitterDisplayName, OffsetDateTime submissionTime, String fileName, String filePath, String url, String proxyUrl)
         {
             this.auditEntryId = auditEntryId;
             this.submitterSnowflake = submitterSnowflake;
             this.submitterDisplayName = submitterDisplayName;
             this.submissionTime = submissionTime;
             this.fileName = fileName;
+            this.filePath = filePath;
             this.url = url;
             this.proxyUrl = proxyUrl;
         }
@@ -772,6 +778,7 @@ public class ScarletData
         public String submitterDisplayName;
         public OffsetDateTime submissionTime;
         public String fileName;
+        public String filePath;
         public String url;
         public String proxyUrl;
     }
@@ -870,7 +877,7 @@ public class ScarletData
         String id;
         {
             UUID uuid;
-            do uuid = UUID.randomUUID();
+            do uuid = new UUID(timestamp.toInstant().toEpochMilli(), ((0xFFFFFFFFL & (long)ThreadLocalRandom.current().nextInt()) << 32) | (0xFFFFFFFFL & (long)typeEx.id.hashCode()));
             while (new File(this.dir, "ex/"+uuid).isFile());
             id = uuid.toString();
         }
@@ -882,6 +889,26 @@ public class ScarletData
         ce.targetId = targetId;
         ce.timestamp = timestamp;
         this.customEvent(id, ce);
+    }
+    public String[] customEvent_filter(GroupAuditTypeEx typeEx, OffsetDateTime from, OffsetDateTime to)
+    {
+        long beginning = from == null ? Long.MIN_VALUE : from.toInstant().toEpochMilli(),
+             end = to == null ? Long.MAX_VALUE : to.toInstant().toEpochMilli();
+        int typeHc = typeEx == null ? 0 : typeEx.id.hashCode();
+        return new File(this.dir, "ex").list((dir, name) ->
+        {
+            try
+            {
+                UUID uuid = UUID.fromString(name);
+                long epochMillis = uuid.getMostSignificantBits();
+                int hc = (int)(uuid.getLeastSignificantBits() & 0xFFFFFFFFL);
+                return (typeHc == 0 || typeHc == hc) && beginning <= epochMillis && epochMillis <= end;
+            }
+            catch (Exception ex)
+            {
+            }
+            return false;
+        });
     }
 
 }

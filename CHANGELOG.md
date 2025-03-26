@@ -5,6 +5,15 @@
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
 
+## 0.4.10
+  - Added UI scaling
+  - Added `joins` field to moderation summary
+  - Changed templating for VRChat Help Desk autofill to optionally append footer
+  - Changed TTS to replace some special Unicode characters before generating audio
+  - Added primitive input sanitization of the Group ID
+  - Fixed some users having negative account age in Instance UI
+  - Fixed AcctAge column of Instance UI comparing by textual instead of numerical value
+
 ## 0.4.10-rc5
   - Added daily moderation summary with configurable time-of-day to generate
   - Added templating for VRChat Help Desk autofill

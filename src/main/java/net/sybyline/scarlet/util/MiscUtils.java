@@ -27,8 +27,10 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAmount;
 import java.time.zone.ZoneRules;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.IntFunction;
@@ -127,6 +129,12 @@ public interface MiscUtils
         for (int idx = 0; idx < len; idx++)
             ret[idx] = map.apply(arr[idx]);
         return ret;
+    }
+
+    static String extractTypedUuid(String type, String fallback, String idContaining)
+    {
+        Matcher m = Pattern.compile(type+"_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matcher(idContaining);
+        return m.find() ? m.group() : fallback;
     }
 
     static String userImageUrl(User user)
@@ -364,6 +372,28 @@ public interface MiscUtils
             // ignore
         }
         return 0;
+    }
+
+    public static List<String> paginateOnLines(StringBuilder input, int maxComponentLen)
+    {
+        List<String> parts = new ArrayList<>();
+        int start = 0;
+        while (start < input.length())
+        {
+            int end = Math.min(start + maxComponentLen, input.length());
+            int lastNewline = input.lastIndexOf("\n", end);
+            if (lastNewline > start && lastNewline < end)
+            {
+                parts.add(input.substring(start, lastNewline).trim());
+                start = lastNewline + 1;
+            }
+            else
+            {
+                parts.add(input.substring(start, end).trim());
+                start = end;
+            }
+        }
+        return parts;
     }
 
     static Writer writer(File file) throws FileNotFoundException

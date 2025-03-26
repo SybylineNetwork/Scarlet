@@ -184,6 +184,9 @@ Parameters are as such:
 | `{tags}` | The custom moderation tags | `Trolling, Harassing, and Insufferable Attitude` |
 | `{description}` | The custom moderation description | |
 | `{auditId}` | The audit ID | `gaud_00000000-0000-0000-0000-000000000000` |
+| Misc | | |
+| `{appName}` | The name of this application | `Scarlet` |
+| `{appVersion}` | The version of this application | `0.4.10` |
 
 ## file `settings.json`
 
@@ -202,8 +205,11 @@ General settings for Scarlet:
     // The VRChat groupId of the relevant group
     "vrchat_group_id": "grp_00000000-0000-0000-0000-000000000000",
     
-    // The email address you would like autofilled for the VRChat Help Desk form
-    "vrchat_report_email": "username@example.com",
+    // Whether the generated report link appends a footer containing the Group ID, Audit ID, and Scarlet version
+    "vrchat_report_template_footer": "username@example.com",
+    
+    // Whether to announce watched groups with TTS
+    "tts_announce_watched_groups": true,
     
     // The voice in which TTS speaks
     "tts_voice_name": "Microsoft Zira Desktop",

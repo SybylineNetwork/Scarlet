@@ -129,7 +129,7 @@ public class ScarletVRChat implements Closeable
         Configuration.setDefaultApiClient(this.client);
         this.cookies.setup(this.client);
         this.cookies.load();
-        this.groupId = scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false);
+        this.groupId = MiscUtils.extractTypedUuid("grp", "", scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false));
         this.groupOwnerId = null;
         this.group = null;
         this.currentUserId = null;

@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -93,7 +94,7 @@ public class TTSService implements Closeable
     public boolean submit(String line)
     {
         this.instructPendingVoice();
-        return this.instruct('+', line);
+        return this.instruct('+', Normalizer.normalize(line, Normalizer.Form.NFKC));
     }
 
     public boolean submitSsml(String line)

@@ -22,7 +22,7 @@ public class TemplateStrings<T>
     TemplateStrings(Class<T> clazz)
     {
         for (Field field : clazz.getFields())
-            if (!Modifier.isStatic(field.getModifiers()))
+            if (!Modifier.isStatic(field.getModifiers()) && Modifier.isPublic(field.getModifiers()))
                 this.fields.put(field.getName(), field);
     }
 

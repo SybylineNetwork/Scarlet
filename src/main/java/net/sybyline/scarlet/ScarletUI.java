@@ -3,6 +3,7 @@ package net.sybyline.scarlet;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -24,10 +25,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.Period;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +39,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -53,8 +57,10 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSlider;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
+import javax.swing.UIDefaults;
 import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.DocumentEvent;
@@ -63,11 +69,13 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.plaf.FontUIResource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatSystemProperties;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
@@ -95,6 +103,30 @@ public class ScarletUI implements AutoCloseable
             LOG.error("Exception setting system look and feel", ex);
         }
     }
+    static void scaleAll(float scale)
+    {
+        scale = (float)Math.sqrt(scale);
+        System.setProperty(FlatSystemProperties.UI_SCALE, Float.toString(scale));
+        UIDefaults defaults = UIManager.getDefaults();
+        for (Enumeration<Object> e = defaults.keys(); e.hasMoreElements();)
+        {
+            Object key = e.nextElement();
+            Object value = defaults.get(key);
+            if (value instanceof Font)
+            {
+                Font font = (Font)value;
+                int newSize = Math.round(font.getSize2D() * scale);
+                if (value instanceof FontUIResource)
+                {
+                    defaults.put(key, new FontUIResource(font.getName(), font.getStyle(), newSize));
+                }
+                else
+                {
+                    defaults.put(key, new Font(font.getName(), font.getStyle(), newSize));
+                }
+            }
+        }
+    }
 
     public interface Setting<T>
     {
@@ -104,6 +136,7 @@ public class ScarletUI implements AutoCloseable
         T get();
         T getDefault();
         void set(T value);
+        void setOnChanged(Consumer<T> onChanged);
     }
 //    public interface SettingCategory
 //    {
@@ -137,13 +170,38 @@ public class ScarletUI implements AutoCloseable
         this.initUI();
     }
 
+    void setUIScale()
+    {
+        this.scarlet.execModal.execute(() ->
+        {
+            JSlider slider = new JSlider(50, 400, 100);
+            slider.setSnapToTicks(true);
+            slider.setPaintTicks(true);
+            slider.setMajorTickSpacing(10);
+            Float uiScale = this.scarlet.settings.getObject("ui_scale", Float.class);
+            if (uiScale != null)
+                slider.setValue(Math.round(uiScale.floatValue() * 100));
+            JLabel label = new JLabel(slider.getValue()+"%");
+            slider.addChangeListener($->label.setText(slider.getValue()+"%"));
+            JPanel panel = new JPanel(new BorderLayout());
+            panel.add(label, BorderLayout.NORTH);
+            panel.add(slider, BorderLayout.CENTER);
+            if (this.confirmModal(null, panel, "Set UI scale %"))
+            {
+                float newUiScale = 0.01F * (float)slider.getValue();
+                this.scarlet.settings.setObject("ui_scale", Float.class, newUiScale);
+                this.messageModalAsyncInfo(null, "UI scale will take effect on restart", "UI scale updated");
+            }
+        });
+    }
+
     public synchronized void playerJoin(boolean initialPreamble, String id, String name, LocalDateTime joined, String advisory, Color text_color, int priority, boolean isRejoinFromPrev)
     {
         User user = this.scarlet.vrc.getUser(id);
         Period period = null;
         if (user != null)
         {
-            period = user.getDateJoined().until(LocalDate.now());
+            period = user.getDateJoined().until(LocalDate.now(ZoneOffset.UTC));
         }
         
         ConnectedPlayer player = this.connectedPlayers.get(id);
@@ -601,6 +659,11 @@ public class ScarletUI implements AutoCloseable
         return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
     }
 
+    public boolean submitModal(Component component, Object message, String title)
+    {
+        return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION;
+    }
+
     public void messageModalAsync(Component component, Object message, String title)
     { this.messageModalAsync(component, message, title, JOptionPane.PLAIN_MESSAGE); }
     public void messageModalAsyncQuestion(Component component, Object message, String title)
@@ -992,6 +1055,7 @@ public class ScarletUI implements AutoCloseable
         final C render;
         final AtomicBoolean dirty;
         T value;
+        Consumer<T> onChanged;
         @Override
         public final String id()
         {
@@ -1015,9 +1079,20 @@ public class ScarletUI implements AutoCloseable
         @Override
         public final void set(T value)
         {
-            this.value = value != null ? value : this.defaultValue;
+            value = value != null ? value : this.defaultValue;
+            T prev = this.value;
+            this.value = value;
             this.update();
             this.markDirty();
+            Consumer<T> onChanged = this.onChanged;
+            if (onChanged != null && !Objects.equals(prev, value)) try
+            {
+                onChanged.accept(prev);
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception onChanged for "+this.id, ex);
+            }
         }
         @Override
         public final Component render()
@@ -1033,6 +1108,11 @@ public class ScarletUI implements AutoCloseable
         public final void markDirty()
         {
             this.dirty.set(true);
+        }
+        @Override
+        public final void setOnChanged(Consumer<T> onChanged)
+        {
+            this.onChanged = onChanged;
         }
         protected abstract void update();
     }
@@ -1317,6 +1397,10 @@ public class ScarletUI implements AutoCloseable
         }
         @Override
         public void deserialize(JsonElement element)
+        {
+        }
+        @Override
+        public void setOnChanged(Consumer<Void> onChanged)
         {
         }
     }

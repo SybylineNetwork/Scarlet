@@ -78,6 +78,8 @@ public class ScarletVRChatReportTemplate
         public String tags = MISSING;
         public String description = MISSING;
         public String auditId = MISSING;
+        public String appName = Scarlet.NAME;
+        public String appVersion = Scarlet.VERSION;
         public FormatParams group(String groupId, Group group)
         {
             this.groupId = groupId;
@@ -169,11 +171,27 @@ public class ScarletVRChatReportTemplate
             }
             return this;
         }
-        public String format()
+        public String format(boolean appendFooter)
         {
-            return TemplateStrings.interpolateTemplate(ScarletVRChatReportTemplate.this.check(), this);
+            String string = TemplateStrings.interpolateTemplate(ScarletVRChatReportTemplate.this.check(), this);
+            if (appendFooter)
+            {
+                string = new StringBuilder(string)
+                .append("Partially autofilled with ")
+                .append(this.appName)
+                .append(" version ")
+                .append(this.appVersion)
+                .append("<br>")
+                .append("Group ID: ")
+                .append(this.groupId)
+                .append("<br>")
+                .append("Audit ID: ")
+                .append(this.auditId)
+                .toString();
+            }
+            return string;
         }
-        public String url(String requestingEmail, String requestingUserId, String reportSubject)
+        public String url(String requestingEmail, String requestingUserId, String reportSubject, boolean appendFooter)
         {
             return VRChatHelpDeskURLs.newModerationRequest(
                 requestingEmail,
@@ -181,7 +199,7 @@ public class ScarletVRChatReportTemplate
                 requestingUserId != null ? requestingUserId : this.actorId,
                 this.targetId,
                 reportSubject != null ? reportSubject : this.targetName,
-                this.format()
+                this.format(appendFooter)
             );
         }
     }
