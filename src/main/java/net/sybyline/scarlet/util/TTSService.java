@@ -82,7 +82,7 @@ public class TTSService implements Closeable
         
         void tts_init(TTSService tts);
         
-        void tts_ready(int job, File file);
+        void tts_ready(String job, File file);
         
     }
 
@@ -91,16 +91,20 @@ public class TTSService implements Closeable
         return this.running;
     }
 
-    public boolean submit(String line)
+    public boolean submit(String identifier, String line)
     {
+        if (!identifierPattern.matcher(identifier).matches())
+            throw new IllegalArgumentException("TTSService job identifier may only have a-z, A-Z, 0-9, -, and _");
         this.instructPendingVoice();
-        return this.instruct('+', Normalizer.normalize(line, Normalizer.Form.NFKC));
+        return this.instruct('+', identifier+";"+Normalizer.normalize(line, Normalizer.Form.NFKC));
     }
 
-    public boolean submitSsml(String line)
+    public boolean submitSsml(String identifier, String line)
     {
+        if (!identifierPattern.matcher(identifier).matches())
+            throw new IllegalArgumentException("TTSService job identifier may only have a-z, A-Z, 0-9, -, and _");
         this.instructPendingVoice();
-        return this.instruct('=', line);
+        return this.instruct('=', identifier+";"+line);
     }
 
     public boolean addLexicon(String uri)
@@ -163,7 +167,8 @@ public class TTSService implements Closeable
         return !this.stdin.checkError();
     }
 
-    static final Pattern pattern = Pattern.compile("tts_(?<idx>\\d+)_audio\\.wav");
+    static final Pattern identifierPattern = Pattern.compile("\\w+"),
+                         pattern = Pattern.compile("tts_(?<id>\\w+)_audio\\.wav");
     volatile boolean running;
     final File dir;
     final Listener listener;
@@ -197,11 +202,11 @@ public class TTSService implements Closeable
                     Matcher matcher = pattern.matcher(name);
                     if (matcher.find())
                     {
-                        int idx = Integer.parseInt(matcher.group("idx"));
+                        String id = matcher.group("id");
                         boolean ok = file.isFile() && file.length() > 0L;
                         if (ok) try
                         {
-                            this.listener.tts_ready(idx, file);
+                            this.listener.tts_ready(id, file);
                         }
                         catch (Exception ex)
                         {

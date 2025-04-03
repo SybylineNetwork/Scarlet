@@ -541,10 +541,10 @@ public class ScarletData
             this.liveInstances.markDirty();
         return instanceEmbedMessage;
     }
-    public ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake)
+    public ScarletData.LiveInstancesMetadata liveInstancesMetadata_setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake, String threadSnowflake, String auxMessageSnowflake, OffsetDateTime openedAt)
     {
         ScarletData.LiveInstancesMetadata liveInstancesMeta = this.liveInstances.get();
-        liveInstancesMeta.setLocationInstanceEmbedMessage(location, guildSnowflake, channelSnowflake, messageSnowflake);
+        liveInstancesMeta.setLocationInstanceEmbedMessage(location, guildSnowflake, channelSnowflake, messageSnowflake, threadSnowflake, auxMessageSnowflake, openedAt);
         this.liveInstances.markDirty();
         return liveInstancesMeta;
     }
@@ -682,14 +682,14 @@ public class ScarletData
                 return null;
             return location2AuditEntryId.keySet();
         }
-        public synchronized void setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake)
+        public synchronized void setLocationInstanceEmbedMessage(String location, String guildSnowflake, String channelSnowflake, String messageSnowflake, String threadSnowflake, String auxMessageSnowflake, OffsetDateTime openedAt)
         {
             Map<String, InstanceEmbedMessage> location2instanceEmbedMessage = this.location2instanceEmbedMessage;
             if (location2instanceEmbedMessage == null)
                 this.location2instanceEmbedMessage = location2instanceEmbedMessage = new HashMap<>();
             if (!(location2instanceEmbedMessage instanceof HashMap))
                 this.location2instanceEmbedMessage = location2instanceEmbedMessage = new HashMap<>(location2instanceEmbedMessage);
-            location2instanceEmbedMessage.put(location, new InstanceEmbedMessage(guildSnowflake, channelSnowflake, messageSnowflake));
+            location2instanceEmbedMessage.put(location, new InstanceEmbedMessage(guildSnowflake, channelSnowflake, messageSnowflake, threadSnowflake, auxMessageSnowflake, openedAt));
         }
         public synchronized InstanceEmbedMessage getLocationInstanceEmbedMessage(String location, boolean remove)
         {
@@ -703,11 +703,14 @@ public class ScarletData
     }
     public static class InstanceEmbedMessage
     {
-        public InstanceEmbedMessage(String guildSnowflake, String channelSnowflake, String messageSnowflake)
+        public InstanceEmbedMessage(String guildSnowflake, String channelSnowflake, String messageSnowflake, String threadSnowflake, String auxMessageSnowflake, OffsetDateTime openedAt)
         {
             this.guildSnowflake = guildSnowflake;
             this.channelSnowflake = channelSnowflake;
             this.messageSnowflake = messageSnowflake;
+            this.threadSnowflake = threadSnowflake;
+            this.auxMessageSnowflake = auxMessageSnowflake;
+            this.openedAt = openedAt;
             this.closedAt = null;
         }
         public InstanceEmbedMessage()
@@ -717,6 +720,9 @@ public class ScarletData
         public String guildSnowflake;
         public String channelSnowflake;
         public String messageSnowflake;
+        public String threadSnowflake;
+        public String auxMessageSnowflake;
+        public OffsetDateTime openedAt;
         public OffsetDateTime closedAt;
     }
 
@@ -868,11 +874,15 @@ public class ScarletData
     {
         public String id, typeEx;
         public String actorId, actorDisplayName;
-        public String targetId;
+        public String targetId, targetDisplayName;
         public OffsetDateTime timestamp;
         public JsonObject data;
     }
-    public synchronized void customEvent_new(GroupAuditTypeEx typeEx, OffsetDateTime timestamp, String actorId, String actorDisplayName, String targetId)
+    public synchronized String customEvent_new(GroupAuditTypeEx typeEx, OffsetDateTime timestamp, String actorId, String actorDisplayName, String targetId, String targetDisplayName)
+    {
+        return this.customEvent_new(typeEx, timestamp, actorId, actorDisplayName, targetId, targetDisplayName);
+    }
+    public synchronized String customEvent_new(GroupAuditTypeEx typeEx, OffsetDateTime timestamp, String actorId, String actorDisplayName, String targetId, String targetDisplayName, JsonObject data)
     {
         String id;
         {
@@ -887,8 +897,11 @@ public class ScarletData
         ce.actorId = actorId;
         ce.actorDisplayName = actorDisplayName;
         ce.targetId = targetId;
+        ce.targetDisplayName = targetDisplayName;
         ce.timestamp = timestamp;
+        ce.data = data;
         this.customEvent(id, ce);
+        return id;
     }
     public String[] customEvent_filter(GroupAuditTypeEx typeEx, OffsetDateTime from, OffsetDateTime to)
     {

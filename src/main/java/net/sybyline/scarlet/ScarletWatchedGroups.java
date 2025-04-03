@@ -30,15 +30,13 @@ public class ScarletWatchedGroups
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/WatchedGroups");
 
-    public ScarletWatchedGroups(Scarlet scarlet, File watchedGroupsFile)
+    public ScarletWatchedGroups(File watchedGroupsFile)
     {
-        this.scarlet = scarlet;
         this.watchedGroupsFile = watchedGroupsFile;
         this.watchedGroups = new ConcurrentHashMap<>();
         this.load();
     }
 
-    final Scarlet scarlet;
     final File watchedGroupsFile;
     Map<String, WatchedGroup> watchedGroups;
 

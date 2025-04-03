@@ -32,10 +32,12 @@ import io.github.vrchatapi.Configuration;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.ProgressResponseBody;
 import io.github.vrchatapi.api.AuthenticationApi;
+import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
+import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
@@ -138,6 +140,7 @@ public class ScarletVRChat implements Closeable
         this.cachedWorlds = new ScarletJsonCache<>("wrld", World.class);
         this.cachedGroups = new ScarletJsonCache<>("grp", Group.class);
         this.cachedUserGroups = new ScarletJsonCache<>("gmem", new TypeToken<List<LimitedUserGroups>>(){});
+        this.cachedAvatars = new ScarletJsonCache<>("avtr", Avatar.class);
     }
 
     final Scarlet scarlet;
@@ -151,6 +154,7 @@ public class ScarletVRChat implements Closeable
     final ScarletJsonCache<World> cachedWorlds;
     final ScarletJsonCache<Group> cachedGroups;
     final ScarletJsonCache<List<LimitedUserGroups>> cachedUserGroups;
+    final ScarletJsonCache<Avatar> cachedAvatars;
     long localDriftMillis = 0L;
 
     public ApiClient getClient()
@@ -476,7 +480,7 @@ public class ScarletVRChat implements Closeable
         {
             this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
-                this.cachedUsers.add404(worldId);
+                this.cachedWorlds.add404(worldId);
             else
                 LOG.error("Error during get world: "+apiex.getMessage());
             return null;
@@ -622,8 +626,37 @@ public class ScarletVRChat implements Closeable
         catch (ApiException apiex)
         {
             this.scarlet.checkVrcRefresh(apiex);
-            LOG.error("Error during ban from group: "+apiex.getMessage());
+            LOG.error("Error during unban from group: "+apiex.getMessage());
             return false;
+        }
+    }
+
+    public Avatar getAvatar(String avatarId)
+    {
+        return this.getAvatar(avatarId, Long.MIN_VALUE);
+    }
+    public Avatar getAvatar(String avatarId, long minEpoch)
+    {
+        Avatar avatar = this.cachedAvatars.get(avatarId, minEpoch);
+        if (avatar != null)
+            return avatar;
+        if (this.cachedAvatars.is404(avatarId))
+            return null;
+        AvatarsApi avatars = new AvatarsApi(this.client);
+        try
+        {
+            avatar = avatars.getAvatar(avatarId);
+            this.cachedAvatars.put(avatarId, avatar);
+            return avatar;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedAvatars.add404(avatarId);
+            else
+                LOG.error("Error during get avatar: "+apiex.getMessage());
+            return null;
         }
     }
 

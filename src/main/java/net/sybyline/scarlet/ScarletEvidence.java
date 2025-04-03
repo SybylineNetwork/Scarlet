@@ -10,14 +10,7 @@ import net.sybyline.scarlet.util.TemplateStrings;
 public class ScarletEvidence
 {
 
-    ScarletEvidence(Scarlet scarlet)
-    {
-        this.scarlet = scarlet;
-    }
-
-    private final Scarlet scarlet;
-
-    public class FormatParams
+    public static class FormatParams
     {
         public String groupId = "groupId", groupName = "groupName", groupCode = "groupCode";
         public String actorId = "actorId", actorName = "actorName";
@@ -31,11 +24,11 @@ public class ScarletEvidence
             this.index = Integer.toUnsignedString(Integer.parseUnsignedInt(this.index) + 1);
             return this;
         }
-        public FormatParams group(String groupId, Group group)
+        public FormatParams group(ScarletVRChat vrc, String groupId, Group group)
         {
             this.groupId = groupId;
-            if (group == null)
-                group = ScarletEvidence.this.scarlet.vrc.getGroup(groupId);
+            if (group == null && vrc != null)
+                group = vrc.getGroup(groupId);
             if (group != null)
             {
                 this.groupName = group.getName();
@@ -43,23 +36,23 @@ public class ScarletEvidence
             }
             return this;
         }
-        public FormatParams actor(String actorId, String actorDisplayName)
+        public FormatParams actor(ScarletVRChat vrc, String actorId, String actorDisplayName)
         {
             this.actorId = actorId;
-            if (actorDisplayName == null)
+            if (actorDisplayName == null && vrc != null)
             {
-                User actor = ScarletEvidence.this.scarlet.vrc.getUser(actorId);
+                User actor = vrc.getUser(actorId);
                 actorDisplayName = actor == null ? actorId : actor.getDisplayName();
             }
             this.actorName = actorDisplayName;
             return this;
         }
-        public FormatParams target(String targetId, String targetDisplayName)
+        public FormatParams target(ScarletVRChat vrc, String targetId, String targetDisplayName)
         {
             this.targetId = targetId;
-            if (targetDisplayName == null)
+            if (targetDisplayName == null && vrc != null)
             {
-                User target = ScarletEvidence.this.scarlet.vrc.getUser(targetId);
+                User target = vrc.getUser(targetId);
                 targetDisplayName = target == null ? targetId : target.getDisplayName();
             }
             this.targetName = targetDisplayName;

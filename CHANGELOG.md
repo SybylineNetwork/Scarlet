@@ -2,8 +2,20 @@
 # Changelog
 
 ## Unreleased
+  - Pending: Support for multiple groups
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
+
+## 0.4.11-rc1
+  - Added extended events: User Join, User Leave, User Switch Avatar, and Instance Monitor
+  - Added avatar search support (only exposed internally for now)
+  - Added support for auto restarting (when runner is used)
+  - Added secret staff list: events actored by these users can be diverted to other channels and are not visible to normal staff under most conditions
+  - Changed handling of Vote-to-Kick Initiated extended event to properly handle initiator name when applicable
+  - Changed Moderation Report extended event to include totals and optionally omit staff without activity
+  - Removed the `associate-ids` Discord command in deference to using the staff commands
+  - Fixed some extended events not being sent to auxiliary webhooks
+  - Fixed Markdown escaping for display names in multiple places
 
 ## 0.4.10
   - Added UI scaling

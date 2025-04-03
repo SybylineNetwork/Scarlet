@@ -17,15 +17,13 @@ public class ScarletPendingModActions
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/PendingModActions");
 
-    public ScarletPendingModActions(Scarlet scarlet, File pendingModActionsFile)
+    public ScarletPendingModActions(File pendingModActionsFile)
     {
-        this.scarlet = scarlet;
         this.pendingModActionsFile = pendingModActionsFile;
         this.pendingModActions = new ConcurrentHashMap<>();
         this.load();
     }
 
-    final Scarlet scarlet;
     final File pendingModActionsFile;
     final Map<String, String> pendingModActions;
 

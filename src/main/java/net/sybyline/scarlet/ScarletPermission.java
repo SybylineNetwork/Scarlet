@@ -16,6 +16,7 @@ public enum ScarletPermission
     EVENT_UNREDACT("event.unredact", "Unredact Events"),
     CONFIG_IMPORT_WATCHED_GROUPS("config.import_watched_groups", "Submit Evidence"),
     CONFIG_EXPORT_LOGS("config.export_logs", "Export Logs"),
+    CONFIG_SERVER_RESTART("config.server_restart", "Restart Server"),
     ;
 
     ScarletPermission(String id, String title)

@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.10</version><!--scarlet-version-->
+  <version>0.4.11-rc1</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -72,6 +72,11 @@
       <groupId>com.google.apis</groupId>
       <artifactId>google-api-services-drive</artifactId>
       <version>v3-rev20250220-2.0.0</version>
+    </dependency>
+    <dependency>
+        <groupId>me.friwi</groupId>
+        <artifactId>jcefmaven</artifactId>
+        <version>132.3.1</version>
     </dependency>
   </dependencies>
 </project>

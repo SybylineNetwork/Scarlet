@@ -36,6 +36,7 @@ import io.github.vrchatapi.model.User;
 
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.sybyline.scarlet.log.ScarletLogger;
+import net.sybyline.scarlet.ui.Swing;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
 import net.sybyline.scarlet.util.MavenDepsLoader;
@@ -57,7 +58,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.10",
+        VERSION = "0.4.11-rc1",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -80,11 +81,13 @@ public class Scarlet implements Closeable
     public static void main(String[] args) throws Exception
     {
         Thread.setDefaultUncaughtExceptionHandler(Scarlet::uncaughtException);
+        int exitCode = 0;
         try (Scarlet scarlet = new Scarlet())
         {
             scarlet.run();
+            exitCode = scarlet.exitCode;
         }
-        System.exit(0);
+        System.exit(exitCode);
     }
 
     public static final File dir;
@@ -132,9 +135,18 @@ public class Scarlet implements Closeable
 
     public void stop()
     {
+        this.stop("shutdown", 0);
+    }
+    public void restart()
+    {
+        this.stop("restart", 69);
+    }
+    public void stop(String kind, int exitCode)
+    {
         if (!this.running)
-            LOG.info("Queuing shutdown...");
+            LOG.info("Queuing "+kind+"...");
         this.running = false;
+        this.exitCode = exitCode;
     }
 
     @Override
@@ -177,6 +189,7 @@ public class Scarlet implements Closeable
     final ScarletUISplash splash = new ScarletUISplash(this);
 
     volatile boolean running = true;
+    volatile int exitCode = 0;
     boolean staffMode = false;
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
@@ -187,19 +200,19 @@ public class Scarlet implements Closeable
     final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
     {
         Float uiScale = this.settings.getObject("ui_scale", Float.class);
-        if (uiScale != null) ScarletUI.scaleAll(uiScale.floatValue());
+        if (uiScale != null) Swing.scaleAll(uiScale.floatValue());
     }
     final ScarletUI ui = new ScarletUI(this);
     final ScarletEventListener eventListener = new ScarletEventListener(this);
-    final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(this, new File(dir, "pending_moderation_actions.json"));
+    final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(new File(dir, "pending_moderation_actions.json"));
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
-    final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(this, new File(dir, "watched_groups.json"));
-    final ScarletStaffList staffList = new ScarletStaffList(this, new File(dir, "staff_list.json"));
-    final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(this, new File(dir, "report_template.txt"));
+    final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(new File(dir, "watched_groups.json"));
+    final ScarletStaffList staffList = new ScarletStaffList(new File(dir, "staff_list.json"));
+    final ScarletSecretStaffList secretStaffList = new ScarletSecretStaffList(new File(dir, "secret_staff_list.json"));
+    final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(new File(dir, "report_template.txt"));
     final ScarletData data = new ScarletData(new File(dir, "data"));
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
-    final ScarletEvidence evidence = new ScarletEvidence(this);
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
     String[] last25logs = new String[0];
@@ -217,7 +230,8 @@ public class Scarlet implements Closeable
         try
         {
             this.vrc.login();
-            this.staffList.populateStaffNames();
+            this.staffList.populateStaffNames(this.vrc);
+            this.secretStaffList.populateSecretStaffNames(this.vrc);
         }
         catch (Exception ex)
         {
@@ -354,7 +368,7 @@ public class Scarlet implements Closeable
                         if (!text.isEmpty())
                         {
                             this.ttsService.setOutputToDefaultAudioDevice(this.eventListener.ttsUseDefaultAudioDevice.get());
-                            LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit(text));
+                            LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit("cli-"+Long.toUnsignedString(System.nanoTime()), text));
                         }
                     } break;
                     case "link": {

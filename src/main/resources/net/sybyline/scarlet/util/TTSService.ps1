@@ -22,9 +22,8 @@ namespace SybylineNetwork
                     Console.WriteLine("@"+voice.VoiceInfo.Name);
                 }
                 string dir = Console.ReadLine();
-                string line;
                 bool speakToDefaultAudioDevice = false;
-                for (uint idx = 0; (line = Console.ReadLine()) != null; idx++)
+                for (string line; (line = Console.ReadLine()) != null;)
                 {
                     if ("stop".Equals(line))
                     {
@@ -40,31 +39,33 @@ namespace SybylineNetwork
                     }
                     else if (line.StartsWith("+"))
                     {
+	                    int semicolon = line.IndexOf(';');
                     	if (speakToDefaultAudioDevice)
                     	{
 	                        synth.SetOutputToDefaultAudioDevice();
-	                        synth.Speak(new Prompt(line.Substring(1)));
+	                        synth.Speak(new Prompt(line.Substring(semicolon + 1)));
                     	}
                     	else
                     	{
-	                        string path = dir+"\\tts_"+idx+"_audio.wav";
+	                        string path = dir+"\\tts_"+line.Substring(0, semicolon)+"_audio.wav";
 	                        synth.SetOutputToWaveFile(path, safi);
-	                        synth.Speak(new Prompt(line.Substring(1)));
+	                        synth.Speak(new Prompt(line.Substring(semicolon + 1)));
 	                        Console.WriteLine("+"+path);
                         }
                     }
                     else if (line.StartsWith("="))
                     {
+	                    int semicolon = line.IndexOf(';');
                     	if (speakToDefaultAudioDevice)
                     	{
 	                        synth.SetOutputToDefaultAudioDevice();
-	                        synth.SpeakSsml(line.Substring(1));
+	                        synth.SpeakSsml(line.Substring(semicolon + 1));
                     	}
                     	else
                     	{
-	                        string path = dir+"\\tts_"+idx+"_audio.wav";
+	                        string path = dir+"\\tts_"+line.Substring(0, semicolon)+"_audio.wav";
 	                        synth.SetOutputToWaveFile(path, safi);
-	                        synth.SpeakSsml(line.Substring(1));
+	                        synth.SpeakSsml(line.Substring(semicolon + 1));
 	                        Console.WriteLine("+"+path);
                         }
                     }

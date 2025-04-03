@@ -140,6 +140,8 @@ public interface ScarletDiscord extends Closeable
     public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent, ScarletData.AuditEntryMetadata parentEntryMeta, boolean reactiveKickFromBan);
     public default void processUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta)
     {
+        boolean isSecretStaff = scarlet.secretStaffList.isSecretStaffId(entryMeta.entry.getActorId())
+                || scarlet.secretStaffList.isSecretStaffId(entryMeta.auxActorId);
         String //type = entryMeta.entry.getEventType(),
                auditId = entryMeta.entry.getId(),
                //description = entryMeta.entry.getDescription(),
@@ -173,9 +175,12 @@ public interface ScarletDiscord extends Closeable
                     ScarletData.AuditEntryMetadata found = scarlet.data.auditEntryMetadata(auditEntryId);
                     if (found != null)
                     {
-                        if (auditEntryMetas == null)
-                            auditEntryMetas = new ArrayList<>();
-                        auditEntryMetas.add(found);
+                        if (!isSecretStaff || (scarlet.secretStaffList.isSecretStaffId(found.entry.getActorId()) || scarlet.secretStaffList.isSecretStaffId(found.auxActorId)))
+                        {
+                            if (auditEntryMetas == null)
+                                auditEntryMetas = new ArrayList<>();
+                            auditEntryMetas.add(found);
+                        }
                     }
                 }
             }
@@ -401,7 +406,10 @@ public interface ScarletDiscord extends Closeable
     public void emitExtendedInstanceInactive(Scarlet scarlet, String location, String auditEntryId, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
     public void emitExtendedStaffJoin(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
     public void emitExtendedStaffLeave(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
-    public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
+    public void emitExtendedUserJoin(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
+    public void emitExtendedUserLeave(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName);
+    public void emitExtendedUserAvatar(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String avatarDisplayName, String[] potentialIds);
+    public void emitExtendedVtkInitiated(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String optActorId, String optActorDisplayName);
     public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
     public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay);
 

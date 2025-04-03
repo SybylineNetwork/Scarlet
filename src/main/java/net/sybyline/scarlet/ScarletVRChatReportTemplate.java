@@ -18,16 +18,14 @@ import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 public class ScarletVRChatReportTemplate
 {
 
-    ScarletVRChatReportTemplate(Scarlet scarlet, File templateFile)
+    public ScarletVRChatReportTemplate(File templateFile)
     {
-        this.scarlet = scarlet;
         this.templateFile = templateFile;
         this.lastModified = 0L;
         this.contents = "";
         this.load();
     }
 
-    private final Scarlet scarlet;
     private final File templateFile;
     private long lastModified;
     private String contents;
@@ -80,12 +78,12 @@ public class ScarletVRChatReportTemplate
         public String auditId = MISSING;
         public String appName = Scarlet.NAME;
         public String appVersion = Scarlet.VERSION;
-        public FormatParams group(String groupId, Group group)
+        public FormatParams group(ScarletVRChat vrc, String groupId, Group group)
         {
             this.groupId = groupId;
             this.groupUrl = "https://vrchat.com/home/group/"+groupId;
-            if (group == null)
-                group = ScarletVRChatReportTemplate.this.scarlet.vrc.getGroup(groupId);
+            if (group == null && vrc != null)
+                group = vrc.getGroup(groupId);
             if (group != null)
             {
                 this.groupName = group.getName();
@@ -94,46 +92,45 @@ public class ScarletVRChatReportTemplate
             }
             return this;
         }
-        public FormatParams world(String worldId, World world)
+        public FormatParams world(ScarletVRChat vrc, String worldId, World world)
         {
             this.worldId = worldId;
             this.worldUrl = "https://vrchat.com/home/world/"+worldId;
-            if (world == null)
-                world = ScarletVRChatReportTemplate.this.scarlet.vrc.getWorld(worldId);
+            if (world == null && vrc != null)
+                world = vrc.getWorld(worldId);
             this.worldName = world == null ? worldId :  world.getName();
             return this;
         }
-        public FormatParams location(String location)
+        public FormatParams location(ScarletVRChat vrc, String location)
         {
             this.location = location;
             Location locationModel = Location.of(location);
-            ScarletVRChat.LOG.info("Template location: "+location);
             if (locationModel.isConcrete())
             {
                 this.instanceType = (locationModel.ageGate ? "18+ " : "") + locationModel.type.display;
-                this.world(locationModel.world, null);
+                this.world(vrc, locationModel.world, null);
             }
             return this;
         }
-        public FormatParams actor(String actorId, String actorDisplayName)
+        public FormatParams actor(ScarletVRChat vrc, String actorId, String actorDisplayName)
         {
             this.actorId = actorId;
             this.actorUrl = "https://vrchat.com/home/user/"+actorId;
-            if (actorDisplayName == null)
+            if (actorDisplayName == null && vrc != null)
             {
-                User actor = ScarletVRChatReportTemplate.this.scarlet.vrc.getUser(actorId);
+                User actor = vrc.getUser(actorId);
                 actorDisplayName = actor == null ? actorId : actor.getDisplayName();
             }
             this.actorName = actorDisplayName;
             return this;
         }
-        public FormatParams target(String targetId, String targetDisplayName)
+        public FormatParams target(ScarletVRChat vrc, String targetId, String targetDisplayName)
         {
             this.targetId = targetId;
             this.targetUrl = "https://vrchat.com/home/user/"+targetId;
-            if (targetDisplayName == null)
+            if (targetDisplayName == null && vrc != null)
             {
-                User target = ScarletVRChatReportTemplate.this.scarlet.vrc.getUser(targetId);
+                User target = vrc.getUser(targetId);
                 targetDisplayName = target == null ? targetId : target.getDisplayName();
             }
             this.targetName = targetDisplayName;

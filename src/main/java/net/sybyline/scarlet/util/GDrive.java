@@ -4,6 +4,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +60,7 @@ public class GDrive
                 .files()
                 .list()
                 .setQ("name='"+name+"'")
-                .setFields("files(id)")
+                .setFields("files(parents,id)")
                 .execute()
                 .getFiles()
                 .stream()
@@ -71,6 +74,30 @@ public class GDrive
             LOG.error("Exception finding file", ioex);
             return null;
         }
+    }
+
+    private String buildFullPath(com.google.api.services.drive.model.File file) throws IOException
+    {
+        if (file.getParents() == null || file.getParents().isEmpty()) {
+            return "/" + file.getName(); // Root-level file
+        }
+
+        StringBuilder path = new StringBuilder();
+        String parentId = file.getParents().get(0);
+
+        while (parentId != null) {
+            com.google.api.services.drive.model.File parent = this.drive.files().get(parentId).setFields("id, name, parents").execute();
+            path.insert(0, "/" + parent.getName());
+            parentId = (parent.getParents() != null && !parent.getParents().isEmpty()) ? parent.getParents().get(0) : null;
+        }
+
+        path.append("/").append(file.getName());
+        return path.toString();
+    }
+
+    void noop() throws Exception
+    {
+        this.drive.files().create(null, null);
     }
 
 }

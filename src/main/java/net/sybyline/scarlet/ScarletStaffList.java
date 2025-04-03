@@ -23,16 +23,14 @@ public class ScarletStaffList
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/StaffList");
 
-    public ScarletStaffList(Scarlet scarlet, File staffListFile)
+    public ScarletStaffList(File staffListFile)
     {
-        this.scarlet = scarlet;
         this.staffListFile = staffListFile;
         this.staffUserIds = Collections.newSetFromMap(new ConcurrentHashMap<>());
         this.staffNames = new ConcurrentHashMap<>();
         this.load();
     }
 
-    final Scarlet scarlet;
     final File staffListFile;
     final Set<String> staffUserIds;
     final Map<String, String> staffNames;
@@ -42,14 +40,14 @@ public class ScarletStaffList
         return this.staffUserIds.toArray(new String[this.staffUserIds.size()]);
     }
 
-    public String getStaffName(String userId)
+    public String getStaffName(ScarletVRChat vrc, String userId)
     {
         if (!this.isStaffId(userId))
             return null;
         String name = this.staffNames.get(userId);
-        if (name == null && this.scarlet.vrc != null)
+        if (name == null && vrc != null)
         {
-            User user = this.scarlet.vrc.getUser(userId);
+            User user = vrc.getUser(userId);
             if (user != null)
             {
                 name = user.getDisplayName();
@@ -62,21 +60,21 @@ public class ScarletStaffList
         return name;
     }
 
-    public Map<String, String> getStaffNames()
+    public Map<String, String> getStaffNames(ScarletVRChat vrc)
     {
         Map<String, String> ret = new HashMap<>();
         for (String userId : this.getStaffIds())
         {
-            ret.put(userId, this.getStaffName(userId));
+            ret.put(userId, this.getStaffName(vrc, userId));
         }
         return ret;
     }
 
-    public void populateStaffNames()
+    public void populateStaffNames(ScarletVRChat vrc)
     {
         for (String userId : this.getStaffIds())
         {
-            this.getStaffName(userId);
+            this.getStaffName(vrc, userId);
         }
     }
 

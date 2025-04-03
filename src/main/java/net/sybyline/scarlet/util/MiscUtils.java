@@ -78,6 +78,17 @@ public interface MiscUtils
             Scarlet.LOG.error("Exception closing resource", ex);
         }
     }
+    static void close(Iterable<? extends AutoCloseable> resources)
+    {
+        if (resources != null) for (AutoCloseable resource : resources) try
+        {
+            resource.close();
+        }
+        catch (Exception ex)
+        {
+            Scarlet.LOG.error("Exception closing resource", ex);
+        }
+    }
 
     static int parseIntElse(String string, int fallback)
     {

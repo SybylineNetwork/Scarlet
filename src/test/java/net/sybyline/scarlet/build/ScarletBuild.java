@@ -120,7 +120,9 @@ public class ScarletBuild
             bat.append("@rem set JAVA_HOME=").println();
             bat.append("@rem set PATH=%JAVA_HOME%\\bin;%JAVA_HOME%\\jre\\bin;%JAVA_HOME%\\jre\\bin\\server;%JAVA_HOME%\\bin\\server;%PATH%").println();
             bat.append("@rem set SCARLET_HOME=").println();
+            bat.append(":RUN").println();
             bat.append("java -jar scarlet-").append(Scarlet.VERSION).append(".jar").println();
+            bat.append("if %ERRORLEVEL% EQU 69 goto RUN").println();
             bat.append("pause").println();
         }
         

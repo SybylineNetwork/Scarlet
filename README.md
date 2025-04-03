@@ -44,11 +44,6 @@ Discord slash commands:
   - `aux-webhooks`<br>
     Configures auxiliary webhooks<br>
     Example: `/aux-webhooks add "External Webhook One" "https://discord.com/api/webhooks/123456789123456789/IdzL4t3KvfQQ_CKYWd8Q2NM6Z7IaSOppoTTL4LS1Da_aMZ-eK1MbML-3ILnLjotWcDkp"`
-  - `associate-ids <discord-user:user> <vrchat-user:string>`<br>
-    Associates a VRChat account with a Discord account<br>
-    Example: `/associate-ids <@123456789123456789> "usr_00000000-0000-0000-0000-000000000000"`
-    - `discord-user` The Discord user
-    - `vrchat-user` The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)
   - `vrchat-user-ban <vrchat-user:string>`<br>
     Ban a specific VRChat user<br>
     Example: `/vrchat-user-ban "usr_00000000-0000-0000-0000-000000000000"`
@@ -89,6 +84,16 @@ Discord slash commands:
     Example: `/set-audit-ex-channel "groupex.instance.vtk" <#log-instance-kicks>`
     - `audit-ex-event-type` The extended event type
     - `discord-channel` The Discord channel to use, or omit to remove entry
+  - `set-audit-secret-channel <audit-event-type:string> <discord-channel:channel?>`<br>
+    Sets a given text channel as the secret channel certain audit event types use<br>
+    Example: `/set-audit-secret-channel "group.instance.kick" <#log-instance-kicks>`
+    - `audit-event-type` The VRChat Group Audit Log event type
+    - `discord-channel` The Discord channel to use, or omit to remove entry
+  - `set-audit-ex-secret-channel <audit-ex-event-type:string> <discord-channel:channel?>`<br>
+    Sets a given text channel as the secret channel certain extended event types use<br>
+    Example: `/set-audit-ex-secret-channel "groupex.instance.vtk" <#log-instance-kicks>`
+    - `audit-ex-event-type` The extended event type
+    - `discord-channel` The Discord channel to use, or omit to remove entry
   - `set-voice-channel <discord-channel:channel?>`<br>
     Sets a given voice channel as the channel in which to announce TTS messages<br>
     Example: `/set-voice-channel <#staff-in-instance>`
@@ -111,6 +116,9 @@ Discord slash commands:
   - `config-set`<br>
     Configures miscellaneous settings<br>
     Example: `/config-set mod-summary-time-of-day "-06:00"`
+  - `server-restart`<br>
+    Restarts the Scarlet server application<br>
+    Example: `/server-restart`
 
 Discord message command:
   - `submit-attachments`<br>

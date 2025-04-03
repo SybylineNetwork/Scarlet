@@ -3,7 +3,6 @@ package net.sybyline.scarlet;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -30,7 +29,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,8 +58,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
-import javax.swing.UIDefaults;
-import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -69,13 +65,10 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import javax.swing.plaf.FontUIResource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatSystemProperties;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
@@ -83,6 +76,7 @@ import com.google.gson.reflect.TypeToken;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.ui.Swing;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.PropsTable;
@@ -94,38 +88,7 @@ public class ScarletUI implements AutoCloseable
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/UI");
     static
     {
-        try
-        {
-            UIManager.setLookAndFeel(new FlatDarkLaf());
-        }
-        catch (Exception ex)
-        {
-            LOG.error("Exception setting system look and feel", ex);
-        }
-    }
-    static void scaleAll(float scale)
-    {
-        scale = (float)Math.sqrt(scale);
-        System.setProperty(FlatSystemProperties.UI_SCALE, Float.toString(scale));
-        UIDefaults defaults = UIManager.getDefaults();
-        for (Enumeration<Object> e = defaults.keys(); e.hasMoreElements();)
-        {
-            Object key = e.nextElement();
-            Object value = defaults.get(key);
-            if (value instanceof Font)
-            {
-                Font font = (Font)value;
-                int newSize = Math.round(font.getSize2D() * scale);
-                if (value instanceof FontUIResource)
-                {
-                    defaults.put(key, new FontUIResource(font.getName(), font.getStyle(), newSize));
-                }
-                else
-                {
-                    defaults.put(key, new Font(font.getName(), font.getStyle(), newSize));
-                }
-            }
-        }
+        Swing.init();
     }
 
     public interface Setting<T>

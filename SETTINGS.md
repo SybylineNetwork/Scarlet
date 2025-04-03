@@ -62,7 +62,7 @@ Settings for the Discord bot account
     },
     
     // Map of extended entry event type to Discord channel snowflake id
-    "auditType2channelSf": {
+    "auditTypeEx2channelSf": {
         "groupex.instance.staff.join": "123456789123456789",
         "groupex.instance.staff.leave": "123456789123456789",
         "groupex.instance.vtk": "123456789123456789"
@@ -72,6 +72,17 @@ Settings for the Discord bot account
     "auditType2scarletAuxWh": {
         "group.instance.kick": "External Webhook One",
         "group.instance.create": [ "External Webhook One", "External Webhook Two" ]
+    },
+    
+    // Map of audit entry event type to Discord secret channel snowflake id
+    "auditType2secretChannelSf": {
+        "group.instance.kick": "123456789123456789",
+        "group.user.ban": "123456789123456789",
+        "group.instance.create": "123456789123456789"
+    },
+    
+    // Map of extended entry event type to Discord secret channel snowflake id
+    "auditTypeEx2secretChannelSf": {
     },
     
     // Map of audit entry event type to hex RGB
@@ -133,6 +144,16 @@ Array of custom moderation tags
 ```
 
 ## file `staff_list.json`
+
+Array of VRChat userIds
+```json
+[
+    "usr_00000000-0000-0000-0000-000000000000",
+    "usr_11111111-1111-1111-1111-111111111111"
+]
+```
+
+## file `secret_staff_list.json`
 
 Array of VRChat userIds
 ```json
@@ -234,6 +255,9 @@ General settings for Scarlet:
     
     // Whether the UI becomes visible immediately or after loading is complete
     "ui_show_during_load": false,
+    
+    // Whether to only list staff with activity on a Moderation Summary
+    "moderation_summary_only_activity": false,
     
     // Whether to issue a ping to the Discord user whose associated VRChat user issues an Instance Warn
     "discord_ping_instance_warn": false,
