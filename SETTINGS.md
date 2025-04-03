@@ -445,6 +445,34 @@ Extended audit event information:
 }
 ```
 
+## file `./scarlet.version`
+
+Contains th version of Scarlet to be run:
+```txt
+0.4.11-rc2
+```
+
+## file `./scarlet.version.target`
+
+Contains the version of Scarlet to which to update (you can "update" backwards if necessary):
+```txt
+0.4.11-rc3
+```
+
+## file `./scarlet.home`
+
+If present, specifies the directory in which to place the application's files:
+```txt
+C:\path\to\custom\data\dir
+```
+
+## file `./scarlet.home.java`
+
+If present, specifies the root directory of the Java installation to use:
+```txt
+C:\path\to\jdk
+```
+
 ## registry
 
 Volatile data:

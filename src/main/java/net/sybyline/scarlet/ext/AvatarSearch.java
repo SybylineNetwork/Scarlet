@@ -81,7 +81,7 @@ public interface AvatarSearch
         public OffsetDateTime createdAt;
         public OffsetDateTime createdAt() { return this.createdAt; }
         
-        @SerializedName(value = "updated_at", alternate = { "updatedAt", "updated", "avatarUpdated", "avatar_created", "avatarUpdatedAt", "avatar_updated_at" }) @Nullable
+        @SerializedName(value = "updated_at", alternate = { "updatedAt", "updated", "avatarUpdated", "avatar_updated", "avatarUpdatedAt", "avatar_updated_at" }) @Nullable
         public OffsetDateTime updatedAt;
         public OffsetDateTime updatedAt() { return this.updatedAt; }
         

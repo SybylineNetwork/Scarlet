@@ -2,6 +2,7 @@ package net.sybyline.scarlet;
 
 import java.io.Closeable;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -15,12 +16,14 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import javax.swing.JOptionPane;
 
@@ -37,6 +40,7 @@ import io.github.vrchatapi.model.User;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.ui.Swing;
+import net.sybyline.scarlet.util.GithubApi;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
 import net.sybyline.scarlet.util.MavenDepsLoader;
@@ -58,7 +62,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc2",
+        VERSION = "0.4.11-rc3",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -133,20 +137,39 @@ public class Scarlet implements Closeable
         // absolute initialization, even before explicit constructor body
     }
 
-    public void stop()
+    public boolean stop()
     {
-        this.stop("shutdown", 0);
+        return this.stop("shutdown", 0);
     }
-    public void restart()
+    public boolean restart()
     {
-        this.stop("restart", 69);
+        return this.stop("restart", 69);
     }
-    public void stop(String kind, int exitCode)
+    public int update(String targetVersion)
+    {
+        if (!MiscUtils.isValidVersion(targetVersion))
+            return 1;
+        if (Arrays.stream(this.allVersions).noneMatch(targetVersion::equals))
+            return 2;
+        try (FileWriter fw = new FileWriter("scarlet.version.target"))
+        {
+            fw.append(targetVersion).flush();
+        }
+        catch (IOException ioex)
+        {
+            LOG.error("Exception writing to scarlet.version.target for target verstion `"+targetVersion+"`", ioex);
+            return 3;
+        }
+        return this.stop("update", 70) ? 0 : -1;
+    }
+    public synchronized boolean stop(String kind, int exitCode)
     {
         if (!this.running)
-            LOG.info("Queuing "+kind+"...");
+            return false;
+        LOG.info("Queuing "+kind+"...");
         this.running = false;
         this.exitCode = exitCode;
+        return true;
     }
 
     @Override
@@ -448,7 +471,8 @@ public class Scarlet implements Closeable
         }
     }
 
-    String newerVersion = null;
+    String newerVersion = null,
+           allVersions[] = {};
     void checkUpdate()
     {
         try
@@ -472,6 +496,16 @@ public class Scarlet implements Closeable
         catch (Exception ex)
         {
             LOG.error("Failed to download meta", ex);
+        }
+        String[] release_names = GithubApi.release_names(API_BASE_1, API_BASE_0);
+        if (release_names == null)
+        {
+            LOG.error("Failed to fetch release names");
+        }
+        else
+        {
+            Arrays.sort(release_names, MiscUtils.SEMVER_CMP_NEWEST_FIRST);
+            this.allVersions = release_names;
         }
     }
 

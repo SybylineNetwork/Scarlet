@@ -29,6 +29,7 @@ import java.time.temporal.TemporalAmount;
 import java.time.zone.ZoneRules;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -323,6 +324,11 @@ public interface MiscUtils
     }
 
     static Pattern SEMVER = Pattern.compile("(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)([\\.\\-_]?(?<kind>\\w+))?([\\.\\-_]?(?<build>\\d+))?");
+    static Comparator<String> SEMVER_CMP_NEWEST_FIRST = MiscUtils::compareSemVer;
+    static boolean isValidVersion(String v)
+    {
+        return v != null && SEMVER.matcher(v).matches();
+    }
     static boolean isPreviewVersion(String v)
     {
         if (v == null)

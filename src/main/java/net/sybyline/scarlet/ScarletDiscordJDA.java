@@ -535,7 +535,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .addOption(OptionType.STRING, "file-name", "The name of the log file", false, true),
                 Commands.slash("server-restart", "Restarts the Scarlet application")
                     .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms),
+                    .setDefaultPermissions(defaultCommandPerms)
+                    .addSubcommands(
+                        new SubcommandData("restart-now", "Restarts now"),
+                        new SubcommandData("update-now", "Updates the application now")
+                            .addOption(OptionType.STRING, "target-version", "The version of Scarlet to which to update", false, true)
+                    ),
                 Commands.message("submit-attachments")
                     .setGuildOnly(true)
                     .setNameLocalizations(MiscUtils.genLocalized($ -> "Submit Attachments"))
@@ -1199,6 +1204,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     {
                     case "scarlet-permission": {
                         event.replyChoices(SCARLET_PERMISSION_CHOICES).queue();
+                    } break;
+                    }
+                } break;
+                case "server-restart": {
+                    switch (event.getFocusedOption().getName())
+                    {
+                    case "target-version": {
+                        String[] allVersions = ScarletDiscordJDA.this.scarlet.allVersions;
+                        event.replyChoiceStrings(Arrays.copyOf(allVersions, Math.min(allVersions.length, 25))).queue();
                     } break;
                     }
                 } break;
@@ -2853,9 +2867,37 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         hook.sendMessage("You do not have permission to restart the application server.").setEphemeral(true).queue();
                         return;
                     }
+                    String targetVersion = event.getOption("target-version", OptionMapping::getAsString);
                     
-                    hook.sendMessage("Restarting...").setEphemeral(false).queue();
-                    ScarletDiscordJDA.this.scarlet.restart();
+                    switch (event.getSubcommandName())
+                    {
+                    case "restart-now": {
+                        hook.sendMessage("Restarting...").setEphemeral(false).queue();
+                        ScarletDiscordJDA.this.scarlet.restart();
+                    } break;
+                    case "update-now": {
+                        
+                        switch (ScarletDiscordJDA.this.scarlet.update(targetVersion))
+                        {
+                        case 1: {
+                            hook.sendMessageFormat("Invalid version syntax `%s`", targetVersion).setEphemeral(false).queue();
+                        } break;
+                        case 2: {
+                            hook.sendMessageFormat("Nonexistant version `%s`, manually set the contents of `scarlet.version` to this version if you want to actually do this", targetVersion).setEphemeral(false).queue();
+                        } break;
+                        case 3: {
+                            hook.sendMessageFormat("Local IO failed for target version `%s`", targetVersion).setEphemeral(false).queue();
+                        } break;
+                        case 0: {
+                            hook.sendMessage("Updating...").setEphemeral(false).queue();
+                        } break;
+                        case -1: {
+                            hook.sendMessage("Shutdown already queued!").setEphemeral(false).queue();
+                        } break;
+                        }
+                    } break;
+                    }
+                    
                     
                 }); break;
                 }

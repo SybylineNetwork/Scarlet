@@ -218,14 +218,10 @@ All such actions (e.g., kicking or banning a user) must be performed manually, b
 2. Copy or extract the files into the directory of your choosing.
 3. If you have Java 8 installed to the system PATH, skip this step.
     - Download and extract a Java 8 JDK, such as this one from [Adoptium](https://adoptium.net/temurin/releases/?os=windows&arch=x64&package=jdk&version=8).
-    - Remove the `@rem ` comment syntax from the beginnings of lines 2 and 3 of `run.bat`
-    - At the end of line 2, append the path of the directory of the JDK you extracted.<br>
-      ![setup edit runner](images/setup_edit_runner.png?raw=true)
-    - If you update Scarlet, remember to either update the version of the `.jar` on line 4:<br>
-      `java -jar scarlet-?.?.?.jar`.
+    - Create (or overwrite) the file `scarlet.home.java` next to `run.bat'.
+    - Copy-paste etc. the root path of the JDK to the **first line** of `scarlet.home.java` and save the file.
 4. If you want Scarlet to store data in a specific folder:
-    - Remove the `@rem ` comment syntax from the beginning of line 4 of `run.bat`
-    - At the end of line 4, append the path of the directory in which you want Scarlet to store data
-    - If you want Scarlet to store data right next to the `.jar` file, specify `;` as the path instead
+    - Create (or overwrite) the file `scarlet.home` next to `run.bat'.
+    - Copy-paste etc. path of the desired directory to the **first line** of `scarlet.home` and save the file.
 5. Run the `run.bat`
 

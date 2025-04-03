@@ -6,6 +6,10 @@
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
 
+## 0.4.11-rc3
+  - Added update option to `/server-restart` Discord command
+  - Fixed duplicate alternate field in AvatarSearch.VrcxAvatar
+
 ## 0.4.11-rc2
   - Added naive in-memory cache for avatar searches
   - Fixed IllegalArgumentException in TTSService
