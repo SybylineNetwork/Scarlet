@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -80,12 +81,12 @@ public class ScarletStaffList
 
     public boolean isStaffId(String userId)
     {
-        return this.staffUserIds.contains(userId);
+        return userId != null && this.staffUserIds.contains(userId);
     }
 
     public boolean addStaffId(String userId)
     {
-        if (!this.staffUserIds.add(userId))
+        if (userId == null || !this.staffUserIds.add(userId))
             return false;
         this.save();
         return true;
@@ -93,7 +94,7 @@ public class ScarletStaffList
 
     public boolean removeStaffId(String userId)
     {
-        if (!this.staffUserIds.remove(userId))
+        if (userId == null || !this.staffUserIds.remove(userId))
             return false;
         this.save();
         return true;
@@ -116,6 +117,7 @@ public class ScarletStaffList
             LOG.error("Exception loading staff list", ex);
             return false;
         }
+        ids.removeIf(Objects::isNull);
         this.staffUserIds.clear();
         this.staffUserIds.addAll(ids);
         return true;

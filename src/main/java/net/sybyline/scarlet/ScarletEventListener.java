@@ -231,10 +231,13 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         }
     }
 
-    
     void switchPlayerAvatar(OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
     {
-        String[] potentialIds = AvatarSearch.vrcxSearchAll(avatarDisplayName).filter($ -> avatarDisplayName.equals($.name)).map(AvatarSearch.VrcxAvatar::id).toArray(String[]::new);
+        String[] potentialIds = AvatarSearch
+            .vrcxSearchAllCached(avatarDisplayName)
+            .filter($$ -> avatarDisplayName.equals($$.name))
+            .map(AvatarSearch.VrcxAvatar::id)
+            .toArray(String[]::new);
         this.scarlet.discord.emitExtendedUserAvatar(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, avatarDisplayName, potentialIds);
         this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_AVATAR, odt, userId, userDisplayName, potentialIds.length == 1 ? potentialIds[0] : null, avatarDisplayName);
     }

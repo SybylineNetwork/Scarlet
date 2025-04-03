@@ -6,6 +6,11 @@
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
 
+## 0.4.11-rc2
+  - Added naive in-memory cache for avatar searches
+  - Fixed IllegalArgumentException in TTSService
+  - Fixed NullPointerException in staff lists
+
 ## 0.4.11-rc1
   - Added extended events: User Join, User Leave, User Switch Avatar, and Instance Monitor
   - Added avatar search support (only exposed internally for now)

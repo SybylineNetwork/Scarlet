@@ -94,7 +94,10 @@ public class TTSService implements Closeable
     public boolean submit(String identifier, String line)
     {
         if (!identifierPattern.matcher(identifier).matches())
-            throw new IllegalArgumentException("TTSService job identifier may only have a-z, A-Z, 0-9, -, and _");
+        {
+            LOG.error("Illegal TTSService job identifier", new IllegalArgumentException("TTSService job identifier may only have a-z, A-Z, 0-9, -, and _ (identifier: `"+identifier+"`, line: `"+line+"`)"));
+            return false;
+        }
         this.instructPendingVoice();
         return this.instruct('+', identifier+";"+Normalizer.normalize(line, Normalizer.Form.NFKC));
     }
@@ -102,7 +105,10 @@ public class TTSService implements Closeable
     public boolean submitSsml(String identifier, String line)
     {
         if (!identifierPattern.matcher(identifier).matches())
-            throw new IllegalArgumentException("TTSService job identifier may only have a-z, A-Z, 0-9, -, and _");
+        {
+            LOG.error("Illegal TTSService job identifier", new IllegalArgumentException("TTSService job identifier may only have a-z, A-Z, 0-9, -, and _ (identifier: `"+identifier+"`, line: `"+line+"`)"));
+            return false;
+        }
         this.instructPendingVoice();
         return this.instruct('=', identifier+";"+line);
     }
@@ -167,8 +173,8 @@ public class TTSService implements Closeable
         return !this.stdin.checkError();
     }
 
-    static final Pattern identifierPattern = Pattern.compile("\\w+"),
-                         pattern = Pattern.compile("tts_(?<id>\\w+)_audio\\.wav");
+    static final Pattern identifierPattern = Pattern.compile("[a-zA-Z0-9\\-\\_]+"),
+                         pattern = Pattern.compile("tts_(?<id>[a-zA-Z0-9\\-\\_]+)_audio\\.wav");
     volatile boolean running;
     final File dir;
     final Listener listener;

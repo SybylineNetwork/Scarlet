@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -80,12 +81,12 @@ public class ScarletSecretStaffList
 
     public boolean isSecretStaffId(String userId)
     {
-        return this.secretStaffUserIds.contains(userId);
+        return userId != null && this.secretStaffUserIds.contains(userId);
     }
 
     public boolean addSecretStaffId(String userId)
     {
-        if (!this.secretStaffUserIds.add(userId))
+        if (userId == null || !this.secretStaffUserIds.add(userId))
             return false;
         this.save();
         return true;
@@ -93,7 +94,7 @@ public class ScarletSecretStaffList
 
     public boolean removeSecretStaffId(String userId)
     {
-        if (!this.secretStaffUserIds.remove(userId))
+        if (userId == null || !this.secretStaffUserIds.remove(userId))
             return false;
         this.save();
         return true;
@@ -116,6 +117,7 @@ public class ScarletSecretStaffList
             LOG.error("Exception loading secretStaff list", ex);
             return false;
         }
+        ids.removeIf(Objects::isNull);
         this.secretStaffUserIds.clear();
         this.secretStaffUserIds.addAll(ids);
         return true;

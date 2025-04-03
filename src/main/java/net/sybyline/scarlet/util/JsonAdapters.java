@@ -48,6 +48,28 @@ public interface JsonAdapters
         .disableHtmlEscaping();
     }
 
+    public static @FunctionalInterface interface Discovery
+    {
+        <T> TypeAdapter<T> discover(Gson gson, TypeToken<T> type);
+    }
+    public static class DiscoveringFactory implements TypeAdapterFactory
+    {
+        public DiscoveringFactory(Discovery discovery)
+        {
+            if (discovery == null)
+                throw new IllegalArgumentException("discovery == null");
+            this.discovery = discovery;
+        }
+        final Discovery discovery;
+        @Override
+        public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type)
+        {
+            TypeAdapter<T> discovered = this.discovery.discover(gson, type);
+            if (discovered != null)
+                return discovered;
+            return gson.getDelegateAdapter(this, type);
+        }
+    }
     public static class CatchingAdapter<T> extends TypeAdapter<T>
     {
         public static class Factory implements TypeAdapterFactory
