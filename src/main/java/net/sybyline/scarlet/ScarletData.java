@@ -880,7 +880,7 @@ public class ScarletData
     }
     public synchronized String customEvent_new(GroupAuditTypeEx typeEx, OffsetDateTime timestamp, String actorId, String actorDisplayName, String targetId, String targetDisplayName)
     {
-        return this.customEvent_new(typeEx, timestamp, actorId, actorDisplayName, targetId, targetDisplayName);
+        return this.customEvent_new(typeEx, timestamp, actorId, actorDisplayName, targetId, targetDisplayName, null);
     }
     public synchronized String customEvent_new(GroupAuditTypeEx typeEx, OffsetDateTime timestamp, String actorId, String actorDisplayName, String targetId, String targetDisplayName, JsonObject data)
     {

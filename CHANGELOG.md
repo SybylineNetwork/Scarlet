@@ -10,6 +10,7 @@
   - Added naive in-memory cache for avatar searches
   - Fixed IllegalArgumentException in TTSService
   - Fixed NullPointerException in staff lists
+  - Fixed StackOverflowError in ScarletData
 
 ## 0.4.11-rc1
   - Added extended events: User Join, User Leave, User Switch Avatar, and Instance Monitor
