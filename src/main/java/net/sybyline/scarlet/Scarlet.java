@@ -60,7 +60,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc4",
+        VERSION = "0.4.11-rc5",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
@@ -141,6 +141,14 @@ public class Scarlet implements Closeable
     }
     public boolean restart()
     {
+        try (FileWriter fw = new FileWriter("scarlet.version"))
+        {
+            fw.append(VERSION).flush();
+        }
+        catch (IOException ioex)
+        {
+            LOG.error("Exception writing to scarlet.version for version `"+VERSION+"`", ioex);
+        }
         return this.stop("restart", 69);
     }
     public int update(String targetVersion)
@@ -216,8 +224,6 @@ public class Scarlet implements Closeable
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
     final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
     
-    final File dirVrc = new File(System.getProperty("user.home"), "AppData/LocalLow/VRChat/VRChat");
-    
     final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
     {
         Float uiScale = this.settings.getObject("ui_scale", Float.class);
@@ -235,13 +241,13 @@ public class Scarlet implements Closeable
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"));
-    final ScarletVRChatLogs logs = new ScarletVRChatLogs(this, this.eventListener);
+    final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
     final ScarletUI.Setting<Boolean> alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
                                      alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true),
                                      showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
+    final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
     final ScarletUI.Setting<Void> uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
-    
 
     public void run()
     {
@@ -268,7 +274,8 @@ public class Scarlet implements Closeable
             for (long now, lastIter = 0L; this.running; lastIter = now)
             {
                 // spin
-                while ((now = System.currentTimeMillis()) - lastIter < 60_000L && this.running)
+                long currentPollInterval = Math.min(Math.max(this.auditPollingInterval.get().longValue(), 10L), 300L) * 1_000L;
+                while ((now = System.currentTimeMillis()) - lastIter < currentPollInterval && this.running)
                     this.spin();
                 // maybe refresh
                 try
@@ -284,7 +291,7 @@ public class Scarlet implements Closeable
                 // query & emit
                 if (!this.staffMode) try
                 {
-                    this.queryEmit();
+                    this.queryEmit(currentPollInterval);
                 }
                 catch (Exception ex)
                 {
@@ -597,10 +604,15 @@ public class Scarlet implements Closeable
         this.queueVrcRefresh();
         return true;
     }
-    void queryEmit()
+    void queryEmit(long currentPollInterval)
     {
+        long offsetMillis = this.vrc.getLocalDriftMillis();
+        if (currentPollInterval < 30_000L)
+        {
+            offsetMillis += (30_000L - currentPollInterval) / 10L;
+        }
         OffsetDateTime from = this.settings.lastAuditQuery.getOrSupply(),
-                       to = OffsetDateTime.now(ZoneOffset.UTC);
+                       to = OffsetDateTime.now(ZoneOffset.UTC).minusNanos(offsetMillis * 1_000_000L);
         switch (this.catchupMode)
         {
         default:

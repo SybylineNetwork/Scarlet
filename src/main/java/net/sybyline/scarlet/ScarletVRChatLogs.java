@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.sybyline.scarlet.ext.VrcAppData;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Tail;
 
@@ -26,9 +27,8 @@ public class ScarletVRChatLogs implements Closeable
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/VRChat/Logs");
 
-    public ScarletVRChatLogs(Scarlet scarlet, Listener listener)
+    public ScarletVRChatLogs(Listener listener)
     {
-        this.scarlet = scarlet;
         this.listener = listener;
         
         this.tailThread = new Thread(this::thread);
@@ -60,7 +60,6 @@ public class ScarletVRChatLogs implements Closeable
         
     }
 
-    private final Scarlet scarlet;
     private final Listener listener;
 
     private void handleEntry(File file, boolean preamble, LocalDateTime timestamp, String level, String text, List<String> lines)
@@ -210,7 +209,7 @@ public class ScarletVRChatLogs implements Closeable
         this.currentTail = null;
         try
         {
-            if (!this.scarlet.dirVrc.isDirectory())
+            if (!VrcAppData.DIR.isDirectory())
             {
                 this.catchUp(null);
                 LOG.warn("The VRChat Client does not seem to be installed on this machine, disabling log tailer-parser!");
@@ -272,7 +271,7 @@ public class ScarletVRChatLogs implements Closeable
     File locateTarget()
     {
         return Optional
-            .ofNullable(this.scarlet.dirVrc.listFiles())
+            .ofNullable(VrcAppData.DIR.listFiles())
             .map(Arrays::stream)
             .orElseGet(Stream::empty)
             .filter(file -> file.isFile() && file.getName().startsWith("output_log_") && file.getName().endsWith(".txt"))

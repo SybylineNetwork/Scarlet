@@ -2682,7 +2682,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
                     if (channel0 == null)
                     {
-                        ScarletDiscordJDA.this.setAuditChannel(auditType, null);
+                        ScarletDiscordJDA.this.setAuditSecretChannel(auditType, null);
                         hook.sendMessageFormat("Unassociating VRChat group audit log event type %s (%s) from any secret channels", auditType.title, auditType.id).setEphemeral(true).queue();
                         return;
                     }
@@ -2694,7 +2694,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     else
                     {
-                        ScarletDiscordJDA.this.setAuditChannel(auditType, channel);
+                        ScarletDiscordJDA.this.setAuditSecretChannel(auditType, channel);
                         hook.sendMessageFormat("Associating VRChat group audit log event type %s (%s) with secret channel <#%s>", auditType.title, auditType.id, channel.getId()).setEphemeral(true).queue();
                     }
                     
@@ -2711,7 +2711,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
                     if (channel0 == null)
                     {
-                        ScarletDiscordJDA.this.setAuditExChannel(auditExType, null);
+                        ScarletDiscordJDA.this.setAuditExSecretChannel(auditExType, null);
                         hook.sendMessageFormat("Unassociating VRChat extended group audit event type %s (%s) from any secret channels", auditExType.title, auditExType.id).setEphemeral(true).queue();
                         return;
                     }
@@ -2723,7 +2723,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     }
                     else
                     {
-                        ScarletDiscordJDA.this.setAuditExChannel(auditExType, channel);
+                        ScarletDiscordJDA.this.setAuditExSecretChannel(auditExType, channel);
                         hook.sendMessageFormat("Associating VRChat extended group audit event type %s (%s) with secret channel <#%s>", auditExType.title, auditExType.id, channel.getId()).setEphemeral(true).queue();
                     }
                     
@@ -3823,12 +3823,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
     void condEmitEmbed(ScarletData.AuditEntryMetadata entryMeta, boolean addTargetIdField, String title, String url, Map<String, GroupAuditType.UpdateSubComponent> updates, Consumer<EmbedBuilder> condEmitEmbed)
     {
         EmbedBuilder embed = this.embed(entryMeta, addTargetIdField);
+        if (title != null)
+            embed.setTitle(title, url);
         if (condEmitEmbed != null)
             condEmitEmbed.accept(embed);
         this.condEmit(entryMeta, (channelSf, guild, channel) ->
         {
-            if (title != null)
-                embed.setTitle(title, url);
             if (updates != null && !updates.isEmpty())
                 updates.forEach((key, sub) -> {
                     String oldValue = String.valueOf(sub.oldValue),

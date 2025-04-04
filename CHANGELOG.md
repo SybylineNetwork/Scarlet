@@ -6,6 +6,12 @@
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
 
+## 0.4.11-rc5
+  - Added tentative support for tailing the VRChat client logs on Linux
+  - Added setting to modify the audit polling interval from the canonical 60 seconds
+  - Fixed some embeds not having linked titles
+  - Fixed secret channels not being set
+
 ## 0.4.11-rc4
   - Fixed duplicate avatar ids being logged
   - Fixed embed field having too many characters

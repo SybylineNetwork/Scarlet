@@ -256,6 +256,9 @@ General settings for Scarlet:
     // Whether the UI becomes visible immediately or after loading is complete
     "ui_show_during_load": false,
     
+    // The time, in seconds, between successive polls for audit events (10-300 inclusive)
+    "audit_polling_interval": 60,
+    
     // Whether to only list staff with activity on a Moderation Summary
     "moderation_summary_only_activity": false,
     
