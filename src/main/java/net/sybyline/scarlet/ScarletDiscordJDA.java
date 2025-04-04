@@ -4303,7 +4303,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle("Instance Inactive")
-                    .setDescription("Location: `"+location+"`")
+                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.INSTANCE_INACTIVE.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4319,7 +4319,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
-                    .setDescription("Location: `"+location+"`")
+                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.STAFF_JOIN.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4335,7 +4335,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
-                    .setDescription("Location: `"+location+"`")
+                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.STAFF_LEAVE.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4351,7 +4351,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
-                    .setDescription("Location: `"+location+"`")
+                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.USER_JOIN.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4367,7 +4367,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
-                    .setDescription("Location: `"+location+"`")
+                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.USER_LEAVE.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4383,11 +4383,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" switched avatars", "https://vrchat.com/home/user/"+userId)
-                    .setDescription("Location: `"+location+"`")
+                    .addField("Location", "`"+location+"`", false)
+                    .addField("Avatar Name", MarkdownSanitizer.escape(avatarDisplayName), false)
+                    .setDescription(Arrays.stream(potentialIds).limit(32).collect(Collectors.joining("`\n`", "Potential ids:\n`", "`")))
                     .setColor(GroupAuditTypeEx.USER_AVATAR.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
-                    .addField(MarkdownSanitizer.escape(avatarDisplayName), Arrays.stream(potentialIds).limit(32).collect(Collectors.joining("`\n`", "`", "`")), false)
                     .build())
                 .complete();
         });

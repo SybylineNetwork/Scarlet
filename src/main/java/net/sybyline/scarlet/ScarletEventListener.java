@@ -235,8 +235,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     {
         String[] potentialIds = AvatarSearch
             .vrcxSearchAllCached(avatarDisplayName)
+            .filter(Objects::nonNull)
             .filter($$ -> avatarDisplayName.equals($$.name))
             .map(AvatarSearch.VrcxAvatar::id)
+            .filter(Objects::nonNull)
+            .distinct()
             .toArray(String[]::new);
         this.scarlet.discord.emitExtendedUserAvatar(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, avatarDisplayName, potentialIds);
         this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_AVATAR, odt, userId, userDisplayName, potentialIds.length == 1 ? potentialIds[0] : null, avatarDisplayName);

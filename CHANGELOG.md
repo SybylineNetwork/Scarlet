@@ -6,6 +6,12 @@
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
 
+## 0.4.11-rc4
+  - Fixed duplicate avatar ids being logged
+  - Fixed embed field having too many characters
+  - Fixed misleading output from `run.bat`
+  - Fixed an infinite loop of failure `run.bat`
+
 ## 0.4.11-rc3
   - Added update option to `/server-restart` Discord command
   - Fixed duplicate alternate field in AvatarSearch.VrcxAvatar

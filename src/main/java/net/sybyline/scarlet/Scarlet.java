@@ -16,14 +16,12 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
 
 import javax.swing.JOptionPane;
 
@@ -62,7 +60,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc3",
+        VERSION = "0.4.11-rc4",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,

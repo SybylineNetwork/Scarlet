@@ -128,6 +128,7 @@ public class ScarletBuild
             bat.append("    set /p SCARLET_VERSION=<%CD%\\scarlet.version").println();
             bat.append("    echo Selected !SCARLET_VERSION!").println();
             bat.append(")").println();
+            bat.append("set \"ATTEMPTED_VERSION=0.0.0\"").println();
             bat.append(":UPDATE").println();
             bat.append("if exist \"%CD%\\scarlet.version.target\" (").println();
             bat.append("    set /p TARGET_VERSION=<%CD%\\scarlet.version.target").println();
@@ -145,13 +146,19 @@ public class ScarletBuild
             bat.append("            set \"SCARLET_VERSION=!TARGET_VERSION!\"").println();
             bat.append("        ) else (").println();
             bat.append("            echo Failed to find version !TARGET_VERSION!, download failed").println();
+            bat.append("            if !TARGET_VERSION! EQU !ATTEMPTED_VERSION! (").println();
+            bat.append("                echo Loop detected, halting").println();
+            bat.append("                goto HALT").println();
+            bat.append("            ) else (").println();
+            bat.append("                set \"ATTEMPTED_VERSION=!TARGET_VERSION!\"").println();
+            bat.append("            )").println();
             bat.append("        )").println();
             bat.append("    )").println();
             bat.append(")").println();
             bat.append(":RUN").println();
             bat.append("if exist \"%CD%\\scarlet.home\" (").println();
             bat.append("    set /p SCARLET_HOME=<%CD%\\scarlet.home").println();
-            bat.append("    echo Scarlet home is %SCARLET_HOME%").println();
+            bat.append("    echo Scarlet home is !SCARLET_HOME!").println();
             bat.append(")").println();
             bat.append("if exist \"%CD%\\scarlet.home.java\" (").println();
             bat.append("    set /p JAVA_HOME=<%CD%\\scarlet.home.java").println();
@@ -170,6 +177,7 @@ public class ScarletBuild
             bat.append("if %ERRORLEVEL% EQU 0 (").println();
             bat.append("    echo !SCARLET_VERSION!>%CD%\\scarlet.version").println();
             bat.append(")").println();
+            bat.append(":HALT").println();
             bat.append("pause").println();
         }
         
