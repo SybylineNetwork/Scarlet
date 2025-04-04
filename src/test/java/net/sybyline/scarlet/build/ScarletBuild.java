@@ -43,6 +43,7 @@ public class ScarletBuild
 {
 
     static final Path DIR = Paths.get(".").toAbsolutePath().getParent();
+    static final FileTime FILE_TIME = FileTime.fromMillis(System.currentTimeMillis());
 
     public static void main(String[] args) throws Throwable
     {
@@ -61,6 +62,9 @@ public class ScarletBuild
                buildPkgJar = buildPkg+"/scarlet-"+Scarlet.VERSION+".jar",
                buildPkgBat = buildPkg+"/run.bat",
                buildZip = build+"/scarlet-"+Scarlet.VERSION+".zip",
+               buildPkgLibs = buildPkg+"/libraries",
+               buildLibsZip = build+"/libraries.zip",
+               buildAllZip = build+"/scarlet-"+Scarlet.VERSION+"-fat.zip",
                
                srcJava = "src/main/java",
                srcRes = "src/main/resources",
@@ -121,7 +125,7 @@ public class ScarletBuild
             bat.append("@rem If you want to specify the location of the JDK installation, set the contents of \"scarlet.home.java\" to the root directory of the JDK").println();
             bat.append("@rem If you want to specify the version of Scarlet to run, set the contents of \"scarlet.version\" to the version to run").println();
             bat.append("").println();
-            bat.append("setlocal enableextensions disabledelayedexpansion").println();
+            bat.append("setlocal enableextensions enabledelayedexpansion").println();
             bat.append("set \"SCARLET_VERSION=").append(Scarlet.VERSION).append("\"").println();
             bat.append("set \"ORIGINAL_PATH=%PATH%\"").println();
             bat.append("if exist \"%CD%\\scarlet.version\" (").println();
@@ -186,7 +190,18 @@ public class ScarletBuild
         copyOne(buildBat, buildPkgBat);
         
         System.out.println("Zipping release "+buildZip);
-        compressDir(buildPkg, buildZip, FileTime.fromMillis(System.currentTimeMillis()), Deflater.DEFAULT_COMPRESSION);
+        compressDir(buildPkg, buildZip, FILE_TIME, Deflater.DEFAULT_COMPRESSION);
+        
+        System.out.println("Copying libraries to "+buildPkgLibs);
+        Path m2repo = Paths.get(System.getProperty("user.home"), ".m2", "repository");
+        for (String cp0 : mfClasspath0())
+        {
+            copyOne(m2repo.resolve(cp0), buildPkgLibs+"/"+cp0);
+        }
+        compressDir(buildPkgLibs, buildLibsZip, FILE_TIME, Deflater.DEFAULT_COMPRESSION);
+        
+        System.out.println("Zipping release with libraries "+buildAllZip);
+        compressDir(buildPkg, buildAllZip, FILE_TIME, Deflater.DEFAULT_COMPRESSION);
         
         System.out.println("Updating pom "+pom);
         updatePom(pom);
@@ -334,6 +349,21 @@ public class ScarletBuild
         }
         return mfcp.toString();
     }
+    static List<String> mfClasspath0() throws IOException
+    {
+        String m2 = "/.m2/repository/";
+        List<String> cp0 = new ArrayList<>();
+        for (URL url : classpathURLs())
+        {
+            String string = url.toString();
+            int m2i = string.indexOf(m2);
+            if (m2i > 9 && !string.endsWith("/"))
+            {
+                cp0.add(string.substring(m2i + m2.length()));
+            }
+        }
+        return cp0;
+    }
 
     static Object[] listSources(String sourcepath) throws IOException
     {
@@ -373,10 +403,14 @@ public class ScarletBuild
     }
     static void copyOne(String from, String to) throws IOException
     {
-        Path from0 = DIR.resolve(from),
-             to0 = DIR.resolve(to);
+        Path from0 = DIR.resolve(from);
+        copyOne(from0, to);
+    }
+    static void copyOne(Path from, String to) throws IOException
+    {
+        Path to0 = DIR.resolve(to);
         Files.createDirectories(to0.getParent());
-        Files.copy(from0, to0);
+        Files.copy(from, to0);
     }
     static void copyContents(String from, String to) throws IOException
     {
