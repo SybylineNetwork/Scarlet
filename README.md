@@ -1,4 +1,4 @@
-[discord-invite]: https://discord.gg/x568Ph434w
+[discord-invite]: https://discord.gg/CP3AyhypBF
 [discord-widget]: https://discord.com/api/guilds/1342131776876838912/widget.png
 
 [![discord-widget][]][discord-invite]
