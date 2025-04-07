@@ -44,12 +44,14 @@ namespace SybylineNetwork
                     	{
 	                        synth.SetOutputToDefaultAudioDevice();
 	                        synth.Speak(new Prompt(line.Substring(semicolon + 1)));
+	                        synth.SetOutputToNull();
                     	}
                     	else
                     	{
-	                        string path = dir+"\\tts_"+line.Substring(0, semicolon)+"_audio.wav";
+	                        string path = dir+"\\tts_"+line.Substring(1, semicolon - 1)+"_audio.wav";
 	                        synth.SetOutputToWaveFile(path, safi);
 	                        synth.Speak(new Prompt(line.Substring(semicolon + 1)));
+	                        synth.SetOutputToNull();
 	                        Console.WriteLine("+"+path);
                         }
                     }
@@ -60,12 +62,14 @@ namespace SybylineNetwork
                     	{
 	                        synth.SetOutputToDefaultAudioDevice();
 	                        synth.SpeakSsml(line.Substring(semicolon + 1));
+	                        synth.SetOutputToNull();
                     	}
                     	else
                     	{
-	                        string path = dir+"\\tts_"+line.Substring(0, semicolon)+"_audio.wav";
+	                        string path = dir+"\\tts_"+line.Substring(1, semicolon - 1)+"_audio.wav";
 	                        synth.SetOutputToWaveFile(path, safi);
 	                        synth.SpeakSsml(line.Substring(semicolon + 1));
+	                        synth.SetOutputToNull();
 	                        Console.WriteLine("+"+path);
                         }
                     }

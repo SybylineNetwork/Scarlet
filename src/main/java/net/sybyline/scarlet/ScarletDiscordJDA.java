@@ -1,9 +1,12 @@
 package net.sybyline.scarlet;
 
+import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.ByteBuffer;
@@ -614,40 +617,43 @@ public class ScarletDiscordJDA implements ScarletDiscord
             if (audioManager == null || !audioManager.isConnected())
                 return false;
             List<byte[]> buffersToAdd = new ArrayList<>();
-            try (AudioInputStream ais = AudioSystem.getAudioInputStream(file))
+            try (InputStream fis = new FileInputStream(file))
             {
-                AudioInputStream ais0 = null;
-                try
+                try (AudioInputStream ais = AudioSystem.getAudioInputStream(new BufferedInputStream(fis)))
                 {
-                    if (AudioSendHandler.INPUT_FORMAT.matches(ais.getFormat()))
+                    AudioInputStream ais0 = null;
+                    try
                     {
-                        ais0 = ais;
+                        if (AudioSendHandler.INPUT_FORMAT.matches(ais.getFormat()))
+                        {
+                            ais0 = ais;
+                        }
+                        else if (AudioSystem.isConversionSupported(AudioSendHandler.INPUT_FORMAT, ais.getFormat()))
+                        {
+                            ais0 = AudioSystem.getAudioInputStream(AudioSendHandler.INPUT_FORMAT, ais);
+                        }
+                        else
+                        {
+                            return false;
+                        }
+                        while (ais0.available() > 0)
+                        {
+                            byte[] buffer = new byte[BYTES_PER_20MS];
+                            for
+                            (
+                                int read = ais0.read(buffer),
+                                    total = read;
+                                total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1;
+                                total += read
+                            );
+                            buffersToAdd.add(buffer);
+                        }
                     }
-                    else if (AudioSystem.isConversionSupported(AudioSendHandler.INPUT_FORMAT, ais.getFormat()))
+                    finally
                     {
-                        ais0 = AudioSystem.getAudioInputStream(AudioSendHandler.INPUT_FORMAT, ais);
+                        if (ais0 != ais)
+                            MiscUtils.close(ais0);
                     }
-                    else
-                    {
-                        return false;
-                    }
-                    while (ais0.available() > 0)
-                    {
-                        byte[] buffer = new byte[BYTES_PER_20MS];
-                        for
-                        (
-                            int read = ais0.read(buffer),
-                                total = read;
-                            total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1;
-                            total += read
-                        );
-                        buffersToAdd.add(buffer);
-                    }
-                }
-                finally
-                {
-                    if (ais0 != ais)
-                        MiscUtils.close(ais0);
                 }
             }
             catch (Exception ex)

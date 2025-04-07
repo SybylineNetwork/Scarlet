@@ -324,7 +324,8 @@ public interface MiscUtils
     }
 
     static Pattern SEMVER = Pattern.compile("(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)([\\.\\-_]?(?<kind>\\w+))?([\\.\\-_]?(?<build>\\d+))?");
-    static Comparator<String> SEMVER_CMP_NEWEST_FIRST = MiscUtils::compareSemVer;
+    static Comparator<String> SEMVER_CMP_OLDEST_FIRST = MiscUtils::compareSemVer,
+                              SEMVER_CMP_NEWEST_FIRST = SEMVER_CMP_OLDEST_FIRST.reversed();
     static boolean isValidVersion(String v)
     {
         return v != null && SEMVER.matcher(v).matches();

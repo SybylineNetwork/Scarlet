@@ -2,7 +2,6 @@ package net.sybyline.scarlet.ext;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
-import java.util.Optional;
 
 import javax.annotation.Nullable;
 
@@ -18,22 +17,7 @@ public interface AvatarSearch_AvtrDB
 {
 
     public static int MAX_PAGE_SIZE = 50;
-
-    public static enum ApiVersion
-    {
-        V1("v1"),
-        V2("v2"),
-        ;
-        ApiVersion(String repr)
-        {
-            this.repr = repr;
-        }
-        private final String repr;
-        public static String repr(ApiVersion apiVersion)
-        {
-            return Optional.ofNullable(apiVersion).orElse(V2).repr;
-        }
-    }
+    public static final String API_ROOT = "https://api.avtrdb.com/v2";
 
     public static class StatisticsResponse
     {
@@ -117,9 +101,9 @@ public interface AvatarSearch_AvtrDB
         public String result;
     }
 
-    static Long index(ApiVersion apiVersion)
+    static Long index()
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get(String.format("https://api.avtrdb.com/%s/avatar/index", ApiVersion.repr(apiVersion))))
+        try (HttpURLInputStream in = HttpURLInputStream.get(API_ROOT+"/avatar/index"))
         {
             return in.readAsJson(null, null, JsonPrimitive.class).getAsLong();
         }
@@ -130,9 +114,9 @@ public interface AvatarSearch_AvtrDB
         }
     }
 
-    static StatisticsResponse statistics(ApiVersion apiVersion)
+    static StatisticsResponse statistics()
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get(String.format("https://api.avtrdb.com/%s/avatar/statistics", ApiVersion.repr(apiVersion))))
+        try (HttpURLInputStream in = HttpURLInputStream.get(API_ROOT+"/avatar/statistics"))
         {
             return in.readAsJson(null, null, StatisticsResponse.class);
         }
@@ -143,9 +127,9 @@ public interface AvatarSearch_AvtrDB
         }
     }
 
-    static AvtrDBAvatar[] search(ApiVersion apiVersion, boolean explicit)
+    static AvtrDBAvatar[] latest(boolean explicit)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get(String.format("https://api.avtrdb.com/%s/avatar/latest?explicit=%s", ApiVersion.repr(apiVersion), explicit)))
+        try (HttpURLInputStream in = HttpURLInputStream.get(API_ROOT+"/avatar/latest?explicit="+explicit))
         {
             return in.readAsJson(null, null, AvtrDBAvatar[].class);
         }
@@ -156,22 +140,9 @@ public interface AvatarSearch_AvtrDB
         }
     }
 
-    static AvtrDBAvatar[] search(ApiVersion apiVersion, int page_size)
+    static SearchResponse search(int page_size, int page, String query)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get(String.format("https://api.avtrdb.com/%s/avatar/search?page_size=%d&page=%d&query=%s", ApiVersion.repr(apiVersion), page_size)))
-        {
-            return in.readAsJson(null, null, AvtrDBAvatar[].class);
-        }
-        catch (IOException ioex)
-        {
-            ioex.printStackTrace();
-            return null;
-        }
-    }
-
-    static SearchResponse search(ApiVersion apiVersion, int page_size, int page, String query)
-    {
-        try (HttpURLInputStream in = HttpURLInputStream.get(String.format("https://api.avtrdb.com/%s/avatar/search?page_size=%d&page=%d&query=%s", ApiVersion.repr(apiVersion), page_size, page, URLs.encode(query))))
+        try (HttpURLInputStream in = HttpURLInputStream.get(API_ROOT+String.format("/avatar/search?page_size=%d&page=%d&query=%s", page_size, page, URLs.encode(query))))
         {
             return in.readAsJson(null, null, SearchResponse.class);
         }
@@ -182,9 +153,9 @@ public interface AvatarSearch_AvtrDB
         }
     }
 
-    static RefetchResponse request_refetch(ApiVersion apiVersion, String avatar_id, String token)
+    static RefetchResponse request_refetch( String avatar_id, String token)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.post(String.format("https://api.avtrdb.com/%s/avatar/request_refetch", ApiVersion.repr(apiVersion)), HttpURLInputStream.writeAsJson(null, null, RefetchRequest.class, new RefetchRequest(avatar_id, token))))
+        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/avatar/request_refetch", HttpURLInputStream.writeAsJson(null, null, RefetchRequest.class, new RefetchRequest(avatar_id, token))))
         {
             return in.readAsJson(null, null, RefetchResponse.class);
         }

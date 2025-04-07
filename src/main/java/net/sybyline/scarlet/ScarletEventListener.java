@@ -344,7 +344,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void tts_ready(String job, File file)
     {
-        Scarlet.LOG.info("TTS Job "+job+": "+this.scarlet.discord.submitAudio(file));
+        Scarlet.LOG.info("TTS Job "+job+"("+file.length()+") : "+this.scarlet.discord.submitAudio(file));
         file.delete();
     }
 

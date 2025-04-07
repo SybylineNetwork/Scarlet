@@ -60,12 +60,12 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc5",
+        VERSION = "0.4.11-rc6",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
-        USER_AGENT_NAME = "Sybyline-Network-"+NAME,
-        USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD,
-        USER_AGENT_STATIC = USER_AGENT_NAME+"-static/"+VERSION+" "+DEV_DISCORD,
+        SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
+        USER_AGENT_NAME = "Sybyline-Network-"+NAME,
+        USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD+"; "+SCARLET_DISCORD_URL+"; "+GITHUB_URL,
         LICENSE_URL = GITHUB_URL+"?tab=MIT-1-ov-file",
         META_URL = GITHUB_URL+"/blob/main/meta.json?raw=true",
         
@@ -502,7 +502,7 @@ public class Scarlet implements Closeable
         {
             LOG.error("Failed to download meta", ex);
         }
-        String[] release_names = GithubApi.release_names(API_BASE_1, API_BASE_0);
+        String[] release_names = GithubApi.release_names(GROUP, NAME);
         if (release_names == null)
         {
             LOG.error("Failed to fetch release names");

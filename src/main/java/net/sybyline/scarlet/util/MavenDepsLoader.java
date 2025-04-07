@@ -175,7 +175,7 @@ public class MavenDepsLoader
                 try
                 {
                     connection.setRequestMethod("HEAD");
-                    connection.setRequestProperty("User-Agent", Scarlet.USER_AGENT_STATIC);
+                    connection.setRequestProperty("User-Agent", Scarlet.USER_AGENT);
                     connection.setConnectTimeout(5_000);
                     connection.setReadTimeout(5_000);
                     int code = connection.getResponseCode();

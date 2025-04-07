@@ -6,6 +6,10 @@
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
 
+## 0.4.11-rc6
+  - Fixed TTS not outputting to Discord voice channel
+  - Fixed versions being both missing and in reverse order in `/server-restart` Discord command autocomplete
+
 ## 0.4.11-rc5
   - Added tentative support for tailing the VRChat client logs on Linux
   - Added setting to modify the audit polling interval from the canonical 60 seconds

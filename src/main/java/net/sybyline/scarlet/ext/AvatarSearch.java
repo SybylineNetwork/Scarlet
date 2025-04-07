@@ -28,7 +28,7 @@ public interface AvatarSearch
     int SEARCH_N = 5000;
     String
         URL_ROOT_AVATARRECOVERY = "https://api.avatarrecovery.com/Avatar/vrcx",
-        URL_ROOT_AVTRDB = "https://api.avtrdb.com/v2/avatar/search/vrcx",
+        URL_ROOT_AVTRDB = AvatarSearch_AvtrDB.API_ROOT+"/avatar/search/vrcx",
         URL_ROOT_NEKOSUNEVR = "https://avtr.nekosunevr.co.uk/vrcx_search.php",
         URL_ROOT_VRCDB = "https://vrcx.vrcdb.com/avatars/Avatar/VRCX",
         URL_ROOT_WORLDBALANCER = "https://avatarwb.worldbalancer.duia.us/vrcx_search.php",

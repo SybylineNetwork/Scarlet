@@ -92,7 +92,7 @@ public class HttpURLInputStream extends FilterInputStream
     {
         URL url0 = new URL(url);
         HttpURLConnection connection = (HttpURLConnection)url0.openConnection();
-        connection.setRequestProperty("User-Agent", Scarlet.USER_AGENT_STATIC);
+        connection.setRequestProperty("User-Agent", Scarlet.USER_AGENT);
         connection.setConnectTimeout(5_000);
         connection.setReadTimeout(5_000);
         if (method != null)
