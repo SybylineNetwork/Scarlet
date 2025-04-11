@@ -131,6 +131,8 @@ Example:
 2. User submits image `screenshot.png` on audit event targeting `usr_00000000-0000-0000-0000-000000000000`
 3. Image is saved to `C:/Users/Scarlet/Desktop/evidence/usr_00000000-0000-0000-0000-000000000000/screenshot.png`
 
+If the channels for auxiliary events are the same as the channel for the Instance Monitor auxiliary event, the events will be posted in threads on a per-instance basis.
+
 ### CLI commands
 
 Scarlet has several commands you can enter via standard input:

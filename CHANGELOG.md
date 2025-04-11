@@ -5,6 +5,13 @@
   - Pending: Support for multiple groups
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
+  - Pending: Distinct Server and Client modes
+
+## 0.4.11-rc7
+  - Added input sanitization/resolution for many Discord commands to accept many intuitive forms for groups, users, worlds, etc. (VRChat Web links, group short codes, etc.)
+  - Added `/vrchat-group` Discord command, with `create-instance` and `close-instance` subcommands
+  - Added customizability for JVM options via `./java.options` file
+  - Removed attachment containing user state to moderation events (will rework to improve usability)
 
 ## 0.4.11-rc6
   - Fixed TTS not outputting to Discord voice channel

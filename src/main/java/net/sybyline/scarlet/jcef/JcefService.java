@@ -1,4 +1,4 @@
-package net.sybyline.scarlet.util;
+package net.sybyline.scarlet.jcef;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import com.jogamp.opengl.awt.GLCanvas;
 
 import net.sybyline.scarlet.ui.Swing;
+import net.sybyline.scarlet.util.MiscUtils;
 
 import me.friwi.jcefmaven.CefAppBuilder;
 import me.friwi.jcefmaven.CefInitializationException;
@@ -66,7 +67,7 @@ public class JcefService implements AutoCloseable
             }
         };
         this.cef_client_ext = this.cef_app_ext.createClientExt();
-        this.cef_client_ext.addMessageRouter("avvQuery", "avvQueryCancel");
+        this.cef_client_ext.addMessageRouter("cefQuery", "cefQueryCancel");
         this.masterFrame = Swing.getWait(JFrame::new);
         this.masterScroll = Swing.getWait(JScrollPane::new);
         this.masterCanvas = Swing.getWait(() ->

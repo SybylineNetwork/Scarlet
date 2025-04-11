@@ -7,7 +7,9 @@ import java.security.GeneralSecurityException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -28,23 +30,28 @@ import com.j256.twofactorauth.TimeBasedOneTimePasswordUtil;
 import io.github.vrchatapi.ApiCallback;
 import io.github.vrchatapi.ApiClient;
 import io.github.vrchatapi.ApiException;
+import io.github.vrchatapi.ApiResponse;
 import io.github.vrchatapi.Configuration;
 import io.github.vrchatapi.JSON;
+import io.github.vrchatapi.Pair;
 import io.github.vrchatapi.ProgressResponseBody;
 import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.GroupsApi;
+import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
+import io.github.vrchatapi.model.CreateInstanceRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupRole;
+import io.github.vrchatapi.model.Instance;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
@@ -348,7 +355,7 @@ public class ScarletVRChat implements Closeable
         {
             this.save();
             {
-                Group group = this.getGroup(this.groupId);
+                Group group = this.getGroup(this.groupId, Boolean.TRUE);
                 if (group != null)
                 {
                     this.groupOwnerId = group.getOwnerId();
@@ -489,9 +496,17 @@ public class ScarletVRChat implements Closeable
 
     public Group getGroup(String groupId)
     {
-        return this.getGroup(groupId, Long.MIN_VALUE);
+        return this.getGroup(groupId, null, Long.MIN_VALUE);
     }
     public Group getGroup(String groupId, long minEpoch)
+    {
+        return this.getGroup(groupId, null, minEpoch);
+    }
+    public Group getGroup(String groupId, Boolean includeRoles)
+    {
+        return this.getGroup(groupId, includeRoles, Long.MIN_VALUE);
+    }
+    public Group getGroup(String groupId, Boolean includeRoles, long minEpoch)
     {
         Group group = this.cachedGroups.get(groupId, minEpoch);
         if (group != null)
@@ -501,7 +516,7 @@ public class ScarletVRChat implements Closeable
         GroupsApi groups = new GroupsApi(this.client);
         try
         {
-            group = groups.getGroup(groupId, null);
+            group = groups.getGroup(groupId, includeRoles);
             this.cachedGroups.put(groupId, group);
             return group;
         }
@@ -658,6 +673,15 @@ public class ScarletVRChat implements Closeable
                 LOG.error("Error during get avatar: "+apiex.getMessage());
             return null;
         }
+    }
+    public Instance createInstanceEx(JsonObject createInstanceRequest) throws ApiException
+    {
+        Map<String, String> headers = new HashMap<>();
+            headers.put("Accept", "application/json");
+            headers.put("Content-Type", "application/json");
+        okhttp3.Call localVarCall = this.client.buildCall(null, "/instances", "POST", new ArrayList<>(), new ArrayList<>(), createInstanceRequest, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+        ApiResponse<Instance> localVarResp = this.client.execute(localVarCall, Instance.class);
+        return localVarResp.getData();
     }
 
     public void save()

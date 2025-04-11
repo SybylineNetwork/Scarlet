@@ -14,6 +14,7 @@ import io.github.vrchatapi.model.ModelFile;
 
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.Hypertext;
+import net.sybyline.scarlet.util.LRUMap;
 import net.sybyline.scarlet.util.VersionedFile;
 
 public interface VrcApiStatic
@@ -47,6 +48,12 @@ public interface VrcApiStatic
     }
     class StaticContent
     {
+        static final Map<String, String> groupResolves = LRUMap.ofSynchronized(),
+                                         locationSecureNameResolves = LRUMap.ofSynchronized();
+        static final Map<String, StaticContent> users = LRUMap.ofSynchronized(),
+                                                groups = LRUMap.ofSynchronized(),
+                                                worlds = LRUMap.ofSynchronized(),
+                                                avatars = LRUMap.ofSynchronized();
         public static enum Kind
         {
             USER("User", "https://vrchat.com/home/user/"),
@@ -125,6 +132,10 @@ public interface VrcApiStatic
             return this.computeInfo();
         }
     }
+    static StaticContent userCached(String userId)
+    {
+        return StaticContent.users.computeIfAbsent(userId, VrcApiStatic::user);
+    }
     static StaticContent user(String userId)
     {
         try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/user/"+userId))
@@ -147,6 +158,10 @@ public interface VrcApiStatic
         return null;
     }
     // https://vrchat.com/api/1/groups/redirect/SHORT6.DISC/settings
+    static StaticContent groupCached(String groupId)
+    {
+        return StaticContent.groups.computeIfAbsent(groupId, VrcApiStatic::group);
+    }
     static StaticContent group(String groupId)
     {
         try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/group/"+groupId))
@@ -168,6 +183,44 @@ public interface VrcApiStatic
         {
         }
         return null;
+    }
+    static String groupResolveCached(String groupCode)
+    {
+        return StaticContent.groupResolves.computeIfAbsent(groupCode, VrcApiStatic::groupResolve);
+    }
+    static String groupResolve(String groupCode)
+    {
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://api.vrchat.cloud/api/1/groups/redirect/"+groupCode, HttpURLInputStream.DISABLE_REDIRECTS))
+        {
+            String location = in.connection().getHeaderField("location");
+            if (location != null && location.startsWith("/home/group/"))
+                return location.substring(12);
+        }
+        catch (Exception ex)
+        {
+        }
+        return null;
+    }
+    static String locationSecureNameResolveCached(String secureName)
+    {
+        return StaticContent.locationSecureNameResolves.computeIfAbsent(secureName, VrcApiStatic::locationSecureNameResolve);
+    }
+    static String locationSecureNameResolve(String secureName)
+    {
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/i/"+secureName, HttpURLInputStream.DISABLE_REDIRECTS))
+        {
+            String location = in.connection().getHeaderField("location");
+            if (location != null && location.startsWith("/home/launch?worldId="))
+                return location.substring(21).replace("&instanceId=", ":").replace("&shortName="+secureName, "");
+        }
+        catch (Exception ex)
+        {
+        }
+        return null;
+    }
+    static StaticContent worldCached(String worldId)
+    {
+        return StaticContent.worlds.computeIfAbsent(worldId, VrcApiStatic::world);
     }
     static final Pattern OG_IMAGE_ALT = Pattern.compile("\\A\\QA preview image of VRChat \\E\\w+\\Q \"\\E(?<name>.+)\\Q\" by \\E(?<ownerName>.+)\\z");
     static StaticContent world(String worldId)
@@ -203,6 +256,10 @@ public interface VrcApiStatic
         {
         }
         return null;
+    }
+    static StaticContent avatarCached(String avatarId)
+    {
+        return StaticContent.avatars.computeIfAbsent(avatarId, VrcApiStatic::avatar);
     }
     static StaticContent avatar(String avatarId)
     {

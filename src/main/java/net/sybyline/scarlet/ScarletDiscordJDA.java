@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -50,14 +51,22 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
+import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.api.GroupsApi;
+import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.UsersApi;
+import io.github.vrchatapi.model.CreateInstanceRequest;
 import io.github.vrchatapi.model.Group;
+import io.github.vrchatapi.model.GroupAccessType;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
+import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
+import io.github.vrchatapi.model.Instance;
+import io.github.vrchatapi.model.InstanceRegion;
+import io.github.vrchatapi.model.InstanceType;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.RepresentedGroup;
 import io.github.vrchatapi.model.User;
@@ -120,6 +129,7 @@ import net.dv8tion.jda.api.requests.restaction.AbstractWebhookMessageAction;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
+import net.dv8tion.jda.api.utils.AttachedFile;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
@@ -128,12 +138,14 @@ import net.dv8tion.jda.api.utils.messages.MessageCreateRequest;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.log.ScarletLogger;
+import net.sybyline.scarlet.util.DiscordOptionsEnum;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
+import net.sybyline.scarlet.util.VrcIds;
 
 public class ScarletDiscordJDA implements ScarletDiscord
 {
@@ -217,6 +229,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      evidenceEnabled;
     final ScarletUI.Setting<Void> selectEvidenceRoot;
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
+    final Map<String, InstanceCreation> instanceCreation = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
     Map<String, UniqueStrings> scarletPermission2roleSf = new HashMap<>();
     Map<String, String> scarletAuxWh2webhookUrl = new ConcurrentHashMap<>();
@@ -230,14 +243,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @FunctionalInterface interface ImmediateHandler { void handle() throws Exception; }
     @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
 
-    static final String[] AUDIT_EVENT_IDS = MiscUtils.map(GroupAuditType.values(), String[]::new, GroupAuditType::id);
-    static final Command.Choice[] AUDIT_EVENT_CHOICES = MiscUtils.map(GroupAuditType.values(), Command.Choice[]::new, $ -> new Command.Choice($.title, $.id));
-
-    static final String[] AUDIT_EX_EVENT_IDS = MiscUtils.map(GroupAuditTypeEx.values(), String[]::new, GroupAuditTypeEx::id);
-    static final Command.Choice[] AUDIT_EX_EVENT_CHOICES = MiscUtils.map(GroupAuditTypeEx.values(), Command.Choice[]::new, $ -> new Command.Choice($.title, $.id));
-
-    static final String[] SCARLET_PERMISSION_IDS = MiscUtils.map(ScarletPermission.values(), String[]::new, ScarletPermission::id);
-    static final Command.Choice[] SCARLET_PERMISSION_CHOICES = MiscUtils.map(ScarletPermission.values(), Command.Choice[]::new, $ -> new Command.Choice($.title, $.id));
+    static final DiscordOptionsEnum<GroupAuditType> AUDIT_EVENT_OPTIONS = DiscordOptionsEnum.of(GroupAuditType.class, GroupAuditType::id, GroupAuditType::title);
+    static final DiscordOptionsEnum<GroupAuditTypeEx> AUDIT_EX_EVENT_OPTIONS = DiscordOptionsEnum.of(GroupAuditTypeEx.class, GroupAuditTypeEx::id, GroupAuditTypeEx::title);
+    static final DiscordOptionsEnum<ScarletPermission> SCARLET_PERMISSION_OPTIONS = DiscordOptionsEnum.of(ScarletPermission.class, ScarletPermission::id, ScarletPermission::title);
 
     static final Command.Choice[] UTC_OFFSET_HOURS_CHOICES =
     {
@@ -267,6 +275,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         new Command.Choice("Midnight for UTC+12:00 (NZST)", "+12:00"),
         new Command.Choice("Midnight for UTC+13:00 [NZDT]", "+13:00"),
     };
+
+    static final DiscordOptionsEnum<InstanceRegion> INSTANCE_REGION_OPTIONS = DiscordOptionsEnum.of(InstanceRegion.class, InstanceRegion::getValue, "US", "US East", "Europe", "Japan", "Default");
+    static final DiscordOptionsEnum<GroupAccessType> GROUP_ACCESS_TYPE_OPTIONS = DiscordOptionsEnum.of(GroupAccessType.class, GroupAccessType::getValue, "Group Public", "Group Plus", "Group Members");
 
     void init()
     {
@@ -311,6 +322,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void updateCommandList()
     {
+        try
+        {
         DefaultMemberPermissions defaultCommandPerms = DefaultMemberPermissions.enabledFor(
             Permission.ADMINISTRATOR,
             Permission.MANAGE_SERVER,
@@ -457,6 +470,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
                     .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                Commands.slash("vrchat-group", "Manages groups")
+                    .setGuildOnly(true)
+                    .setDefaultPermissions(defaultCommandPerms)
+                    .addSubcommands(
+                        new SubcommandData("open-instance", "Opens an instance")
+//                        .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+                        .addOption(OptionType.STRING, "vrchat-world", "The VRChat world id (wrld_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                        new SubcommandData("close-instance", "Closes an instance")
+                            .addOption(OptionType.STRING, "vrchat-location", "The instance to close", true)
+                            .addOptions(new OptionData(OptionType.INTEGER, "close-hard", "The number of minutes to wait before closing the instance").setRequiredRange(1L, 600L))
+                    ),
                 Commands.slash("discord-user-info", "Lists internal information for a specific Discord user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
@@ -549,7 +573,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setNameLocalizations(MiscUtils.genLocalized($ -> "Submit Attachments"))
                     .setDefaultPermissions(defaultCommandPerms)
             )
-            .complete();
+            .queue($ -> LOG.info("Commands updated"), $ -> LOG.error("Failed to update commands", $));
+        LOG.info("Queued commands update");
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception queuing commands update", ex);
+        }
     }
 
     void setStaffMode()
@@ -961,6 +991,73 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
     }
 
+    class InstanceCreation
+    {
+        InstanceCreation(String ictoken, String worldId, String groupId)
+        {
+            this.worldId = worldId;
+            this.groupId = groupId;
+        }
+        final String worldId;
+        final String groupId;
+        InstanceRegion region = InstanceRegion.US;
+        List<String> roleIds = null;
+        GroupAccessType groupAccessType = GroupAccessType.PUBLIC;
+        OffsetDateTime closedAt = null;
+        Boolean queueEnabled = Boolean.TRUE;
+        Boolean hardClose = Boolean.FALSE;
+        Boolean ageGate = Boolean.FALSE;
+        Boolean instancePersistenceEnabled = null;
+        String displayName = null;
+        
+        boolean contentSettings_drones = true;
+        boolean contentSettings_emoji = true;
+        boolean contentSettings_pedestals = true;
+        boolean contentSettings_prints = true;
+        boolean contentSettings_stickers = true;
+        CreateInstanceRequest createRequest()
+        {
+            CreateInstanceRequest cir = new CreateInstanceRequest();
+            cir.setWorldId(this.worldId);
+            cir.setOwnerId(this.groupId);
+            cir.setType(InstanceType.GROUP);
+            cir.setRegion(this.region);
+            if (this.groupAccessType == GroupAccessType.MEMBERS && this.roleIds != null) cir.setRoleIds(this.roleIds);
+            cir.setGroupAccessType(this.groupAccessType);
+            if (this.closedAt != null) cir.setClosedAt(this.closedAt);
+            cir.setQueueEnabled(this.queueEnabled);
+            cir.setHardClose(this.hardClose);
+//            cir.setAgeGate(this.ageGate);
+            return cir;
+        }
+        JsonObject createRequestEx()
+        {
+            JsonObject cir = new JsonObject();
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_WORLD_ID, this.worldId);
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_TYPE, InstanceType.GROUP.getValue());
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_OWNER_ID, this.groupId);
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_REGION, this.region.getValue());
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_GROUP_ACCESS_TYPE, this.groupAccessType.getValue());
+            if (this.groupAccessType == GroupAccessType.MEMBERS && this.roleIds != null)
+                cir.add(CreateInstanceRequest.SERIALIZED_NAME_ROLE_IDS, JSON.getGson().toJsonTree(this.roleIds));
+            if (this.closedAt != null) cir.add(CreateInstanceRequest.SERIALIZED_NAME_CLOSED_AT, JSON.getGson().toJsonTree(this.closedAt));
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_QUEUE_ENABLED, this.queueEnabled);
+            cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_HARD_CLOSE, this.hardClose);
+            
+            cir.addProperty("ageGate", this.ageGate);
+            if (this.instancePersistenceEnabled != null) cir.addProperty("instancePersistenceEnabled", this.instancePersistenceEnabled);
+            if (this.displayName != null) cir.addProperty("displayName", this.displayName);
+            JsonObject cs = new JsonObject();
+                cs.addProperty("drones", this.contentSettings_drones);
+                cs.addProperty("emoji", this.contentSettings_emoji);
+                cs.addProperty("pedestals", this.contentSettings_pedestals);
+                cs.addProperty("prints", this.contentSettings_prints);
+                cs.addProperty("stickers", this.contentSettings_stickers);
+            cir.add("contentSettings", cs);
+            return cir;
+        }
+    }
+
     class JDAEvents extends ListenerAdapter
     {
         JDAEvents()
@@ -1145,7 +1242,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     switch (event.getFocusedOption().getName())
                     {
                     case "audit-event-type": {
-                        event.replyChoices(AUDIT_EVENT_CHOICES).queue();
+                        AUDIT_EVENT_OPTIONS.replyQueue(event);
                     } break;
                     }
                 } break;
@@ -1153,7 +1250,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     switch (event.getFocusedOption().getName())
                     {
                     case "audit-event-type": {
-                        event.replyChoices(AUDIT_EVENT_CHOICES).queue();
+                        AUDIT_EVENT_OPTIONS.replyQueue(event);
                     } break;
                     }
                 } break;
@@ -1161,7 +1258,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     switch (event.getFocusedOption().getName())
                     {
                     case "audit-ex-event-type": {
-                        event.replyChoices(AUDIT_EX_EVENT_CHOICES).queue();
+                        AUDIT_EX_EVENT_OPTIONS.replyQueue(event);
                     } break;
                     }
                 } break;
@@ -1169,7 +1266,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     switch (event.getFocusedOption().getName())
                     {
                     case "audit-event-type": {
-                        event.replyChoices(AUDIT_EVENT_CHOICES).queue();
+                        AUDIT_EVENT_OPTIONS.replyQueue(event);
                     } break;
                     }
                 } break;
@@ -1177,7 +1274,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     switch (event.getFocusedOption().getName())
                     {
                     case "audit-ex-event-type": {
-                        event.replyChoices(AUDIT_EX_EVENT_CHOICES).queue();
+                        AUDIT_EX_EVENT_OPTIONS.replyQueue(event);
                     } break;
                     }
                 } break;
@@ -1209,7 +1306,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     switch (event.getFocusedOption().getName())
                     {
                     case "scarlet-permission": {
-                        event.replyChoices(SCARLET_PERMISSION_CHOICES).queue();
+                        SCARLET_PERMISSION_OPTIONS.replyQueue(event);
                     } break;
                     }
                 } break;
@@ -1314,7 +1411,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 case "watched-group": this.handleInGuildAsync(event, false, hook -> {
                     
                     int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String groupId = event.getOption("vrchat-group", OptionMapping::getAsString);
+                    String groupId = event.getOption("vrchat-group", VrcIds::getAsString_group);
                     Attachment importedFile = event.getOption("import-file", OptionMapping::getAsAttachment);
                     String groupTags = event.getOption("group-tags", OptionMapping::getAsString);
                     String groupTag = event.getOption("group-tag", OptionMapping::getAsString);
@@ -1934,7 +2031,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 case "staff-list": this.handleInGuildAsync(event, true, hook -> {
                     
                     int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String vrcId = event.getOption("vrchat-user", null, OptionMapping::getAsString);
+                    String vrcId = event.getOption("vrchat-user", null, VrcIds::getAsString_user);
                     net.dv8tion.jda.api.entities.User user = event.getOption("discord-user", null, OptionMapping::getAsUser);
                     long within1day = System.currentTimeMillis() - 86400_000L;
 
@@ -2035,7 +2132,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 case "secret-staff-list": this.handleInGuildAsync(event, true, hook -> {
                     
                     int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String vrcId = event.getOption("vrchat-user", null, OptionMapping::getAsString);
+                    String vrcId = event.getOption("vrchat-user", null, VrcIds::getAsString_user);
                     net.dv8tion.jda.api.entities.User user = event.getOption("discord-user", null, OptionMapping::getAsUser);
                     long within1day = System.currentTimeMillis() - 86400_000L;
 
@@ -2141,7 +2238,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         return;
                     }
                     
-                    String vrcTargetId = event.getOption("vrchat-user").getAsString();
+                    String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
                     
                     String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
                     if (vrcActorId == null)
@@ -2189,7 +2286,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         return;
                     }
                     
-                    String vrcTargetId = event.getOption("vrchat-user").getAsString();
+                    String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
                     
                     String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
                     if (vrcActorId == null)
@@ -2231,7 +2328,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "vrchat-user-info": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String vrcId = event.getOption("vrchat-user").getAsString();
+                    String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
 
                     long within1day = System.currentTimeMillis() - 86400_000L;
                     User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
@@ -2306,6 +2403,108 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     ScarletDiscordJDA.this.new Pagination(event.getId(), sb).queue(hook);
                     
                 }); break;
+                case "vrchat-group": this.handleInGuildAsync(event, true, hook -> {
+
+                    long within1day = System.currentTimeMillis() - 86400_000L;
+                    
+                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+                    if (vrcActorId == null)
+                    {
+                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
+                        return;
+                    }
+                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcActorId, within1day);
+                    if (sc == null)
+                    {
+                        hook.sendMessageFormat("No VRChat user found with id %s", vrcActorId).setEphemeral(true).queue();
+                        return;
+                    }
+                    String vrcActorDisplayName = sc == null ? vrcActorId : sc.getDisplayName();
+
+                    switch (event.getSubcommandName())
+                    {
+                    case "open-instance": {
+
+                        String openGroup = ScarletDiscordJDA.this.scarlet.vrc.groupId;//event.getOption("vrchat-group", VrcIds::getAsString_group);
+                        String openWorld = event.getOption("vrchat-world", VrcIds::getAsString_world);
+                        String openName = ScarletDiscordJDA.this.getLocationName(openWorld);
+                        
+                        if (openName == null)
+                        {
+                            hook.sendMessageFormat("No VRChat world found with id %s", openWorld).setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        String ictoken;
+                        do ictoken = UUID.randomUUID().toString();
+                        while (ScarletDiscordJDA.this.instanceCreation.putIfAbsent(ictoken, new InstanceCreation(ictoken, openWorld, openGroup)) != null);
+                        
+                        List<GroupRole> roles = ScarletDiscordJDA.this.scarlet.vrc.getGroupRoles(openGroup);
+                        
+                        hook.sendMessageFormat("Create a new [%s](https://vrchat.com/home/world/%s) instance:", openName, openWorld)
+                            .addActionRow(StringSelectMenu.create("new-instance-access-type:"+ictoken)
+                                    .addOption("Group Public", "public")
+                                    .addOption("Group Plus", "plus")
+                                    .addOption("Group Members", "members")
+                                    .setDefaultValues("public")
+                                    .build())
+                            .addActionRow(StringSelectMenu.create("new-instance-roles:"+ictoken)
+                                    .setPlaceholder("Select roles (Group Members)")
+                                    .addOptions(roles.stream().map($ -> SelectOption.of($.getName(), $.getId())).limit(25L).toArray(SelectOption[]::new))
+                                    .setRequiredRange(1, Math.min(25, roles.size()))
+                                    .build())
+                            .addActionRow(StringSelectMenu.create("new-instance-region:"+ictoken)
+                                    .addOption("Region: US", "us")
+                                    .addOption("Region: US East", "use")
+                                    .addOption("Region: Europe", "eu")
+                                    .addOption("Region: Japan", "jp")
+                                    .setDefaultValues("us")
+                                    .build())
+                            .addActionRow(StringSelectMenu.create("new-instance-flags:"+ictoken)
+                                    .setPlaceholder("Options & Content Settings")
+                                    .addOption("Join queue (users wait to connect when full)", "queueEnabled")
+                                    .addOption("Hard close (kick connected users on close)", "hardClose")
+                                    .addOption("Age gate (Age Verified 18+ users only)", "ageGate")
+//                                    .addOption("Instance persistence (state persists when empty)", "instancePersistenceEnabled")
+                                    .addOption("Content: drones", "contentSettings.drones")
+                                    .addOption("Content: emoji", "contentSettings.emoji")
+                                    .addOption("Content: pedestals", "contentSettings.pedestals")
+                                    .addOption("Content: prints", "contentSettings.prints")
+                                    .addOption("Content: stickers", "contentSettings.stickers")
+                                    .setRequiredRange(0, 8)
+                                    .setDefaultValues("queueEnabled", "contentSettings.drones", "contentSettings.emoji", "contentSettings.pedestals", "contentSettings.prints", "contentSettings.stickers")
+                                    .build())
+                            .addActionRow(Button.success("new-instance-create:"+ictoken, "Create"),
+                                          Button.danger("new-instance-cancel:"+ictoken, "Cancel"),
+                                          Button.secondary("new-instance-modal:"+ictoken, "Additional options..."))
+                            .setEphemeral(true)
+                            .queue();
+                        
+                    } break;
+                    case "close-instance": {
+                        
+                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_manage, event.getMember()))
+                        {
+                            hook.sendMessage("You do not have permission to close instances").setEphemeral(true).queue();
+                            return;
+                        }
+                        
+                        String closeLocation = event.getOption("vrchat-location", null, VrcIds::getAsString_location);
+                        Location closeLocationModel = Location.of(closeLocation);
+                        Boolean closeHard = event.getOption("close-hard", null, OptionMapping::getAsBoolean);
+                        Long closeInMinutes = event.getOption("close-in-minutes", null, OptionMapping::getAsLong);
+                        OffsetDateTime closeAt = closeInMinutes == null ? null : OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(closeInMinutes.longValue());
+                        
+                        InstancesApi instances = new InstancesApi(ScarletDiscordJDA.this.scarlet.vrc.client);
+                        Instance instance = instances.closeInstance(closeLocationModel.world, closeLocationModel.instance, closeHard, closeAt);
+                        
+                        LOG.info(String.format("%s (%s) closed an instance: %s", vrcActorDisplayName, vrcActorId, instance.getId()));
+                        hook.sendMessageFormat("Closed instance `%s`", instance.getId()).setEphemeral(true).queue();
+                        
+                    } break;
+                    }
+                    
+                }); break;
                 case "discord-user-info": this.handleInGuildAsync(event, true, hook -> {
                     
                     net.dv8tion.jda.api.entities.User user = event.getOption("discord-user").getAsUser();
@@ -2359,7 +2558,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "query-target-history": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String vrcId = event.getOption("vrchat-user").getAsString();
+                    String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
                     int daysBack = Math.max(1, Math.min(2048, event.getOption("days-back", 7, OptionMapping::getAsInt)));
 
                     long within1day = System.currentTimeMillis() - 86400_000L;
@@ -2407,7 +2606,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }); break;
                 case "query-actor-history": this.handleInGuildAsync(event, true, hook -> {
                     
-                    String vrcId = event.getOption("vrchat-user").getAsString();
+                    String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
                     int daysBack = Math.max(1, Math.min(2048, event.getOption("days-back", 7, OptionMapping::getAsInt)));
 
                     long within1day = System.currentTimeMillis() - 86400_000L;
@@ -2508,8 +2707,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             .append("): ")
                             .append(channelSf == null ? "unassigned" : ("<#"+channelSf+">"));
                     }
-                    
-                    hook.sendMessage(sb.toString()).setEphemeral(true).queue();
+                    List<String> pages = MiscUtils.paginateOnLines(sb, 2000);
+                    for (String page : pages)
+                    {
+                        hook.sendMessage(page).setEphemeral(false).queue();
+                    }
                 }); break;
                 case "config-set": this.handleInGuildAsync(event, true, hook -> {
                     
@@ -3143,6 +3345,117 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId, auditEntryMeta);
                     this.updateAuxMessage(event.getChannel(), auditEntryMeta);
                 }); break;
+                case "new-instance-create": this.handleInGuildAsync(event, true, hook -> {
+                    
+                    long within1day = System.currentTimeMillis() - 86400_000L;
+                    
+                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+                    if (vrcActorId == null)
+                    {
+                        hook.sendMessage("You must have linked ids to perform this action.").setEphemeral(true).queue();
+                        return;
+                    }
+                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcActorId, within1day);
+                    if (sc == null)
+                    {
+                        hook.sendMessageFormat("No VRChat user found with id %s", vrcActorId).setEphemeral(true).queue();
+                        return;
+                    }
+                    String vrcActorDisplayName = sc == null ? vrcActorId : sc.getDisplayName();
+                    
+                    String ictoken = parts[1];
+                    
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    
+                    if (ic == null)
+                    {
+                        hook.deleteMessageById(event.getMessageId()).queue();
+                        hook.sendMessage("This interaction timed out.").queue();
+                        hook.deleteOriginal().delay(5_000L, TimeUnit.MILLISECONDS).queue();
+                        return;
+                    }
+                    
+                    switch (ic.groupAccessType)
+                    {
+                    case PUBLIC: {
+                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_public_create, event.getMember()))
+                        {
+                            hook.sendMessage("You do not have permission to create group public instances.").setEphemeral(true).queue();
+                            return;
+                        }
+                    } break;
+                    case PLUS: {
+                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_plus_create, event.getMember()))
+                        {
+                            hook.sendMessage("You do not have permission to create group plus instances.").setEphemeral(true).queue();
+                            return;
+                        }
+                    } break;
+                    case MEMBERS: {
+                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_open_create, event.getMember()))
+                        {
+                            hook.sendMessage("You do not have permission to create group member-only instances.").setEphemeral(true).queue();
+                            return;
+                        }
+                        if (ic.roleIds != null && !ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_restricted_create, event.getMember()))
+                        {
+                            hook.sendMessage("You do not have permission to create role-restricted instances.").setEphemeral(true).queue();
+                            return;
+                        }
+                    } break;
+                    }
+
+                    if (ic.ageGate != null && ic.ageGate.booleanValue() && !ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_age_gated_create, event.getMember()))
+                    {
+                        hook.sendMessage("You do not have permission to create age gated instances.").setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    hook.deleteMessageById(event.getMessageId()).queue();
+                    
+                    Instance instance;
+                    try
+                    {
+//                        instance = new InstancesApi(ScarletDiscordJDA.this.scarlet.vrc.client).createInstance(ic.createRequest());
+                        instance = ScarletDiscordJDA.this.scarlet.vrc.createInstanceEx(ic.createRequestEx());
+                    }
+                    catch (ApiException apiex)
+                    {
+                        String message = apiex.getResponseBody();
+                        try
+                        {
+                            message = JSON.<io.github.vrchatapi.model.Error>deserialize(message, io.github.vrchatapi.model.Error.class).getError().getMessage();
+                        }
+                        catch (Exception ex)
+                        {
+                        }
+                        hook.sendMessageFormat("Failed to create new instance: %s", message).setEphemeral(true).queue();
+                        return;
+                    }
+                    
+                    ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.INSTANCE_CREATE, instance.getId(), vrcActorId);
+                    String worldName = ScarletDiscordJDA.this.getLocationName(instance.getWorldId());
+                    
+                    LOG.info(String.format("%s (%s) opened an instance of %s: %s", vrcActorDisplayName, vrcActorId, worldName, instance.getId()));
+                    hook.sendMessageFormat("Created [new %s instance](https://vrchat.com/home/launch?worldId=%s&instanceId=%s)", worldName, instance.getWorldId(), instance.getInstanceId()).setEphemeral(true).queue();
+                    
+                }); break;
+                case "new-instance-cancel": this.handleInGuildAsync(event, true, hook -> {
+                    String ictoken = parts[1];
+                    ScarletDiscordJDA.this.instanceCreation.remove(ictoken);
+                    hook.deleteMessageById(event.getMessageId()).queue();
+                    hook.deleteOriginal().queue();
+                }); break;
+                case "new-instance-modal": {
+                    String ictoken = parts[1];
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    event.replyModal(Modal.create("new-instance-modal:"+ictoken, "Additional options")
+                            .addActionRow(TextInput.create("display-name:"+ictoken, "Display name (unknown purpose)", TextInputStyle.SHORT)
+                                .setValue(ic == null ? null : ic.displayName)
+                                .build())
+                            .build())
+                        .queue();
+                } break;
                 case "edit-desc": { // FIXME : can't defer a modal
                     
                     if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SET_DESCRIPTION, event.getMember()))
@@ -3529,6 +3842,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata_setDescription(parts[1], desc);
                     this.updateAuxMessage(event.getChannel(), auditEntryMeta);
                 } break;
+                case "new-instance-modal": {
+                    String ictoken = parts[1];
+                    String displayName = event.getValue("display-name:"+parts[1]).getAsString();
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    if (ic == null)
+                    {
+                        event.reply("This interaction has timed out.").queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
+                        return;
+                    }
+                    ic.displayName = displayName;
+                    event.deferEdit().queue();
+                } break;
                 }
             }
             catch (Exception ex)
@@ -3597,6 +3922,70 @@ public class ScarletDiscordJDA implements ScarletDiscord
                             ScarletDiscordJDA.this.addPermissionRole(scarletPermission, role);
                         }
                     }
+                } break;
+                case "new-instance-region": {
+                    String ictoken = parts[1];
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    if (ic != null) try
+                    {
+                        ic.region = event.getValues().stream().findFirst().map(InstanceRegion::fromValue).get();
+                        event.deferEdit().queue();
+                        return;
+                    }
+                    catch (RuntimeException rex)
+                    {
+                    }
+                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
+                } break;
+                case "new-instance-access-type": {
+                    String ictoken = parts[1];
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    if (ic != null) try
+                    {
+                        ic.groupAccessType = event.getValues().stream().findFirst().map(GroupAccessType::fromValue).get();
+                        event.deferEdit().queue();
+                        return;
+                    }
+                    catch (RuntimeException rex)
+                    {
+                    }
+                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
+                } break;
+                case "new-instance-roles": {
+                    String ictoken = parts[1];
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    if (ic != null) try
+                    {
+                        ic.roleIds = new ArrayList<>(event.getValues());
+                        event.deferEdit().queue();
+                        return;
+                    }
+                    catch (RuntimeException rex)
+                    {
+                    }
+                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
+                } break;
+                case "new-instance-flags": {
+                    String ictoken = parts[1];
+                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
+                    if (ic != null) try
+                    {
+                        ic.queueEnabled = event.getValues().contains("queueEnabled");
+                        ic.hardClose = event.getValues().contains("hardClose");
+                        ic.ageGate = event.getValues().contains("ageGate");
+//                        ic.instancePersistenceEnabled = event.getValues().contains("instancePersistenceEnabled");
+                        ic.contentSettings_drones = event.getValues().contains("contentSettings.drones");
+                        ic.contentSettings_emoji = event.getValues().contains("contentSettings.emoji");
+                        ic.contentSettings_pedestals = event.getValues().contains("contentSettings.pedestals");
+                        ic.contentSettings_prints = event.getValues().contains("contentSettings.prints");
+                        ic.contentSettings_stickers = event.getValues().contains("contentSettings.stickers");
+                        event.deferEdit().queue();
+                        return;
+                    }
+                    catch (RuntimeException rex)
+                    {
+                    }
+                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
                 } break;
                 }
             }
@@ -3745,6 +4134,20 @@ public class ScarletDiscordJDA implements ScarletDiscord
         if (roleSfs == null || roleSfs.isEmpty())
             return false;
         return roleSfs.contains(role.getId());
+    }
+
+    public boolean checkMemberHasVRChatPermission(GroupPermissions vrchatPermission, Member member)
+    {
+        if (vrchatPermission == null)
+            return true;
+        String userId = this.scarlet.data.globalMetadata_getSnowflakeId(member.getId());
+        if (userId == null)
+            return false;
+        GroupLimitedMember glm = this.scarlet.vrc.getGroupMembership(this.scarlet.vrc.groupId, userId);
+        if (glm == null)
+            return false;
+        List<GroupRole> grl = this.scarlet.vrc.group.getRoles();
+        return grl != null && grl.stream().filter(Objects::nonNull).filter($ -> glm.getRoleIds().contains($.getId())).map(GroupRole::getPermissions).filter(Objects::nonNull).anyMatch($ -> $.contains(GroupPermissions.group_all) || $.contains(vrchatPermission));
     }
 
     @FunctionalInterface interface CondEmit { Message emit(String channelSf, Guild guild, GuildMessageChannel channel); }
@@ -3947,6 +4350,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setImage(MiscUtils.userImageUrl(target))
             ;
             List<LimitedUserGroups> lugs = null;
+            lugs = this.scarlet.vrc.getUserGroups(entryMeta.entry.getTargetId(), Long.MAX_VALUE);
+ /*
             String jsonUser;
             try
             {
@@ -3979,6 +4384,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             
             byte[] fileData = String.format("{\n\"user\":%s,\n\"groups\":%s,\n\"represented\":%s\n}\n", jsonUser, jsonUserGroups, jsonUserRepGroup).getBytes(StandardCharsets.UTF_8);
+//*/
 
             if (target != null)
             {
@@ -4036,7 +4442,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         : (entryMeta.hasAuxActor() ? entryMeta.auxActorDisplayName : entryMeta.entry.getActorDisplayName()));
             Message auxMessage = threadChannel.sendMessage(content)
                 .addContent("\nUnclaimed")
-                .addFiles(FileUpload.fromData(fileData, entryMeta.entry.getTargetId()+".json").asSpoiler())
+//                .addFiles(FileUpload.fromData(fileData, entryMeta.entry.getTargetId()+".json").asSpoiler())
                 .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
                               Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
                               Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link"))
@@ -4057,7 +4463,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         try
         {
-            String worldId = location.substring(0, location.indexOf(':'));
+            int colon = location.indexOf(':');
+            String worldId = location.substring(0, colon >= 0 ? colon : location.length());
             long within1day = System.currentTimeMillis() - 86400_000L;
             World world = this.scarlet.vrc.getWorld(worldId, within1day);
             if (world != null)
@@ -4073,7 +4480,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         try
         {
-            String worldId = location.substring(0, location.indexOf(':'));
+            int colon = location.indexOf(':');
+            String worldId = location.substring(0, colon >= 0 ? colon : location.length());
             long within1day = System.currentTimeMillis() - 86400_000L;
             World world = this.scarlet.vrc.getWorld(worldId, within1day);
             if (world != null)
@@ -4460,9 +4868,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         .append(avatarName).append("\n");
                 }
                 
+                if (sb.length() > 4096)
+                {
+                    channel.editMessageEmbedsById(instanceEmbedMessage.messageSnowflake, embed.setDescription("See `players.txt` for connected users").build()).setAttachments(AttachedFile.fromData(sb.toString().getBytes(StandardCharsets.UTF_8), "players.txt"));
+                    return;
+                }
+                
                 MessageEmbed[] embeds = {embed.setDescription(sb).build()};// Stream.concat(Stream.of(embed.build()), MiscUtils.paginateOnLines(sb, 4000).stream().limit(9L).map($ -> new EmbedBuilder().setDescription($).build())).toArray(MessageEmbed[]::new);
                 
-                channel.editMessageEmbedsById(instanceEmbedMessage.messageSnowflake, embeds).complete();
+                channel.editMessageEmbedsById(instanceEmbedMessage.messageSnowflake, embeds).setAttachments().complete();
             }
         }
     }

@@ -57,12 +57,12 @@ public class ScarletJsonCache<T>
 
     public boolean is404(String id)
     {
-        return this.known404s.contains(id);
+        return id == null || this.known404s.contains(id);
     }
 
     public boolean add404(String id)
     {
-        if (!this.known404s.add(id))
+        if (id == null || !this.known404s.add(id))
             return false;
         this.save404s();
         return true;
@@ -70,7 +70,7 @@ public class ScarletJsonCache<T>
 
     public boolean remove404(String id)
     {
-        if (!this.known404s.remove(id))
+        if (id == null || !this.known404s.remove(id))
             return false;
         this.save404s();
         return true;

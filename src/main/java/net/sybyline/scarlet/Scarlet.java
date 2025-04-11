@@ -48,6 +48,8 @@ import net.sybyline.scarlet.util.TTSService;
 public class Scarlet implements Closeable
 {
 
+    public static final int JAVA_SPEC;
+
     static
     {
         String javaVersion = System.getProperty("java.specification.version");
@@ -55,12 +57,13 @@ public class Scarlet implements Closeable
             System.err.println("System property 'java.specification.version' is missing?!?!?!");
         else if (!"1.8".equals(javaVersion))
             System.err.println("This application was compiled to run on Java 8");
+        JAVA_SPEC = javaVersion == null ? 0 : Integer.parseInt(javaVersion.startsWith("1.") ? javaVersion.substring(2) : javaVersion);
     }
 
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc6",
+        VERSION = "0.4.11-rc7",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -220,6 +223,7 @@ public class Scarlet implements Closeable
     volatile boolean running = true;
     volatile int exitCode = 0;
     boolean staffMode = false;
+    final Runnable explicitGC = MiscUtils.withMinimumInterval(3600_000L, System::gc);
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
     final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
@@ -353,6 +357,7 @@ public class Scarlet implements Closeable
                 {
                     LOG.error("Exception maybe saving data", ex);
                 }
+                this.explicitGC.run();
             }
         }
         finally

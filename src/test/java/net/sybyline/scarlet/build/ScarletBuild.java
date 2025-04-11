@@ -175,7 +175,14 @@ public class ScarletBuild
             bat.append("    goto UPDATE").println();
             bat.append(")").println();
             bat.append("echo Running version !SCARLET_VERSION!").println();
-            bat.append("java -jar scarlet-!SCARLET_VERSION!.jar").println();
+            bat.append("set JVM_OPTS=").println();
+            bat.append("if exist \"%CD%\\java.options\" (").println();
+            bat.append("    for /f \"usebackq delims=\" %%A in (\"%CD%\\java.options\") do (").println();
+            bat.append("        set \"LINE=%%A\"").println();
+            bat.append("        set \"JVM_OPTS=!JVM_OPTS! !LINE!\"").println();
+            bat.append("    )").println();
+            bat.append(")").println();
+            bat.append("java !JVM_OPTS! -jar scarlet-!SCARLET_VERSION!.jar").println();
             bat.append("if %ERRORLEVEL% EQU 69 goto RUN").println();
             bat.append("if %ERRORLEVEL% EQU 70 goto UPDATE").println();
             bat.append("if %ERRORLEVEL% EQU 0 (").println();
@@ -319,10 +326,9 @@ public class ScarletBuild
         return command instanceof Object[] ? Arrays.stream((Object[])command).flatMap(ScarletBuild::exec0) : Stream.of(String.valueOf(command));
     }
 
-    @SuppressWarnings("restriction")
     static URL[] classpathURLs()
     {
-        return sun.misc.SharedSecrets.getJavaNetAccess().getURLClassPath((URLClassLoader)ClassLoader.getSystemClassLoader()).getURLs();
+        return ((URLClassLoader)ClassLoader.getSystemClassLoader()).getURLs();
     }
     static String javacClasspath() throws IOException
     {

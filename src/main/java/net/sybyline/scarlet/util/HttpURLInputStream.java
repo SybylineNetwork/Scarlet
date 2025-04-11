@@ -24,6 +24,8 @@ import net.sybyline.scarlet.Scarlet;
 public class HttpURLInputStream extends FilterInputStream
 {
 
+    public static final Func.V1<IOException, HttpURLConnection> DISABLE_REDIRECTS = $ -> $.setInstanceFollowRedirects(false);
+
     public static HttpURLInputStream get(String url) throws IOException
     {
         return of(url, null, null, null);

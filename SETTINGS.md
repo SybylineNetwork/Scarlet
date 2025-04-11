@@ -476,6 +476,23 @@ If present, specifies the root directory of the Java installation to use:
 C:\path\to\jdk
 ```
 
+## file `./java.options`
+
+If present, prepends listed JVM options to the invoked command:
+```txt
+-Xms8G
+-XX:+AggressiveOpts
+-XX:+UnlockExperimentalVMOptions
+-XX:+UnlockDiagnosticVMOptions
+-XX:+AggressiveUnboxing
+-XX:+AllowParallelDefineClass
+-XX:+OptoBundling
+-XX:+OptoScheduling
+-XX:+UseFastAccessorMethods
+-XX:+UseFastEmptyMethods
+-XX:+ParallelRefProcEnabled
+```
+
 ## registry
 
 Volatile data:

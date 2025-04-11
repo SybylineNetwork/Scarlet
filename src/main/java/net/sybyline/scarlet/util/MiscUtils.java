@@ -33,6 +33,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.regex.Matcher;
@@ -53,6 +55,16 @@ public interface MiscUtils
     static OffsetDateTime odt2utc(LocalDateTime ldt)
     {
         return OffsetDateTime.of(ldt, DEFAULT_ZONE_RULES.getOffset(ldt)).withOffsetSameInstant(ZoneOffset.UTC);
+    }
+
+    @SafeVarargs
+    static <T> int indexOf(T target, T... array)
+    {
+        if (array != null)
+    for (int i = 0, l = array.length; i < l; i++)
+        if (Objects.equals(array[i], target))
+            return i;
+        return -1;
     }
 
     static boolean sleep(long millis)
@@ -323,6 +335,34 @@ public interface MiscUtils
         return sb.length() == 0 ? "0D" : sb.substring(0, sb.length() - 1);
     }
 
+    static int bin2b64(int len_bin)
+    {
+        if (len_bin <= 0) return 0;
+        int mod = len_bin % 3;
+        return (len_bin / 3) * 4 + (mod == 0 ? 0 : (mod + 1));
+    }
+    static int b642bin(int len_b64)
+    {
+        if (len_b64 <= 0) return 0;
+        int mod = len_b64 & 0x03;
+        return (len_b64 / 4) * 3 + (mod == 0 ? 0 : (mod - 1));
+    }
+
+    static Runnable withMinimumInterval(long minimumIntervalMillis, Runnable runnable)
+    {
+        if (runnable == null)
+            throw new IllegalArgumentException("runnable == null");
+        long minIntervalMs = Math.max(0L, minimumIntervalMillis);
+        AtomicLong prev = new AtomicLong(System.currentTimeMillis());
+        return () ->
+        {
+            long nowEpochMs = System.currentTimeMillis(),
+                 prevEpochMs = prev.get();
+            if (nowEpochMs - prevEpochMs >= minIntervalMs && prev.compareAndSet(prevEpochMs, nowEpochMs))
+                runnable.run();
+        };
+    }
+
     static Pattern SEMVER = Pattern.compile("(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)([\\.\\-_]?(?<kind>\\w+))?([\\.\\-_]?(?<build>\\d+))?");
     static Comparator<String> SEMVER_CMP_OLDEST_FIRST = MiscUtils::compareSemVer,
                               SEMVER_CMP_NEWEST_FIRST = SEMVER_CMP_OLDEST_FIRST.reversed();
@@ -398,17 +438,25 @@ public interface MiscUtils
         int start = 0;
         while (start < input.length())
         {
-            int end = Math.min(start + maxComponentLen, input.length());
-            int lastNewline = input.lastIndexOf("\n", end);
-            if (lastNewline > start && lastNewline < end)
+            int end = start + maxComponentLen;
+            if (end >= input.length())
             {
-                parts.add(input.substring(start, lastNewline).trim());
-                start = lastNewline + 1;
+                parts.add(input.substring(start).trim());
+                start = input.length();
             }
             else
             {
-                parts.add(input.substring(start, end).trim());
-                start = end;
+                int lastNewline = input.lastIndexOf("\n", end);
+                if (lastNewline > start && lastNewline < end)
+                {
+                    parts.add(input.substring(start, lastNewline).trim());
+                    start = lastNewline + 1;
+                }
+                else
+                {
+                    parts.add(input.substring(start, end).trim());
+                    start = end;
+                }
             }
         }
         return parts;

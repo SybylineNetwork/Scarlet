@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.11-rc6</version><!--scarlet-version-->
+  <version>0.4.11-rc7</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -18,10 +18,21 @@
   </build>
   <repositories>
     <repository>
+      <id>sonatype-snapshots</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+      <releases><enabled>false</enabled></releases>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
+    <repository>
       <id>jitpack.io</id>
       <url>https://jitpack.io</url>
     </repository>
   </repositories>
+  <properties>
+    <selenium.version>4.31.0</selenium.version>
+    <jcef.version>132.3.1</jcef.version>
+    <nanohttpd.version>2.3.2-SNAPSHOT</nanohttpd.version>
+  </properties>
   <dependencies>
     <dependency>
       <groupId>net.dv8tion</groupId>
@@ -74,9 +85,34 @@
       <version>v3-rev20250220-2.0.0</version>
     </dependency>
     <dependency>
+        <groupId>org.seleniumhq.selenium</groupId>
+        <artifactId>selenium-java</artifactId>
+        <version>${selenium.version}</version>
+    </dependency>
+    <dependency>
         <groupId>me.friwi</groupId>
         <artifactId>jcefmaven</artifactId>
-        <version>132.3.1</version>
+        <version>${jcef.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.nanohttpd</groupId>
+        <artifactId>nanohttpd</artifactId>
+        <version>${nanohttpd.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.nanohttpd</groupId>
+        <artifactId>nanohttpd-webserver</artifactId>
+        <version>${nanohttpd.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.nanohttpd</groupId>
+        <artifactId>nanohttpd-webserver-markdown-plugin</artifactId>
+        <version>${nanohttpd.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.nanohttpd</groupId>
+        <artifactId>nanohttpd-websocket</artifactId>
+        <version>${nanohttpd.version}</version>
     </dependency>
   </dependencies>
 </project>
