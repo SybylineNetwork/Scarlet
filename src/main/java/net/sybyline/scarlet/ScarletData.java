@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
@@ -811,6 +812,10 @@ public class ScarletData
         public String auxActorDisplayName;
         
         public String parentEventId;
+        
+        public JsonObject snapshotTargetUser = null;
+        public JsonArray snapshotTargetUserGroups = null;
+        public JsonObject snapshotTargetUserRepresentedGroup = null;
         
         public boolean hasMessage()
         { return this.guildSnowflake != null && this.channelSnowflake != null && this.messageSnowflake != null; }

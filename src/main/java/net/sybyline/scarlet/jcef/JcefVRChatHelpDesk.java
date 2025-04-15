@@ -18,7 +18,6 @@ import com.google.gson.JsonElement;
 import net.sybyline.scarlet.Scarlet;
 import net.sybyline.scarlet.ext.VRChatHelpDeskRequest;
 import net.sybyline.scarlet.util.MiscUtils;
-import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 
 public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRequest
 {
@@ -51,6 +50,7 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
         }
         return super.onFileDialog(mode, title2, defaultFilePath, acceptFilters, acceptExtensions, acceptDescriptions, callback);
     }
+    
 
     public static class InjectedRequest
     {
@@ -68,12 +68,7 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
             case "click": {
                 int cx = Math.round(req.content.getAsJsonObject().getAsJsonPrimitive("x").getAsFloat()),
                     cy = Math.round(req.content.getAsJsonObject().getAsJsonPrimitive("y").getAsFloat());
-                boolean is = this.isFocused();
-                if (!is) this.setFocus(true);
-                this.sendMouseEvent(new MouseEvent(this.component, MouseEvent.MOUSE_PRESSED, 0L, 0, cx, cy, cx, cy, 1, false, MouseEvent.BUTTON1));
-                this.sendMouseEvent(new MouseEvent(this.component, MouseEvent.MOUSE_RELEASED, 0L, 0, cx, cy, cx, cy, 1, false, MouseEvent.BUTTON1));
-                this.sendMouseEvent(new MouseEvent(this.component, MouseEvent.MOUSE_CLICKED, 0L, 0, cx, cy, cx, cy, 1, false, MouseEvent.BUTTON1));
-                if (!is) this.setFocus(false);
+                this.injectClick(cx, cy, MouseEvent.BUTTON1);
             } break;
             }
             
@@ -125,10 +120,6 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
         {
             return this.setElementByIdValue(FORM_FIELD_MODERATION_CATEGORY, moderationCategory);
         }
-        public CompletableFuture<Void> setModerationCategory(VRChatHelpDeskURLs.ModerationCategory moderationCategory)
-        {
-            return this.setModerationCategory(moderationCategory == null ? null : moderationCategory.value);
-        }
         public CompletableFuture<Void> setRequester(String requester)
         {
             return this.setElementByIdValue(FORM_FIELD_REQUESTER, requester);
@@ -149,10 +140,6 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
         {
             return this.setElementByIdValue(FORM_FIELD_SUPPORT_CATEGORY, supportCategory);
         }
-        public CompletableFuture<Void> setSupportCategory(VRChatHelpDeskURLs.SupportCategory supportCategory)
-        {
-            return this.setSupportCategory(supportCategory == null ? null : supportCategory.value);
-        }
         public CompletableFuture<Void> setRequester(String requester)
         {
             return this.setElementByIdValue(FORM_FIELD_REQUESTER, requester);
@@ -160,10 +147,6 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
         public CompletableFuture<Void> setTargetPlatform(String targetPlatform)
         {
             return this.setElementByIdValue(FORM_FIELD_TARGET_PLATFORM, targetPlatform);
-        }
-        public CompletableFuture<Void> setTargetPlatform(VRChatHelpDeskURLs.SupportPlatform targetPlatform)
-        {
-            return this.setTargetPlatform(targetPlatform == null ? null : targetPlatform.value);
         }
     }
 

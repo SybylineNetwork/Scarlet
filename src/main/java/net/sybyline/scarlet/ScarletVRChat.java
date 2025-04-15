@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -33,18 +34,15 @@ import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.ApiResponse;
 import io.github.vrchatapi.Configuration;
 import io.github.vrchatapi.JSON;
-import io.github.vrchatapi.Pair;
 import io.github.vrchatapi.ProgressResponseBody;
 import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.GroupsApi;
-import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
-import io.github.vrchatapi.model.CreateInstanceRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
@@ -682,6 +680,54 @@ public class ScarletVRChat implements Closeable
         okhttp3.Call localVarCall = this.client.buildCall(null, "/instances", "POST", new ArrayList<>(), new ArrayList<>(), createInstanceRequest, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
         ApiResponse<Instance> localVarResp = this.client.execute(localVarCall, Instance.class);
         return localVarResp.getData();
+    }
+
+    static final TypeToken<List<LimitedUserGroups>> LIST_LUGROUPS = new TypeToken<List<LimitedUserGroups>>(){};
+    public List<LimitedUserGroups> snapshot(ScarletData.AuditEntryMetadata entryMeta)
+    {
+        List<LimitedUserGroups> lugs = null;
+        try
+        {
+            Map<String, String> localVarHeaderParams = new HashMap<>();
+            localVarHeaderParams.put("Accept", "application/json");
+            okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+entryMeta.entry.getTargetId(), "GET", new ArrayList<>(), new ArrayList<>(), null, localVarHeaderParams, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+            entryMeta.snapshotTargetUser = this.client.<JsonObject>execute(localVarCall, JsonObject.class).getData();
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception whilst fetching user", ex);
+        }
+        try
+        {
+            Map<String, String> localVarHeaderParams = new HashMap<>();
+            localVarHeaderParams.put("Accept", "application/json");
+            okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+entryMeta.entry.getTargetId()+"/groups", "GET", new ArrayList<>(), new ArrayList<>(), null, localVarHeaderParams, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+            entryMeta.snapshotTargetUserGroups = this.client.<JsonArray>execute(localVarCall, JsonArray.class).getData();
+            try
+            {
+                lugs = JSON.getGson().fromJson(entryMeta.snapshotTargetUserGroups, LIST_LUGROUPS);
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception whilst deserializing user groups", ex);
+            }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception whilst fetching user groups", ex);
+        }
+        try
+        {
+            Map<String, String> localVarHeaderParams = new HashMap<>();
+            localVarHeaderParams.put("Accept", "application/json");
+            okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+entryMeta.entry.getTargetId()+"/groups/represented", "GET", new ArrayList<>(), new ArrayList<>(), null, localVarHeaderParams, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+            entryMeta.snapshotTargetUserRepresentedGroup = this.client.<JsonObject>execute(localVarCall, JsonObject.class).getData();
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception whilst fetching user represented group", ex);
+        }
+        return lugs;
     }
 
     public void save()

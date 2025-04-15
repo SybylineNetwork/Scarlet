@@ -7,6 +7,11 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.11-rc8
+  - Added functionality to paginated Discord command responses
+  - Changed WorldBalancer domain from `avatarwb.worldbalancer.duia.us` to `avatar.worldbalancer.com`
+  - Fixed `/(secret-)staff-list list` command sometimes failing
+
 ## 0.4.11-rc7
   - Added input sanitization/resolution for many Discord commands to accept many intuitive forms for groups, users, worlds, etc. (VRChat Web links, group short codes, etc.)
   - Added `/vrchat-group` Discord command, with `create-instance` and `close-instance` subcommands

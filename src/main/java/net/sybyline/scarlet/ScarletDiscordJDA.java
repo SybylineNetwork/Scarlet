@@ -55,7 +55,6 @@ import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.InstancesApi;
-import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.model.CreateInstanceRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAccessType;
@@ -68,7 +67,6 @@ import io.github.vrchatapi.model.Instance;
 import io.github.vrchatapi.model.InstanceRegion;
 import io.github.vrchatapi.model.InstanceType;
 import io.github.vrchatapi.model.LimitedUserGroups;
-import io.github.vrchatapi.model.RepresentedGroup;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
@@ -138,7 +136,8 @@ import net.dv8tion.jda.api.utils.messages.MessageCreateRequest;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.log.ScarletLogger;
-import net.sybyline.scarlet.util.DiscordOptionsEnum;
+import net.sybyline.scarlet.server.discord.DInteractions;
+import net.sybyline.scarlet.server.discord.DOptionEnum;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -228,6 +227,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      pingOnModeration_userUnban,
                                      evidenceEnabled;
     final ScarletUI.Setting<Void> selectEvidenceRoot;
+    final DInteractions interactions = new DInteractions(false);
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
     final Map<String, InstanceCreation> instanceCreation = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
@@ -243,9 +243,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @FunctionalInterface interface ImmediateHandler { void handle() throws Exception; }
     @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
 
-    static final DiscordOptionsEnum<GroupAuditType> AUDIT_EVENT_OPTIONS = DiscordOptionsEnum.of(GroupAuditType.class, GroupAuditType::id, GroupAuditType::title);
-    static final DiscordOptionsEnum<GroupAuditTypeEx> AUDIT_EX_EVENT_OPTIONS = DiscordOptionsEnum.of(GroupAuditTypeEx.class, GroupAuditTypeEx::id, GroupAuditTypeEx::title);
-    static final DiscordOptionsEnum<ScarletPermission> SCARLET_PERMISSION_OPTIONS = DiscordOptionsEnum.of(ScarletPermission.class, ScarletPermission::id, ScarletPermission::title);
+    static final DOptionEnum<GroupAuditType> AUDIT_EVENT_OPTIONS = DOptionEnum.of("audit-event-type", "The VRChat Group Audit Log event type", GroupAuditType.class, GroupAuditType::id, GroupAuditType::title);
+    static final DOptionEnum<GroupAuditTypeEx> AUDIT_EX_EVENT_OPTIONS = DOptionEnum.of("audit-ex-event-type", "The extended audit event type", GroupAuditTypeEx.class, GroupAuditTypeEx::id, GroupAuditTypeEx::title);
+    static final DOptionEnum<ScarletPermission> SCARLET_PERMISSION_OPTIONS = DOptionEnum.of("scarlet-permission", "The Scarlet-specific permission", ScarletPermission.class, ScarletPermission::id, ScarletPermission::title);
+    static final OptionData VRCHAT_USER_OPTION = new OptionData(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                            VRCHAT_GROUP_OPTION = new OptionData(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true);
+    
 
     static final Command.Choice[] UTC_OFFSET_HOURS_CHOICES =
     {
@@ -276,11 +279,28 @@ public class ScarletDiscordJDA implements ScarletDiscord
         new Command.Choice("Midnight for UTC+13:00 [NZDT]", "+13:00"),
     };
 
-    static final DiscordOptionsEnum<InstanceRegion> INSTANCE_REGION_OPTIONS = DiscordOptionsEnum.of(InstanceRegion.class, InstanceRegion::getValue, "US", "US East", "Europe", "Japan", "Default");
-    static final DiscordOptionsEnum<GroupAccessType> GROUP_ACCESS_TYPE_OPTIONS = DiscordOptionsEnum.of(GroupAccessType.class, GroupAccessType::getValue, "Group Public", "Group Plus", "Group Members");
-
+    public class ScarletCommands
+    {
+        public final DInteractions.SlashOption<String> OPT_0 = DInteractions.SlashOption.ofString("opt-0", "Option 0", true, null);
+        @DInteractions.SlashCmd(name="test-command")
+        public class TestCommand
+        {
+            @DInteractions.SlashCmd(name="test-command-group")
+            public class TestCommandGroup
+            {
+                @DInteractions.SlashCmd(name="test-command-handler", options={"opt-0"})
+                public void TestCommandHandler(SlashCommandInteractionEvent event, String opt0)
+                {
+                    event.reply(opt0).queue();
+                    LOG.info("Test command handler: "+opt0);
+                }
+            }
+        }
+    }
     void init()
     {
+        this.interactions.getGuildSnowflakesMutable().add(this.guildSf);
+        this.interactions.register(new ScarletCommands());
         if (this.jda == null)
         {
             this.setStaffMode();
@@ -350,71 +370,71 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("import", "Imports watched groups from an attached file")
                             .addOption(OptionType.ATTACHMENT, "import-file", "Accepts: JSON, CSV", true),
                         new SubcommandData("add", "Adds a watched group")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("add-malicious", "Adds a watched group with a watch type of malicious")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("add-nuisance", "Adds a watched group with a watch type of nuisance")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("add-community", "Adds a watched group with a watch type of community")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("add-affiliated", "Adds a watched group with a watch type of affiliated")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("add-other", "Adds a watched group with a watch type of other")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
                         new SubcommandData("delete-watched-group", "Removes a watched group")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("view", "Views a group's watch information")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-critical", "Sets a group's critical status to true")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("unset-critical", "Sets a group's critical status to false")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-silent", "Sets a group's silent status to true")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("unset-silent", "Sets a group's silent status to false")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-type-malicious", "Sets a group's watch type to malicious")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-type-nuisance", "Sets a group's watch type to nuisance")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-type-community", "Sets a group's watch type to community")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-type-affiliated", "Sets a group's watch type to affiliated")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-type-other", "Sets a group's watch type to other")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true),
+                            .addOptions(VRCHAT_GROUP_OPTION),
                         new SubcommandData("set-priority", "Sets a group's watch type to other")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100).setRequired(true)),
                         new SubcommandData("set-tags", "Sets a group's tags")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'"),
                         new SubcommandData("add-tag", "Adds a tag for a group")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tag", "A tag", true),
                         new SubcommandData("remove-tag", "Removes a tag from a group")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "group-tag", "A tag", true),
                         new SubcommandData("set-message", "Sets a group's TTS announcement message")
-                            .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
+                            .addOptions(VRCHAT_GROUP_OPTION)
                             .addOption(OptionType.STRING, "message", "A message to announce with TTS")
                     ),
                 Commands.slash("aux-webhooks", "Configures auxiliary webhooks")
@@ -441,10 +461,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("list", "Lists all staff users")
                             .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of users to show per page").setRequiredRange(1L, 10L)),
                         new SubcommandData("add", "Adds a user to the staff list")
-                            .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+                            .addOptions(VRCHAT_USER_OPTION)
                             .addOption(OptionType.USER, "discord-user", "The Discord user"),
                         new SubcommandData("delete", "Removes a user from the staff list")
-                            .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+                            .addOptions(VRCHAT_USER_OPTION)
                     ),
                 Commands.slash("secret-staff-list", "Configures the secret staff list")
                     .setGuildOnly(true)
@@ -453,33 +473,33 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("list", "Lists all secret staff users")
                             .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of users to show per page").setRequiredRange(1L, 10L)),
                         new SubcommandData("add", "Adds a user to the secret staff list")
-                            .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+                            .addOptions(VRCHAT_USER_OPTION)
                             .addOption(OptionType.USER, "discord-user", "The Discord user"),
                         new SubcommandData("delete", "Removes a user from the secret staff list")
-                            .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+                            .addOptions(VRCHAT_USER_OPTION)
                     ),
                 Commands.slash("vrchat-user-info", "Lists internal and audit information for a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                    .addOptions(VRCHAT_USER_OPTION),
                 Commands.slash("vrchat-user-ban", "Ban a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                    .addOptions(VRCHAT_USER_OPTION),
                 Commands.slash("vrchat-user-unban", "Unban a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
+                    .addOptions(VRCHAT_USER_OPTION),
                 Commands.slash("vrchat-group", "Manages groups")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
                     .addSubcommands(
                         new SubcommandData("open-instance", "Opens an instance")
-//                        .addOption(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+//                        .addOptions(VRCHAT_GROUP_OPTION)
                         .addOption(OptionType.STRING, "vrchat-world", "The VRChat world id (wrld_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
                         new SubcommandData("close-instance", "Closes an instance")
                             .addOption(OptionType.STRING, "vrchat-location", "The instance to close", true)
-                            .addOptions(new OptionData(OptionType.INTEGER, "close-hard", "The number of minutes to wait before closing the instance").setRequiredRange(1L, 600L))
+                            .addOptions(new OptionData(OptionType.INTEGER, "close-at", "The number of minutes to wait before closing the instance").setRequiredRange(1L, 600L))
                     ),
                 Commands.slash("discord-user-info", "Lists internal information for a specific Discord user")
                     .setGuildOnly(true)
@@ -488,7 +508,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 Commands.slash("query-target-history", "Queries audit events targeting a specific VRChat user")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true)
+                    .addOptions(VRCHAT_USER_OPTION)
                     .addOption(OptionType.INTEGER, "days-back", "The number of days into the past to search for events"),
                 Commands.slash("query-actor-history", "Queries audit events actored by a specific VRChat user")
                     .setGuildOnly(true)
@@ -498,26 +518,26 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 Commands.slash("set-audit-channel", "Sets a given text channel as the channel certain audit event types use")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "audit-event-type", "The VRChat Group Audit Log event type", true, true)
+                    .addOptions(AUDIT_EVENT_OPTIONS.option(true))
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
                 Commands.slash("set-audit-aux-webhooks", "Sets the given webhooks as the webhooks certain audit event types use")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "audit-event-type", "The extended audit event type", true, true),
+                    .addOptions(AUDIT_EVENT_OPTIONS.option(true)),
                 Commands.slash("set-audit-ex-channel", "Sets a given text channel as the channel certain extended event types use")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "audit-ex-event-type", "The extended audit event type", true, true)
+                    .addOptions(AUDIT_EX_EVENT_OPTIONS.option(true))
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
                 Commands.slash("set-audit-secret-channel", "Sets a given text channel as the secret channel certain audit event types use")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "audit-event-type", "The VRChat Group Audit Log event type", true, true)
+                    .addOptions(AUDIT_EVENT_OPTIONS.option(true))
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
                 Commands.slash("set-audit-ex-secret-channel", "Sets a given text channel as the secret channel certain extended event types use")
                     .setGuildOnly(true)
                     .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "audit-ex-event-type", "The extended audit event type", true, true)
+                    .addOptions(AUDIT_EX_EVENT_OPTIONS.option(true))
                     .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
                 Commands.slash("set-voice-channel", "Sets a given voice channel as the channel in which to announce TTS messages")
                     .setGuildOnly(true)
@@ -534,10 +554,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         new SubcommandData("list", "Lists all Scarlet permissions and associated roles")
                             .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of permissions to show per page").setRequiredRange(1L, 10L)),
                         new SubcommandData("add-to-role", "Grants the Scarlet-specific permission to the given role")
-                            .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
+                            .addOptions(SCARLET_PERMISSION_OPTIONS.option(true))
                             .addOption(OptionType.ROLE, "discord-role", "The Discord role to which to grant the Scarlet-specific permission", true),
                         new SubcommandData("delete-from-role", "Revokes the Scarlet-specific permission for the given role")
-                            .addOption(OptionType.STRING, "scarlet-permission", "The Scarlet-specific permission", true, true)
+                            .addOptions(SCARLET_PERMISSION_OPTIONS.option(true))
                             .addOption(OptionType.ROLE, "discord-role", "The Discord role for which to revoke the Scarlet-specific permission", true),
                         new SubcommandData("edit-role", "Editd the Scarlet-specific permissions for the given role")
                             .addOption(OptionType.ROLE, "discord-role", "The Discord role for which to edit the Scarlet-specific permissions", true)
@@ -566,15 +586,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .addSubcommands(
                         new SubcommandData("restart-now", "Restarts now"),
                         new SubcommandData("update-now", "Updates the application now")
-                            .addOption(OptionType.STRING, "target-version", "The version of Scarlet to which to update", false, true)
+                            .addOption(OptionType.STRING, "target-version", "The version of Scarlet to which to update", true, true)
                     ),
                 Commands.message("submit-attachments")
                     .setGuildOnly(true)
                     .setNameLocalizations(MiscUtils.genLocalized($ -> "Submit Attachments"))
                     .setDefaultPermissions(defaultCommandPerms)
             )
+            .addCommands(this.interactions.getCommandDataMutable())
             .queue($ -> LOG.info("Commands updated"), $ -> LOG.error("Failed to update commands", $));
-        LOG.info("Queued commands update");
+        LOG.info("Queued commands update "+this.interactions.getCommandDataMutable());
         }
         catch (Exception ex)
         {
@@ -968,18 +989,28 @@ public class ScarletDiscordJDA implements ScarletDiscord
             if (pageOrdinal < 1) pageOrdinal = 1;
             if (pageOrdinal > this.pages.length) pageOrdinal = this.pages.length;
             
-            Button prev = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal - 1), "Prev"),
-                   self = Button.primary("pagination:"+this.paginationId+":"+pageOrdinal, pageOrdinal+"/"+pages.length).asDisabled(),
-                   next = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal + 1), "Next");
+            Button first = Button.secondary("pagination-first:"+this.paginationId, "First"),
+                   prev = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal - 1), "Prev"),
+                   self = Button.primary("pagination-select:"+this.paginationId+":"+pageOrdinal, pageOrdinal+"/"+pages.length),
+                   next = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal + 1), "Next"),
+                   last = Button.secondary("pagination-last:"+this.paginationId, "Last");
             
-            if (pageOrdinal == 1) prev = prev.asDisabled();
-            if (pageOrdinal == this.pages.length) next = next.asDisabled();
+            if (pageOrdinal == 1)
+            {
+                first = first.asDisabled();
+                prev = prev.asDisabled();
+            }
+            if (pageOrdinal == this.pages.length)
+            {
+                next = next.asDisabled();
+                last = last.asDisabled();
+            }
             
             int pageIndex = pageOrdinal - 1;
             return this
                 .pages[pageIndex]
                 .setContent(this.hook, this.messageId)
-                .setActionRow(prev, self, next);
+                .setActionRow(first, prev, self, next, last);
         }
         void queue(InteractionHook hook)
         {
@@ -1147,6 +1178,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onMessageContextInteraction(MessageContextInteractionEvent event)
         {
+            ScarletDiscordJDA.this.interactions.handle(event);
             if (!this.isInGuild(event))
                 return;
             try
@@ -1176,6 +1208,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event)
         {
+            ScarletDiscordJDA.this.interactions.handle(event);
             if (!this.isInGuild(event))
                 return;
             try
@@ -1330,6 +1363,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onSlashCommandInteraction(SlashCommandInteractionEvent event)
         {
+            ScarletDiscordJDA.this.interactions.handle(event);
             if (!this.isInGuild(event))
                 return;
             try
@@ -2065,8 +2099,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                 }
                                 if (member != null)
                                 {
-                                    String epochJoined = Long.toUnsignedString(member.getJoinedAt().toEpochSecond());
-                                    builder.addField("Joined", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
+                                    if (member.getJoinedAt() != null)
+                                    {
+                                        String epochJoined = Long.toUnsignedString(member.getJoinedAt().toEpochSecond());
+                                        builder.addField("Joined", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
+                                    }
                                     if (member.getRoleIds() != null && !member.getRoleIds().isEmpty())
                                     {
                                         builder.addField("Roles", member.getRoleIds().stream().map(roles::get).filter(Objects::nonNull).map(GroupRole::getName).collect(Collectors.joining(", ")), false);
@@ -2166,8 +2203,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                 }
                                 if (member != null)
                                 {
-                                    String epochJoined = Long.toUnsignedString(member.getJoinedAt().toEpochSecond());
-                                    builder.addField("Joined", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
+                                    if (member.getJoinedAt() != null)
+                                    {
+                                        String epochJoined = Long.toUnsignedString(member.getJoinedAt().toEpochSecond());
+                                        builder.addField("Joined", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
+                                    }
                                     if (member.getRoleIds() != null && !member.getRoleIds().isEmpty())
                                     {
                                         builder.addField("Roles", member.getRoleIds().stream().map(roles::get).filter(Objects::nonNull).map(GroupRole::getName).collect(Collectors.joining(", ")), false);
@@ -3119,6 +3159,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onButtonInteraction(ButtonInteractionEvent event)
         {
+            ScarletDiscordJDA.this.interactions.handle(event);
             if (!this.isInGuild(event))
                 return;
             try
@@ -3147,6 +3188,75 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 {
                     LOG.error("Exception sync handling of pagination", ex);
                     event.reply("Exception sync handling of pagination:\n`"+ex+"`").setEphemeral(true).queue();
+                } break;
+                case "pagination-first": try
+                {
+                    String paginationId = parts[1];
+                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
+                    if (pagination == null || pagination.removeIfExpired())
+                    {
+                        event.reply("Pagination interaction expired")
+                            .setEphemeral(true)
+                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
+                    }
+                    else
+                    {
+                        pagination.action(1).queue();
+                        event.deferEdit().queue();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception sync handling of pagination-first", ex);
+                    event.reply("Exception sync handling of pagination-first:\n`"+ex+"`").setEphemeral(true).queue();
+                } break;
+                case "pagination-last": try
+                {
+                    String paginationId = parts[1];
+                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
+                    if (pagination == null || pagination.removeIfExpired())
+                    {
+                        event.reply("Pagination interaction expired")
+                            .setEphemeral(true)
+                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
+                    }
+                    else
+                    {
+                        pagination.action(pagination.pages.length).queue();
+                        event.deferEdit().queue();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception sync handling of pagination-last", ex);
+                    event.reply("Exception sync handling of pagination-last:\n`"+ex+"`").setEphemeral(true).queue();
+                } break;
+                case "pagination-select": try
+                {
+                    String paginationId = parts[1];
+                    int pageOrdinal = MiscUtils.parseIntElse(parts[2], 1);
+                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
+                    if (pagination == null || pagination.removeIfExpired())
+                    {
+                        event.reply("Pagination interaction expired")
+                            .setEphemeral(true)
+                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
+                    }
+                    else
+                    {
+                        event.replyModal(Modal.create(event.getButton().getId(), "Pagination")
+                            .addActionRow(TextInput.create("pagination-ordinal", "Page (1 to "+pagination.pages.length+", inclusive)", TextInputStyle.SHORT)
+                                .setRequiredRange(1, Integer.toString(pagination.pages.length).length())
+                                .setValue(Integer.toString(pageOrdinal))
+                                .build())
+                            .build()).queue();
+                        
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception sync handling of pagination-select", ex);
+                    event.reply("Exception sync handling of pagination-select:\n`"+ex+"`").setEphemeral(true).queue();
                 } break;
                 case "edit-tags": this.handleInGuildAsync(event, true, hook -> {
                     
@@ -3829,6 +3939,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onModalInteraction(ModalInteractionEvent event)
         {
+            ScarletDiscordJDA.this.interactions.handle(event);
             if (!this.isInGuild(event))
                 return;
             try
@@ -3836,6 +3947,40 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 String[] parts = event.getModalId().split(":");
                 switch (parts[0])
                 {
+                case "pagination-select": try
+                {
+                    String paginationId = parts[1];
+                    int pageOrdinal = MiscUtils.parseIntElse(parts[2], 1);
+                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
+                    if (pagination == null || pagination.removeIfExpired())
+                    {
+                        event.reply("Pagination interaction expired")
+                            .setEphemeral(true)
+                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
+                    }
+                    else try
+                    {
+                        pageOrdinal = Integer.parseInt(event.getValue("pagination-ordinal").getAsString());
+                        if (pageOrdinal < 1 || pageOrdinal > pagination.pages.length)
+                        {
+                            event.reply("Invalid page, must be an integer from 1 to "+pagination.pages.length+", inclusive").setEphemeral(true).queue();
+                        }
+                        else
+                        {
+                            pagination.action(pageOrdinal).queue();
+                            event.deferEdit().queue();
+                        }
+                    }
+                    catch (NumberFormatException nfex)
+                    {
+                        event.reply("Invalid integer").setEphemeral(true).queue();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception sync handling of pagination", ex);
+                    event.reply("Exception sync handling of pagination:\n`"+ex+"`").setEphemeral(true).queue();
+                } break;
                 case "edit-desc": {
                     String desc = event.getValue("input-desc:"+parts[1]).getAsString();
                     event.replyFormat("### Setting description:\n%s", desc).setEphemeral(true).queue();
@@ -3865,6 +4010,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onStringSelectInteraction(StringSelectInteractionEvent event)
         {
+            ScarletDiscordJDA.this.interactions.handle(event);
             if (!this.isInGuild(event))
                 return;
             try
@@ -4349,43 +4495,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setTitle(MarkdownSanitizer.escape(target.getDisplayName()), "https://vrchat.com/home/user/"+target.getId())
                 .setImage(MiscUtils.userImageUrl(target))
             ;
-            List<LimitedUserGroups> lugs = null;
-            lugs = this.scarlet.vrc.getUserGroups(entryMeta.entry.getTargetId(), Long.MAX_VALUE);
- /*
-            String jsonUser;
-            try
-            {
-                jsonUser = this.scarlet.vrc.getUser(entryMeta.entry.getTargetId()).toJson();
-            }
-            catch (Exception ex)
-            {
-                LOG.error("Exception whilst fetching user", ex);
-                jsonUser = null;
-            }
-            String jsonUserGroups;
-            try
-            {
-                jsonUserGroups = JSON.getGson().toJson(lugs = new UsersApi(this.scarlet.vrc.client).getUserGroups(entryMeta.entry.getTargetId()), LIST_LUGROUPS.getType());
-            }
-            catch (Exception ex)
-            {
-                LOG.error("Exception whilst fetching user groups", ex);
-                jsonUserGroups = null;
-            }
-            String jsonUserRepGroup;
-            try
-            {
-                jsonUserRepGroup = JSON.getGson().toJson(new UsersApi(this.scarlet.vrc.client).getUserRepresentedGroup(entryMeta.entry.getTargetId()), RepresentedGroup.class);
-            }
-            catch (Exception ex)
-            {
-                LOG.error("Exception whilst fetching user represented group", ex);
-                jsonUserRepGroup = null;
-            }
             
-            byte[] fileData = String.format("{\n\"user\":%s,\n\"groups\":%s,\n\"represented\":%s\n}\n", jsonUser, jsonUserGroups, jsonUserRepGroup).getBytes(StandardCharsets.UTF_8);
-//*/
-
+            List<LimitedUserGroups> lugs = this.scarlet.vrc.snapshot(entryMeta);
+            
             if (target != null)
             {
                 String epochJoined = Long.toUnsignedString(target.getDateJoined().toEpochDay() * 86400L);
@@ -4446,6 +4558,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
                               Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
                               Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link"))
+                .addActionRow(Button.secondary("view-snapshot-user:"+entryMeta.entry.getId(), "Snapshot: user"),
+                              Button.secondary("view-snapshot-user-groups:"+entryMeta.entry.getId(), "Snapshot: user groups"),
+                              Button.secondary("view-snapshot-user-represented-group:"+entryMeta.entry.getId(), "Snapshot: user represented group"))
                 .addActionRow(Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
                               Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"),
                               Button.primary("event-redact:"+entryMeta.entry.getId(), "Redact event"),
@@ -4732,8 +4847,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.condEmitEx(GroupAuditTypeEx.STAFF_JOIN, false, false, location, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
-                    .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
-                    .addField("Location", "`"+location+"`", false)
+                    .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) joined [a group instance](https://vrchat.com/home/launch?worldId=%s)",
+                            MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+//                    .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
+//                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.STAFF_JOIN.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4748,8 +4865,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.condEmitEx(GroupAuditTypeEx.STAFF_LEAVE, false, false, location, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
-                    .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
-                    .addField("Location", "`"+location+"`", false)
+                    .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) left [a group instance](https://vrchat.com/home/launch?worldId=%s)",
+                            MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+//                    .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
+//                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.STAFF_LEAVE.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4764,8 +4883,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.condEmitEx(GroupAuditTypeEx.USER_JOIN, false, false, location, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
-                    .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
-                    .addField("Location", "`"+location+"`", false)
+                    .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) joined [a group instance](https://vrchat.com/home/launch?worldId=%s)",
+                            MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+//                    .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
+//                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.USER_JOIN.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4780,8 +4901,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.condEmitEx(GroupAuditTypeEx.USER_LEAVE, false, false, location, (channelSf, guild, channel) ->
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
-                    .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
-                    .addField("Location", "`"+location+"`", false)
+                    .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) left [a group instance](https://vrchat.com/home/launch?worldId=%s)",
+                            MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+//                    .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
+//                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.USER_LEAVE.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
@@ -4814,8 +4937,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.condEmitEx(GroupAuditTypeEx.VTK_START, true, false, location, (channelSf, guild, channel) ->
         {
             EmbedBuilder builder = new EmbedBuilder()
-                    .setTitle(MarkdownSanitizer.escape(displayName)+" was targeted by a vote-to-kick", "https://vrchat.com/home/user/"+userId)
-                    .addField("Location", "`"+location+"`", false)
+                    .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) was targeted by a vote-to-kick in [a group instance](https://vrchat.com/home/launch?worldId=%s)",
+                            MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+//                    .setTitle(MarkdownSanitizer.escape(displayName)+" was targeted by a vote-to-kick", "https://vrchat.com/home/user/"+userId)
+//                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.VTK_START.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC));
