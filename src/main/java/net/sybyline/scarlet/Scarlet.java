@@ -43,7 +43,9 @@ import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
 import net.sybyline.scarlet.util.MavenDepsLoader;
 import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.ProcLock;
 import net.sybyline.scarlet.util.TTSService;
+import net.sybyline.scarlet.util.VrcIds;
 
 public class Scarlet implements Closeable
 {
@@ -63,7 +65,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc8",
+        VERSION = "0.4.11-rc9",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -87,14 +89,26 @@ public class Scarlet implements Closeable
     {
         Thread.setDefaultUncaughtExceptionHandler(Scarlet::uncaughtException);
         int exitCode = 0;
-        try (Scarlet scarlet = new Scarlet())
+        try
         {
-            scarlet.run();
-            exitCode = scarlet.exitCode;
+            try (Scarlet scarlet = new Scarlet())
+            {
+                scarlet.run();
+                exitCode = scarlet.exitCode;
+            }
+            catch (Throwable t)
+            {
+                exitCode = -1;
+                LOG.error("Exception in main", t);
+            }
         }
-        System.exit(exitCode);
+        finally
+        {
+            System.exit(exitCode);
+        }
     }
 
+    public static final File user_home = new File(System.getProperty("user.home"));
     public static final File dir;
     static
     {
@@ -107,7 +121,7 @@ public class Scarlet implements Closeable
                 : new File(scarletHome).getAbsoluteFile()
             : localappdata != null
                 ? new File(localappdata, GROUP+"/"+NAME)
-                : new File(System.getProperty("user.home"), "AppData/Local/"+GROUP+"/"+NAME);
+                : new File(user_home, "AppData/Local/"+GROUP+"/"+NAME);
         if (!dir0.isDirectory())
             dir0.mkdirs();
         dir = dir0;
@@ -232,6 +246,12 @@ public class Scarlet implements Closeable
     {
         Float uiScale = this.settings.getObject("ui_scale", Float.class);
         if (uiScale != null) Swing.scaleAll(uiScale.floatValue());
+        String groupId = this.settings.getString("vrchat_group_id");
+        if (groupId != null && !(groupId = VrcIds.resolveGroupId(groupId)).isEmpty())
+        {
+            if (!ProcLock.tryLock(new File(user_home, ".scarlet."+groupId+".lock")))
+                throw new IllegalStateException("Duplicate processes detected for group "+groupId);
+        }
     }
     final ScarletUI ui = new ScarletUI(this);
     final ScarletEventListener eventListener = new ScarletEventListener(this);
@@ -244,7 +264,7 @@ public class Scarlet implements Closeable
     final ScarletData data = new ScarletData(new File(dir, "data"));
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
-    final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"));
+    final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
     final ScarletUI.Setting<Boolean> alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),

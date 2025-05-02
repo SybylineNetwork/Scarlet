@@ -94,6 +94,28 @@ Settings for the Discord bot account
 }
 ```
 
+## file `discord_perms.json`
+
+Permissions for Discord users and roles
+```json
+{
+    // Map of permission type to permission set
+    "<PermissionType>": {
+        "byUser": {
+            "123456789123456789": {
+                "<PermissionName>": true
+            }
+        },
+        "byRole": {
+            "123456789123456789": {
+                "<PermissionName>": false
+            }
+        }
+    },
+    ...
+}
+```
+
 ## file `watched_groups.json`
 
 Array of watched groups

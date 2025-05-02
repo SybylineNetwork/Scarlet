@@ -139,7 +139,8 @@ public interface DEnum<DE extends Enum<DE> & DEnum<DE, V>, V>
 
     class DEnumInfo<DE extends Enum<DE> & DEnum<DE, V>, V>
     {
-        static final Map<Class<?>, DEnumInfo<?, ?>> cache = Collections.synchronizedMap(new WeakHashMap<>());
+        @SuppressWarnings("rawtypes")
+        static final Map<Class/*<?>*/, DEnumInfo/*<?, ?>*/> cache = Collections.synchronizedMap(new WeakHashMap<>());
         @SuppressWarnings("unchecked")
         static <DE extends Enum<DE> & DEnum<DE, V>, V> DEnumInfo<DE, V> of(Class<DE> type)
         {

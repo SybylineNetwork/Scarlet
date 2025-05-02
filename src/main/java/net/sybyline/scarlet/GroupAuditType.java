@@ -12,7 +12,9 @@ import com.google.gson.reflect.TypeToken;
 import io.github.vrchatapi.model.GroupAccessType;
 import io.github.vrchatapi.model.GroupPostVisibility;
 
-public enum GroupAuditType
+import net.sybyline.scarlet.server.discord.DEnum;
+
+public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
 {
     INSTANCE_CLOSE      ("group.instance.close"      , "Instance Close"      , 0x00_FF0000), // InstanceComponent
     INSTANCE_CREATE     ("group.instance.create"     , "Instance Create"     , 0x00_00FF00), // InstanceComponent
@@ -56,6 +58,18 @@ public enum GroupAuditType
         this.id = id;
         this.title = title;
         this.color = color;
+    }
+
+    @Override
+    public String value()
+    {
+        return this.id;
+    }
+
+    @Override
+    public String display()
+    {
+        return this.title;
     }
 
     public final String id, title;

@@ -3,7 +3,9 @@ package net.sybyline.scarlet;
 import java.util.HashMap;
 import java.util.Map;
 
-public enum ScarletPermission
+import net.sybyline.scarlet.server.discord.DEnum;
+
+public enum ScarletPermission implements DEnum.DEnumString<ScarletPermission>
 {
 
     EVENT_SET_DESCRIPTION("event.set_description", "Set Description"),
@@ -23,6 +25,18 @@ public enum ScarletPermission
     {
         this.id = id;
         this.title = title;
+    }
+
+    @Override
+    public String value()
+    {
+        return this.id;
+    }
+
+    @Override
+    public String display()
+    {
+        return this.title;
     }
 
     public final String id, title;

@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import io.github.vrchatapi.model.Group;
 
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.sybyline.scarlet.server.discord.DEnum;
 import net.sybyline.scarlet.util.UniqueStrings;
 
 public class ScarletWatchedGroups
@@ -44,7 +45,7 @@ public class ScarletWatchedGroups
     {
         public String id;
         public Type type = Type.UNKNOWN;
-        public static enum Type
+        public static enum Type implements DEnum.DEnumString<Type>
         {
             UNKNOWN(null),
             
@@ -61,6 +62,16 @@ public class ScarletWatchedGroups
             {
                 this.text_color = text_color;
             }
+            @Override
+            public String value()
+            {
+                return this.name();
+            }
+            @Override
+            public String display()
+            {
+                return this.name();
+            }
         }
         public UniqueStrings tags = new UniqueStrings();
         public int priority = 0;
@@ -70,9 +81,12 @@ public class ScarletWatchedGroups
         
         public EmbedBuilder embed(Group group)
         {
-            String name = group != null ? group.getName() : this.id,
+            String code = group != null ? (group.getShortCode()+"."+group.getDiscriminator()) : null,
+                   icon = group != null ? group.getIconUrl() : null,
+                   name = group != null ? group.getName() : this.id,
                    thumbnail = group != null ? group.getBannerUrl() : "https://assets.vrchat.com/www/groups/default_banner.png";
             return new EmbedBuilder()
+                .setAuthor(code, null, icon)
                 .setTitle(name, "https://vrchat.com/home/group/"+this.id)
                 .setThumbnail(thumbnail)
                 .addField("Id", "`"+this.id+"`", false)

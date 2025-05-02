@@ -7,22 +7,28 @@ import java.lang.annotation.Target;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
+import org.apache.commons.text.similarity.LevenshteinDistance;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +41,7 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.Channel;
+import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
@@ -58,54 +65,57 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
+import net.dv8tion.jda.api.interactions.components.ComponentInteraction;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.interactions.components.text.TextInput;
+import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
+import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.interactions.modals.ModalInteraction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 import net.sybyline.scarlet.util.Func;
+import net.sybyline.scarlet.util.MiscUtils;
 
 public class DInteractions
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/Discord/DCmd");
 
-    public static final DefaultMemberPermissions DEFAULT_PERMISSIONS = DefaultMemberPermissions.enabledFor(
-        Permission.ADMINISTRATOR,
-        Permission.MANAGE_SERVER,
-        Permission.MANAGE_ROLES);
+    public static final DefaultMemberPermissions DEFAULT_PERMISSIONS = DefaultMemberPermissions.enabledFor(Permission.MODERATE_MEMBERS);
+
+    @Target(ElementType.PARAMETER)
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface SlashOpt { String value(); }
+    @Target({ElementType.TYPE,ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface SlashCmd { String value(); }
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface MsgCmd { String value(); }
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface UserCmd { String value(); }
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface ButtonClk { String value(); }
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface StringSel { String value(); }
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface EntitySel { String value(); }
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface ModalSub { String value(); }
 
     @Target({ElementType.TYPE,ElementType.METHOD})
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface SlashCmd
-    {
-        public abstract String name();
-        public abstract String description() default "description";
-        public abstract String[] options() default {};
-        public abstract Permission[] defaultPerms() default {};
-    }
-    @Target({ElementType.TYPE})
+    public static @interface Desc { String value(); }
+    @Target({ElementType.TYPE,ElementType.METHOD})
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface MsgCmd
-    {
-        public abstract String name();
-        public abstract Permission[] defaultPerms() default {};
-    }
-    @Target({ElementType.TYPE})
-    @Retention(RetentionPolicy.RUNTIME)
-    public static @interface UserCmd
-    {
-        public abstract String name();
-        public abstract Permission[] defaultPerms() default {};
-    }
- /*
+    public static @interface DefaultPerms { Permission[] value() default {}; }
     @Target({ElementType.METHOD})
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface SlashOpt
-    {
-        public abstract String name();
-        public abstract String description() default "";
-        public abstract String min() default "";
-        public abstract String max() default "";
-    }
-//*/
+    public static @interface Ephemeral { }
 
     public void register(Object object)
     {
@@ -124,13 +134,19 @@ public class DInteractions
     }
     public void register(Class<?> type, Object object)
     {
+        if (this.registerSlashCmd(type, object))
+            return;
         for (Field field : type.getFields())
-            this.registerSlashCmdOption(object, field);
+            this.registerSlashCmdOption(object, field, null, null);
         for (Method method : type.getMethods())
         {
             if (this.registerSlashCmdHandler(object, method, null, null)) continue;
             if (this.registerMsgCmdHandler(object, method)) continue;
             if (this.registerUserCmdHandler(object, method)) continue;
+            if (this.registerButtonClkHandler(object, method)) continue;
+            if (this.registerStringSelHandler(object, method)) continue;
+            if (this.registerEntitySelHandler(object, method)) continue;
+            if (this.registerModalSubHandler(object, method)) continue;
         }
         for (Class<?> clazz : type.getClasses())
             this.registerSlashCmd(type, object, clazz);
@@ -158,19 +174,37 @@ public class DInteractions
             }
         }
     }
+    static Permission[] defaultPerms(AnnotatedElement e)
+    {
+        DefaultPerms dp = e.getDeclaredAnnotation(DefaultPerms.class);
+        return dp == null ? Permission.EMPTY_PERMISSIONS : dp.value();
+    }
+    static String description(AnnotatedElement e)
+    {
+        Desc d = e.getDeclaredAnnotation(Desc.class);
+        return d == null ? "description" : d.value();
+    }
     public boolean registerSlashCmd(Class<?> outer, Object receiver, Class<?> cclass)
     {
         SlashCmd sc = cclass.getDeclaredAnnotation(SlashCmd.class);
         if (sc == null)
             return false;
-        LOG.debug(String.format("Registering slash command: %s", sc.name()));
         Object sub = this.ctxNew(outer, receiver, cclass);
-        Slash slash = this.slash(sc.name(), sc.description());
-        slash.data.setDefaultPermissions(sc.defaultPerms().length == 0
+        return this.registerSlashCmd(cclass, sub);
+    }
+    public boolean registerSlashCmd(Class<?> cclass, Object sub)
+    {
+        SlashCmd sc = cclass.getDeclaredAnnotation(SlashCmd.class);
+        if (sc == null)
+            return false;
+        LOG.debug(String.format("Registering slash command: %s", sc.value()));
+        Slash slash = this.slash(sc.value(), description(cclass));
+        Permission[] defaultPerms = defaultPerms(cclass);
+        slash.data.setDefaultPermissions(defaultPerms.length == 0
             ? DEFAULT_PERMISSIONS
-            : DefaultMemberPermissions.enabledFor(sc.defaultPerms()));        
+            : DefaultMemberPermissions.enabledFor(defaultPerms));        
         for (Field field : cclass.getFields())
-            this.registerSlashCmdOption(sub, field);
+            this.registerSlashCmdOption(sub, field, slash, null);
         for (Method method : cclass.getMethods())
             this.registerSlashCmdHandler(sub, method, slash, null);
         for (Class<?> gclass : cclass.getClasses())
@@ -182,11 +216,11 @@ public class DInteractions
         SlashCmd sc = gclass.getDeclaredAnnotation(SlashCmd.class);
         if (sc == null)
             return false;
-        LOG.debug(String.format("Registering slash command group: %s %s", slash.data.getName(), sc.name()));
+        LOG.debug(String.format("Registering slash command group: %s %s", slash.data.getName(), sc.value()));
         Object sub = this.ctxNew(cclass, receiver, gclass);
-        Slash.Group group = slash.group(sc.name(), sc.description());
+        Slash.Group group = slash.group(sc.value(), description(gclass));
         for (Field field : gclass.getFields())
-            this.registerSlashCmdOption(sub, field);
+            this.registerSlashCmdOption(sub, field, slash, group);
         for (Method method : gclass.getMethods())
             this.registerSlashCmdHandler(sub, method, slash, group);
         return true;
@@ -196,53 +230,85 @@ public class DInteractions
         SlashCmd sc = method.getDeclaredAnnotation(SlashCmd.class);
         if (sc == null)
             return false;
-        LOG.debug(String.format("Registering slash command handler: %s%s%s", slash==null?"":(slash.data.getName()+" "), group==null?"":(group.data.getName()+" "), sc.name()));
-        SlashOption<?>[] options = this.findOptions(sc.options());
-        Permission[] defaultPerms = sc.defaultPerms();
+        LOG.debug(String.format("Registering slash command handler: %s%s%s", slash==null?"":(slash.data.getName()+" "), group==null?"":(group.data.getName()+" "), sc.value()));
+        Permission[] defaultPerms = defaultPerms(method);
+        String description = description(method);
         int params = method.getParameterCount() - 1;
         Class<?>[] paramTypes = method.getParameterTypes();
         if (!paramTypes[0].isAssignableFrom(SlashCommandInteractionEvent.class))
-            throw new IllegalArgumentException("!method.getParameterTypes()[0].isAssignableFrom(SlashCommandInteractionEvent.class)");
+            throw new IllegalArgumentException(method+": !method.getParameterTypes()[0].isAssignableFrom(SlashCommandInteractionEvent.class)");
         SlashCommandHandler handler;
+        
+        boolean onlyImpl = slash == null;
+        if (onlyImpl) slash = this.slash(sc.value(), description);
+
+        int hookParam;
+        Boolean ephemeral = null;
+        if (params >= 1 && paramTypes[1].isAssignableFrom(InteractionHook.class))
+        {
+            hookParam = 1;
+            if (!IReplyCallback.class.isAssignableFrom(paramTypes[0]))
+                throw new IllegalArgumentException(method+": !IReplyCallback.class.isAssignableFrom(method.getParameterTypes()[0])");
+            ephemeral = null != method.getDeclaredAnnotation(Ephemeral.class);
+            params--;
+        }
+        else
+        {
+            hookParam = 0;
+        }
+        SlashOption<?>[] options = this.findOptions(slash, group, method, params);
+        
+        int argidx = -1;
         try
         {
-            int argidx = Modifier.isStatic(method.getModifiers()) ? 1 : 2;
+            argidx = Modifier.isStatic(method.getModifiers()) ? 1 : 2;
             MethodHandle mh = MethodHandles.publicLookup().unreflect(method);
             mh = MethodHandles.filterArguments(mh,
-                    argidx,
+                    argidx + hookParam,
                     IntStream.range(0, params)
-                    .mapToObj($ -> options[$].mh(paramTypes[$ + 1], paramTypes[0]))
+                    .mapToObj($ -> options[$].mh(paramTypes[$ + 1 + hookParam], paramTypes[0]))
                     .toArray(MethodHandle[]::new));
-            mh = argidx == 2 ? MethodHandles.permuteArguments(mh,
-                MethodType.methodType(
-                    mh.type().returnType(), mh.type().parameterType(0), mh.type().parameterType(1)),
-                IntStream.concat(IntStream.of(0, 1), IntStream.range(0, params).map($ -> 1)).toArray()
-            ) : MethodHandles.permuteArguments(mh,
-                MethodType.methodType(
-                    mh.type().returnType(), mh.type().parameterType(0)),
-                IntStream.concat(IntStream.of(0), IntStream.range(0, params).map($ -> 0)).toArray()
-            );
+            
+            mh = ephemeral == null ?
+                (argidx == 2 ? MethodHandles.permuteArguments(mh,
+                    MethodType.methodType(
+                        mh.type().returnType(), mh.type().parameterType(0), mh.type().parameterType(1)),
+                    IntStream.concat(IntStream.of(0, 1), IntStream.range(0, params).map($ -> 1)).toArray()
+                ) : MethodHandles.permuteArguments(mh,
+                    MethodType.methodType(
+                        mh.type().returnType(), mh.type().parameterType(0)),
+                    IntStream.concat(IntStream.of(0), IntStream.range(0, params).map($ -> 0)).toArray()
+                )) :
+                (argidx == 2 ? MethodHandles.permuteArguments(mh,
+                    MethodType.methodType(
+                        mh.type().returnType(), mh.type().parameterType(0), mh.type().parameterType(1), mh.type().parameterType(2)),
+                    IntStream.concat(IntStream.of(0, 1, 2), IntStream.range(0, params).map($ -> 1)).toArray()
+                ) : MethodHandles.permuteArguments(mh,
+                    MethodType.methodType(
+                        mh.type().returnType(), mh.type().parameterType(0), mh.type().parameterType(1)),
+                    IntStream.concat(IntStream.of(0, 1), IntStream.range(0, params).map($ -> 0)).toArray()
+                ));
             if (mh.type().returnType() == void.class) mh = MethodHandles.filterReturnValue(mh, MethodHandles.constant(Object.class, null));
             if (argidx == 2) mh = mh.bindTo(receiver);
-            Func.F1<Throwable, Object, CommandInteractionPayload> f1 = mh::invoke;
-            handler = f1.asUnchecked()::invoke;
+            handler = this.tryHandleAsyncable(ephemeral, mh)::invoke;
         }
         catch (Exception ex)
         {
+            LOG.error(String.format("%d %d %d %s", params, hookParam, argidx, method));
             throw new Error(ex);
         }
-        if (slash == null)
+        if (onlyImpl)
         {
             DefaultMemberPermissions defaultMemberPerms = defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms);
-            this.slash(sc.name(), sc.description(), handler, defaultMemberPerms, options);
+            slash.impl(handler, defaultMemberPerms, options);
         }
         else if (group == null)
-            slash.sub(sc.name(), sc.description(), handler, options);
+            slash.sub(sc.value(), description, handler, options);
         else
-            group.sub(sc.name(), sc.description(), handler, options);
+            group.sub(sc.value(), description, handler, options);
         return true;
     }
-    public boolean registerSlashCmdOption(Object receiver, Field field)
+    public boolean registerSlashCmdOption(Object receiver, Field field, Slash slash, Slash.Group group)
     {
         if (!SlashOption.class.isAssignableFrom(field.getType()))
             return false;
@@ -258,35 +324,19 @@ public class DInteractions
         if (so == null)
             return false;
         LOG.debug(String.format("Registering slash command option: %s", so.data.getName()));
-        return this.registerOption(null, so);
+        if (this.registerOption(slash, group, field.getName(), so))
+            return true;
+        LOG.debug(String.format("Duplicate slash command option: %s (%s)", so.data.getName(), field));
+        return false;
     }
     public boolean registerMsgCmdHandler(Object receiver, Method method)
     {
         MsgCmd mc = method.getDeclaredAnnotation(MsgCmd.class);
         if (mc == null)
             return false;
-        LOG.debug(String.format("Registering message command: %s", mc.name()));
-        Permission[] defaultPerms = mc.defaultPerms();
-        int params = method.getParameterCount();
-        if (params != 1)
-            throw new IllegalArgumentException("method.getParameterCount() != 1");
-        if (!method.getParameterTypes()[0].isAssignableFrom(MessageContextInteractionEvent.class))
-            throw new IllegalArgumentException("!method.getParameterTypes()[0].isAssignableFrom(MessageContextInteractionEvent.class)");
-        MessageCommandHandler handler;
-        try
-        {
-            int argidx = Modifier.isStatic(method.getModifiers()) ? 0 : 1;
-            MethodHandle mh = MethodHandles.publicLookup().unreflect(method);
-            if (mh.type().returnType() == void.class) mh = MethodHandles.filterReturnValue(mh, MethodHandles.constant(Object.class, null));
-            if (argidx == 1) mh = mh.bindTo(receiver);
-            Func.F1<Throwable, Object, MessageContextInteractionEvent> f1 = mh::invoke;
-            handler = f1.asUnchecked()::invoke;
-        }
-        catch (Exception ex)
-        {
-            throw new Error(ex);
-        }
-        this.message(mc.name(), handler).setDefaultPermissions(defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms));
+        LOG.debug(String.format("Registering message command: %s", mc.value()));
+        Permission[] defaultPerms = defaultPerms(method);
+        this.message(mc.value(), this.tryHandle(receiver, method, MessageContextInteractionEvent.class)::invoke).setDefaultPermissions(defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms));
         return true;
     }
     public boolean registerUserCmdHandler(Object receiver, Method method)
@@ -294,41 +344,175 @@ public class DInteractions
         UserCmd uc = method.getDeclaredAnnotation(UserCmd.class);
         if (uc == null)
             return false;
-        LOG.debug(String.format("Registering user command: %s", uc.name()));
-        Permission[] defaultPerms = uc.defaultPerms();
-        int params = method.getParameterCount();
-        if (params != 1)
-            throw new IllegalArgumentException("method.getParameterCount() != 1");
-        if (!method.getParameterTypes()[0].isAssignableFrom(UserContextInteractionEvent.class))
-            throw new IllegalArgumentException("!method.getParameterTypes()[0].isAssignableFrom(UserContextInteractionEvent.class)");
-        UserCommandHandler handler;
+        LOG.debug(String.format("Registering user command: %s", uc.value()));
+        Permission[] defaultPerms = defaultPerms(method);
+        this.user(uc.value(), this.tryHandle(receiver, method, UserContextInteractionEvent.class)::invoke).setDefaultPermissions(defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms));
+        return true;
+    }
+    public boolean registerButtonClkHandler(Object receiver, Method method)
+    {
+        ButtonClk bc = method.getDeclaredAnnotation(ButtonClk.class);
+        if (bc == null)
+            return false;
+        LOG.debug(String.format("Registering button click: %s", bc.value()));
+        return this.button(bc.value(), this.tryHandle(receiver, method, ButtonInteractionEvent.class)::invoke);
+    }
+    public boolean registerStringSelHandler(Object receiver, Method method)
+    {
+        StringSel ss = method.getDeclaredAnnotation(StringSel.class);
+        if (ss == null)
+            return false;
+        LOG.debug(String.format("Registering string select: %s", ss.value()));
+        return this.string(ss.value(), this.tryHandle(receiver, method, StringSelectInteractionEvent.class)::invoke);
+    }
+    public boolean registerEntitySelHandler(Object receiver, Method method)
+    {
+        EntitySel es = method.getDeclaredAnnotation(EntitySel.class);
+        if (es == null)
+            return false;
+        LOG.debug(String.format("Registering entity select: %s", es.value()));
+        return this.entity(es.value(), this.tryHandle(receiver, method, EntitySelectInteractionEvent.class)::invoke);
+    }
+    public boolean registerModalSubHandler(Object receiver, Method method)
+    {
+        ModalSub ms = method.getDeclaredAnnotation(ModalSub.class);
+        if (ms == null)
+            return false;
+        LOG.debug(String.format("Registering modal submit: %s", ms.value()));
+        return this.modal(ms.value(), this.tryHandle(receiver, method, ModalInteractionEvent.class)::invoke);
+    }
+    public <E> Func.F1.NE<Object, E> tryHandle(Object receiver, Method method, Class<E> event)
+    {
+        Class<?>[] parameterTypes = method.getParameterTypes();
+        int params = method.getParameterCount(),
+            spreads = 0;
+        if (ComponentInteraction.class.isAssignableFrom(event) || ModalInteraction.class.isAssignableFrom(event))
+        {
+            while (String.class.equals(parameterTypes[params - 1]))
+            {
+                params--;
+                spreads++;
+            }
+        }
+        if (params != 1 && params != 2)
+            throw new IllegalArgumentException(method+": method.getParameterCount() != 1 && method.getParameterCount() != 2");
+        if (!parameterTypes[0].isAssignableFrom(event))
+            throw new IllegalArgumentException(method+": !method.getParameterTypes()[0].isAssignableFrom("+event.getSimpleName()+".class)");
+        Boolean ephemeral = null;
+        if (params == 2)
+        {
+            if (!parameterTypes[1].isAssignableFrom(InteractionHook.class))
+                throw new IllegalArgumentException(method+": !method.getParameterTypes()[1].isAssignableFrom(InteractionHook.class)");
+            if (!IReplyCallback.class.isAssignableFrom(parameterTypes[0]))
+                throw new IllegalArgumentException(method+": !IReplyCallback.class.isAssignableFrom(method.getParameterTypes()[0])");
+            ephemeral = null != method.getDeclaredAnnotation(Ephemeral.class);
+        }
         try
         {
+            MethodHandles.Lookup lookup = MethodHandles.publicLookup();
             int argidx = Modifier.isStatic(method.getModifiers()) ? 0 : 1;
-            MethodHandle mh = MethodHandles.publicLookup().unreflect(method);
+            MethodHandle mh = lookup.unreflect(method);
+            if (spreads <= 0)
+            {
+                ; // noop
+            }
+            else
+            {
+                MethodHandle getId,
+                             get = MethodHandles.arrayElementGetter(String[].class),
+                             split = MethodHandles.insertArguments(lookup.findVirtual(String.class, "split", MethodType.methodType(String[].class, String.class, String.class)), 1, ":");
+                if (ComponentInteraction.class.isAssignableFrom(event))
+                {
+                    getId = lookup.findVirtual(ComponentInteraction.class, "getComponentId", MethodType.methodType(String.class, ComponentInteraction.class));
+                }
+                else if (ModalInteraction.class.isAssignableFrom(event))
+                {
+                    getId = lookup.findVirtual(ModalInteraction.class, "getModalId", MethodType.methodType(String.class, ModalInteraction.class));
+                }
+                else
+                {
+                    throw new IllegalArgumentException(method+": spreading event "+event+" is neither a ComponentInteraction nor a ModalInteraction");
+                }
+                int spc = mh.type().parameterCount() - spreads;
+                mh = MethodHandles.filterArguments(mh, spc, IntStream.range(0, spreads).mapToObj($ -> MethodHandles.insertArguments(get, 1, $)).toArray(MethodHandle[]::new));
+                mh = MethodHandles.permuteArguments(mh, mh.type().dropParameterTypes(spc + 1, mh.type().parameterCount()), IntStream.range(0, mh.type().parameterCount()).map($ -> Math.min($, spc + 1)).toArray());
+                mh = MethodHandles.filterArguments(mh, mh.type().parameterCount() - 1, split);
+                mh = MethodHandles.filterArguments(mh, mh.type().parameterCount() - 1, getId);
+                mh = MethodHandles.permuteArguments(mh, mh.type().dropParameterTypes(mh.type().parameterCount() - 1, mh.type().parameterCount()), IntStream.concat(IntStream.range(0, mh.type().parameterCount() - 1), IntStream.of(argidx)).toArray());
+            }
             if (mh.type().returnType() == void.class) mh = MethodHandles.filterReturnValue(mh, MethodHandles.constant(Object.class, null));
             if (argidx == 1) mh = mh.bindTo(receiver);
-            Func.F1<Throwable, Object, UserContextInteractionEvent> f1 = mh::invoke;
-            handler = f1.asUnchecked()::invoke;
+            return this.tryHandleAsyncable(ephemeral, mh);
         }
         catch (Exception ex)
         {
             throw new Error(ex);
         }
-        this.user(uc.name(), handler).setDefaultPermissions(defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms));
+    }
+    public <E> Func.F1.NE<Object, E> tryHandleAsyncable(Boolean ephemeral, MethodHandle mh)
+    {
+        if (ephemeral == null)
+        {
+            Func.F1<Throwable, Object, E> f1 = mh::invoke;
+            return f1.asUnchecked();
+        }
+        else
+        {
+            boolean ephemeral0 = ephemeral.booleanValue();
+            Func.F2<Throwable, Object, E, InteractionHook> f2 = mh::invoke;
+            Func.F2.NE<Object, E, InteractionHook> ne = f2.asUnchecked();
+            return $ -> this.handleAsync((IReplyCallback)$, ephemeral0, hook -> ne.invoke($, hook));
+        }
+    }
+    public <T> boolean registerOption(Slash slash, Slash.Group group, String altId, SlashOption<T> option)
+    {
+        String id = option.data.getName();
+        if (group != null)
+        {
+            if (altId != null)
+                group.opts.putIfAbsent(altId, option);
+            if (null != group.opts.putIfAbsent(id, option))
+                return false;
+            return true;
+        }
+        if (slash != null)
+        {
+            if (altId != null)
+                slash.opts.putIfAbsent(altId, option);
+            if (null != slash.opts.putIfAbsent(id, option))
+                return false;
+            return true;
+        }
+        if (altId != null)
+            this.slashOptionsBound.putIfAbsent(altId, option);
+        if (null != this.slashOptionsBound.putIfAbsent(id, option))
+            return false;
         return true;
     }
-    public <T> boolean registerOption(String id, SlashOption<T> option)
+    public SlashOption<?> findOption(Slash slash, Slash.Group group, String id)
     {
-        return null == this.slashOptionsBound.putIfAbsent(id != null ? id : option.data.getName(), option);
+        SlashOption<?> ret = null;
+        if (group != null) ret = group.opts.get(id);
+        if (ret == null) ret = slash.opts.get(id);
+        if (ret == null) ret = this.slashOptionsBound.get(id);
+        return ret;
     }
-    public SlashOption<?> findOption(String id)
+    public SlashOption<?>[] findOptions(Slash slash, Slash.Group group, Method method, int params)
     {
-        return this.slashOptionsBound.get(id);
-    }
-    public SlashOption<?>[] findOptions(String... ids)
-    {
-        return Arrays.stream(ids).map(this.slashOptionsBound::get).toArray(SlashOption[]::new);
+        int off = method.getParameterCount() - params;
+        Parameter[] parameters = method.getParameters();
+        return IntStream.range(0, params).mapToObj(idx ->
+        {
+            SlashOption<?> ret = null;
+            Parameter parameter = parameters[idx + off];
+            SlashOpt so = parameter.getDeclaredAnnotation(SlashOpt.class);
+            
+            if (so != null && !so.value().isEmpty()) ret = this.findOption(slash, group, so.value());
+            if (ret == null && parameter.isNamePresent()) ret = this.findOption(slash, group, parameter.getName());
+            
+            if (ret == null) LOG.error(String.format("No option found for %s:%d (%s) {%s}", method, idx, parameter, so));
+            return ret;
+        }).toArray(SlashOption[]::new);
     }
 
     public static @FunctionalInterface interface SlashCommandHandler { void handle(SlashCommandInteractionEvent event); }
@@ -341,27 +525,161 @@ public class DInteractions
     public static @FunctionalInterface interface ModalSubmitHandler { void handle(ModalInteractionEvent event); }
     public static @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
 
+    public static class SlashOptionStrings implements SlashCompleteHandler
+    {
+        static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
+        static final Pattern namer = Pattern.compile("[^0-9a-z]");
+        static String normalize(String string)
+        {
+            return namer.matcher(string.toLowerCase()).replaceAll("");
+        }
+        public SlashOptionStrings(Stream<String> values, boolean includeTyping)
+        {
+            this(values, includeTyping, $->new String[]{$});
+        }
+        public SlashOptionStrings(Stream<String> values, boolean includeTyping, Function<String, String[]> names)
+        {
+            this.values = values.toArray(String[]::new);
+            this.includeTyping = includeTyping;
+            this.count = this.values.length;
+            this.names = Arrays.stream(this.values).map($->Stream.concat(Stream.of($), Arrays.stream(names.apply($))).map(SlashOptionStrings::normalize).toArray(String[]::new)).toArray(String[][]::new);
+        }
+        final String[] values;
+        final boolean includeTyping;
+        final int count;
+        final String[][] names;
+        Comparator<Integer> cmp(String typing)
+        {
+            String typing_san = normalize(typing);
+            return Comparator.<Integer>comparingLong($ ->
+            {
+                int order = Arrays.stream(this.names[$]).mapToInt($$ -> $$.startsWith(typing_san) ? 0 : $$.contains(typing_san) ? 1 : 2).min().getAsInt(),
+                    dist = Arrays.stream(this.names[$]).mapToInt($$ -> LD.apply(typing_san, $$)).min().getAsInt();
+                return ((long)order << 32) | ((long)dist & 0xFFFFFFFF);
+            });
+        }
+        public IntStream indices(String typing)
+        {
+            if (typing == null || (typing = typing.trim()).isEmpty())
+                return IntStream.range(0, Math.min(this.count, 25));
+            return IntStream
+                .range(0, this.count)
+                .mapToObj(Integer::valueOf)
+                .sorted(this.cmp(typing))
+                .mapToInt(Integer::intValue)
+                ;
+        }
+        public String[] values(String typing)
+        {
+            if (typing == null || (typing = typing.trim()).isEmpty())
+                return this.count <= 25 ? this.values : Arrays.copyOf(this.values, 25);
+            return Stream.concat(this.includeTyping ? Stream.of(typing) : Stream.empty(), this.indices(typing).mapToObj($ -> this.values[$])).limit(25L).toArray(String[]::new);
+        }
+        @Override
+        public void autocomplete(CommandAutoCompleteInteractionEvent event)
+        {
+            event.replyChoiceStrings(this.values(event.getFocusedOption().getValue())).queue();
+        }
+    }
+    public static class SlashOptionStringsUnsanitized implements SlashCompleteHandler
+    {
+        static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
+        public SlashOptionStringsUnsanitized(Supplier<String[]> values, boolean includeTyping)
+        {
+            this.values = values;
+            this.includeTyping = includeTyping;
+        }
+        final Supplier<String[]> values;
+        final boolean includeTyping;
+        @Override
+        public void autocomplete(CommandAutoCompleteInteractionEvent event)
+        {
+            autocomplete(event, this.values.get(), this.includeTyping);
+        }
+        public static void autocomplete(CommandAutoCompleteInteractionEvent event, String[] values, boolean includeTyping)
+        {
+            String typing = event.getFocusedOption().getValue().trim();
+            if (!typing.isEmpty())
+            {
+                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(Comparator.comparingInt($ -> LD.apply(typing, $))))).limit(25L).toArray(String[]::new);
+            }
+            else if (values.length > 25)
+            {
+                values = Arrays.copyOf(values, 25);
+            }
+            event.replyChoiceStrings(values).queue();
+        }
+    }
+    public static class SlashOptionsChoicesUnsanitized implements SlashCompleteHandler
+    {
+        static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
+        public SlashOptionsChoicesUnsanitized(Supplier<Command.Choice[]> values, boolean includeTyping)
+        {
+            this.values = values;
+            this.includeTyping = includeTyping;
+        }
+        final Supplier<Command.Choice[]> values;
+        final boolean includeTyping;
+        @Override
+        public void autocomplete(CommandAutoCompleteInteractionEvent event)
+        {
+            autocomplete(event, this.values.get(), this.includeTyping);
+        }
+        public static void autocomplete(CommandAutoCompleteInteractionEvent event, Command.Choice[] values, boolean includeTyping)
+        {
+            String typing = event.getFocusedOption().getValue().trim();
+            if (!typing.isEmpty())
+            {
+                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(Comparator.comparingInt($ -> Math.min(LD.apply(typing, $.getName()), LD.apply(typing, $.getAsString())))))).limit(25L).toArray(Command.Choice[]::new);
+            }
+            else if (values.length > 25)
+            {
+                values = Arrays.copyOf(values, 25);
+            }
+            event.replyChoices(values).queue();
+        }
+    }
     public static class SlashOption<T>
     {
-        public static SlashOption<Boolean> ofBool(String name, String desc, boolean required, boolean fallback)
+        public static SlashOption<Boolean> ofBool(String name, String desc, boolean required, Boolean fallback)
         {
             return new SlashOption<>(OptionType.BOOLEAN, name, desc, required, fallback, OptionMapping::getAsBoolean);
         }
-        public static SlashOption<Integer> ofInt(String name, String desc, boolean required, int fallback)
+        public static SlashOption<Integer> ofInt(String name, String desc, boolean required, Integer fallback)
         {
-            return new SlashOption<>(OptionType.INTEGER, name, desc, required, fallback, OptionMapping::getAsInt);
+            return ofInt(name, desc, required, fallback, null);
         }
-        public static SlashOption<Long> ofLong(String name, String desc, boolean required, long fallback)
+        public static SlashOption<Integer> ofInt(String name, String desc, boolean required, Integer fallback, SlashCompleteHandler autocomplete)
         {
-            return new SlashOption<>(OptionType.INTEGER, name, desc, required, fallback, OptionMapping::getAsLong);
+            return new SlashOption<>(OptionType.INTEGER, name, desc, required, fallback, OptionMapping::getAsInt, autocomplete);
         }
-        public static SlashOption<Double> ofDouble(String name, String desc, boolean required, double fallback)
+        public static SlashOption<Long> ofLong(String name, String desc, boolean required, Long fallback)
         {
-            return new SlashOption<>(OptionType.INTEGER, name, desc, required, fallback, OptionMapping::getAsDouble);
+            return ofLong(name, desc, required, fallback, null);
+        }
+        public static SlashOption<Long> ofLong(String name, String desc, boolean required, Long fallback, SlashCompleteHandler autocomplete)
+        {
+            return new SlashOption<>(OptionType.INTEGER, name, desc, required, fallback, OptionMapping::getAsLong, autocomplete);
+        }
+        public static SlashOption<Double> ofDouble(String name, String desc, boolean required, Double fallback)
+        {
+            return ofDouble(name, desc, required, fallback, null);
+        }
+        public static SlashOption<Double> ofDouble(String name, String desc, boolean required, Double fallback, SlashCompleteHandler autocomplete)
+        {
+            return new SlashOption<>(OptionType.NUMBER, name, desc, required, fallback, OptionMapping::getAsDouble, autocomplete);
         }
         public static SlashOption<String> ofString(String name, String desc, boolean required, String fallback)
         {
-            return new SlashOption<>(OptionType.STRING, name, desc, required, fallback, OptionMapping::getAsString);
+            return ofString(name, desc, required, fallback, null);
+        }
+        public static SlashOption<String> ofString(String name, String desc, boolean required, String fallback, SlashCompleteHandler autocomplete)
+        {
+            return new SlashOption<>(OptionType.STRING, name, desc, required, fallback, OptionMapping::getAsString, autocomplete);
+        }
+        public static <T> SlashOption<T> ofString(String name, String desc, boolean required, T fallback, Function<String, T> parser, boolean trycatch, SlashCompleteHandler autocomplete)
+        {
+            return new SlashOption<>(OptionType.STRING, name, desc, required, fallback, (trycatch ? (Function<String, T>)($)->{try{return parser.apply($);}catch(Exception e){return fallback;}} : parser).compose(OptionMapping::getAsString), autocomplete);
         }
         public static SlashOption<Message.Attachment> ofAttachment(String name, String desc, boolean required)
         {
@@ -375,6 +693,10 @@ public class DInteractions
         {
             return new SlashOption<>(OptionType.CHANNEL, name, desc, required, null, OptionMapping::getAsChannel);
         }
+        public static SlashOption<Channel> ofChannel(String name, String desc, boolean required, ChannelType... types)
+        {
+            return ofChannel(name, desc, required).with($ -> $.setChannelTypes(types));
+        }
         public static SlashOption<Role> ofRole(String name, String desc, boolean required)
         {
             return new SlashOption<>(OptionType.ROLE, name, desc, required, null, OptionMapping::getAsRole);
@@ -387,9 +709,17 @@ public class DInteractions
         {
             return new SlashOption<>(OptionType.MENTIONABLE, name, desc, required, null, OptionMapping::getAsMentionable);
         }
+        public static <DE extends Enum<DE> & DEnum<DE, ?>> SlashOption<DE> ofEnum(String name, String desc, boolean required, DE _instance, DE fallback)
+        {
+            return new SlashOption<>(_instance.type(), name, desc, required, fallback, ((DEnum<DE, ?>)_instance)::mapEnum, _instance.choices());
+        }
         public static <DE extends Enum<DE> & DEnum<DE, ?>> SlashOption<DE> ofEnum(String name, String desc, boolean required, DE fallback)
         {
-            return new SlashOption<>(fallback.type(), name, desc, required, fallback, ((DEnum<DE, ?>)fallback)::mapEnum, fallback.choices());
+            return ofEnum(name, desc, required, fallback, fallback);
+        }
+        public static <DE extends Enum<DE> & DEnum<DE, ?>> SlashOption<DE> ofEnum(String name, String desc, boolean required, Class<DE> clazz)
+        {
+            return ofEnum(name, desc, required, clazz.getEnumConstants()[0], null);
         }
         public static <E extends Enum<E>> SlashOption<E> ofDOptionEnum(DOptionEnum<E> dOptionEnum, boolean required)
         {
@@ -535,20 +865,30 @@ public class DInteractions
             if (pageOrdinal < 1) pageOrdinal = 1;
             if (pageOrdinal > this.pages.length) pageOrdinal = this.pages.length;
             
-            Button prev = Button.primary("pagination:"+this.paginationId+":"+(pageOrdinal - 1), "Prev"),
-                   self = Button.secondary("pagination:"+this.paginationId+":"+pageOrdinal, pageOrdinal+"/"+pages.length).asDisabled(),
-                   next = Button.primary("pagination:"+this.paginationId+":"+(pageOrdinal + 1), "Next");
+            Button first = Button.secondary("pagination-first:"+this.paginationId+":1", "First"),
+                   prev = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal - 1), "Prev"),
+                   self = Button.primary("pagination-select:"+this.paginationId+":"+pageOrdinal, pageOrdinal+"/"+pages.length),
+                   next = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal + 1), "Next"),
+                   last = Button.secondary("pagination-last:"+this.paginationId+":"+this.pages.length, "Last");
             
-            if (pageOrdinal == 1) prev = prev.asDisabled();
-            if (pageOrdinal == this.pages.length) next = next.asDisabled();
+            if (pageOrdinal == 1)
+            {
+                first = first.asDisabled();
+                prev = prev.asDisabled();
+            }
+            if (pageOrdinal == this.pages.length)
+            {
+                next = next.asDisabled();
+                last = last.asDisabled();
+            }
             
             int pageIndex = pageOrdinal - 1;
             return this
                 .pages[pageIndex]
                 .applyContent(this.hook, this.messageId)
-                .setActionRow(prev, self, next);
+                .setActionRow(first, prev, self, next, last);
         }
-        void queue(InteractionHook hook)
+        public void queue(InteractionHook hook)
         {
             this.hook = hook;
             this.action(1).queue(message -> {
@@ -558,9 +898,10 @@ public class DInteractions
         }
     }
 
-    public DInteractions(boolean warnMissing)
+    public DInteractions(boolean warnMissing, ExecutorService exec)
     {
         this.warnMissing = warnMissing;
+        this.exec = exec;
     }
 
     final List<CommandData> data = new ArrayList<>();
@@ -576,24 +917,14 @@ public class DInteractions
     final Map<String, ModalSubmitHandler> modalSubmits = new HashMap<>();
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
 
-    final Set<String> guildSfs = new HashSet<>();
-
     final boolean warnMissing;
+    final ExecutorService exec;
 
     public List<CommandData> getCommandDataMutable()
     {
         return this.data;
     }
 
-    public Set<String> getGuildSnowflakesMutable()
-    {
-        return this.guildSfs;
-    }
-
-    public SlashCommandData slash(String name, String desc, SlashCommandHandler handler, DefaultMemberPermissions defaultMemberPerms, SlashOption<?>... options)
-    {
-        return new Slash(name, desc, handler, defaultMemberPerms, options).end();
-    }
     public Slash slash(String name, String desc)
     {
         return new Slash(name, desc);
@@ -602,34 +933,26 @@ public class DInteractions
     {
         Slash(String name, String desc)
         {
-            this.data = Commands.slash(name, desc);
+            this.data = Commands.slash(name, desc).setGuildOnly(true);
             this.subs = new HashMap<>();
+            this.opts = new HashMap<>();
             DInteractions.this.data.add(this.data);
             DInteractions.this.slashBuilders.put(name, this);
         }
-        Slash(String name, String desc, SlashCommandHandler handler, DefaultMemberPermissions defaultMemberPerms, SlashOption<?>... options)
-        {
-            this(name, desc);
-            this.data.setDefaultPermissions(defaultMemberPerms);
-            DInteractions.this.data.add(this.data);
-            DInteractions.this.slashCmds.put(name, handler);
-            for (SlashOption<?> option : options)
-            {
-                this.data.addOptions(option.data);
-                DInteractions.this.slashOptions.put(name + " " + option.data.getName(), option);
-            }
-        }
         final SlashCommandData data;
         final Map<String, Group> subs;
+        final Map<String, SlashOption<?>> opts;
         public class Group
         {
             Group(String name, String desc)
             {
                 this.data = new SubcommandGroupData(name, desc);
+                this.opts = new HashMap<>();
                 Slash.this.data.addSubcommandGroups(this.data);
                 Slash.this.subs.put(name, this);
             }
             final SubcommandGroupData data;
+            final Map<String, SlashOption<?>> opts;
             public Group sub(String name, String desc, SlashCommandHandler handler, SlashOption<?>... options)
             {
                 String subName = Slash.this.data.getName() + " " + this.data.getName() + " " + name;
@@ -648,6 +971,18 @@ public class DInteractions
                 return Slash.this;
             }
         }
+        public Slash impl(SlashCommandHandler handler, DefaultMemberPermissions defaultMemberPerms, SlashOption<?>... options)
+        {
+            String name = this.data.getName();
+            this.data.setDefaultPermissions(defaultMemberPerms);
+            DInteractions.this.slashCmds.put(name, handler);
+            for (SlashOption<?> option : options)
+            {
+                this.data.addOptions(option.data);
+                DInteractions.this.slashOptions.put(name + " " + option.data.getName(), option);
+            }
+            return this;
+        }
         public Group group(String name, String desc)
         {
             return new Group(name, desc);
@@ -656,10 +991,11 @@ public class DInteractions
         {
             String subName = this.data.getName() + " " + name;
             DInteractions.this.slashCmds.put(subName, handler);
-            this.data.addSubcommands(new SubcommandData(name, desc));
+            SubcommandData subData = new SubcommandData(name, desc);
+            this.data.addSubcommands(subData);
             for (SlashOption<?> option : options)
             {
-                this.data.addOptions(option.data);
+                subData.addOptions(option.data);
                 DInteractions.this.slashOptions.put(subName + " " + option.data.getName(), option);
             }
             return this;
@@ -686,14 +1022,29 @@ public class DInteractions
         return data;
     }
 
-    boolean isInGuild(Interaction interaction)
+    public boolean button(String name, ButtonClickHandler handler)
     {
-        return interaction.isFromGuild() && this.guildSfs.contains(interaction.getGuild().getId());
+        return this.buttonClicks.putIfAbsent(name, handler) != null;
     }
 
-    void handleAsync(ExecutorService exec, IReplyCallback event, boolean ephemeral, DeferredHandler handler)
+    public boolean string(String name, StringSelectHandler handler)
     {
-        event.deferReply().queue(hook -> exec.execute(() ->
+        return this.stringSelects.putIfAbsent(name, handler) != null;
+    }
+
+    public boolean entity(String name, EntitySelectHandler handler)
+    {
+        return this.entitySelects.putIfAbsent(name, handler) != null;
+    }
+
+    public boolean modal(String name, ModalSubmitHandler handler)
+    {
+        return this.modalSubmits.putIfAbsent(name, handler) != null;
+    }
+
+    public Object handleAsync(IReplyCallback event, boolean ephemeral, DeferredHandler handler)
+    {
+        event.deferReply().queue(hook -> this.exec.execute(() ->
         {
             try
             {
@@ -706,6 +1057,7 @@ public class DInteractions
                 hook.sendMessage("Exception async handling event:\n`"+ex+"`").setEphemeral(ephemeral).queue();
             }
         }), throwable -> LOG.error("Exception queuing async handling event of type "+event.getClass().getSimpleName(), throwable));
+        return null;
     }
 
     void interactionError(Interaction interaction, Throwable err)
@@ -729,10 +1081,110 @@ public class DInteractions
         }
     }
 
-    public void handle(SlashCommandInteractionEvent event)
+    boolean handlePagination(ButtonInteractionEvent event, String id, String[] parts, String op)
     {
-        if (!this.isInGuild(event))
-            return;
+        switch (op)
+        {
+        default:
+            return false;
+        case "pagination":
+        case "pagination-first":
+        case "pagination-last":
+        case "pagination-select":
+            break;
+        }
+        try
+        {
+            String paginationId = parts[1];
+            int pageOrdinal = MiscUtils.parseIntElse(parts[2], 1);
+            Pagination pagination = this.pagination.get(paginationId);
+            if (pagination == null || pagination.removeIfExpired())
+            {
+                event.reply("Pagination interaction expired")
+                    .setEphemeral(true)
+                    .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
+            }
+            else switch (op)
+            {
+            case "pagination": {
+                pagination.action(pageOrdinal).queue();
+                event.deferEdit().queue();
+            } break;
+            case "pagination-first": {
+                pagination.action(1).queue();
+                event.deferEdit().queue();
+            } break;
+            case "pagination-last": {
+                pagination.action(pagination.pages.length).queue();
+                event.deferEdit().queue();
+            } break;
+            case "pagination-select": {
+                event.replyModal(Modal.create(event.getButton().getId(), "Pagination")
+                    .addActionRow(TextInput.create("pagination-ordinal", "Page (1 to "+pagination.pages.length+", inclusive)", TextInputStyle.SHORT)
+                        .setRequiredRange(1, Integer.toString(pagination.pages.length).length())
+                        .setValue(Integer.toString(pageOrdinal))
+                        .build())
+                    .build()).queue();
+            } break;
+            default: throw new Exception("Unknown pagination action for "+id);
+            }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception sync handling of "+id, ex);
+            event.reply("Exception sync handling of "+id+":\n`"+ex+"`").setEphemeral(true).queue();
+        }
+        return true;
+    }
+
+    boolean handlePagination(ModalInteractionEvent event, String id, String[] parts, String op)
+    {
+        switch (op)
+        {
+        default:
+            return false;
+        case "pagination-select":
+            break;
+        }
+        try
+        {
+            String paginationId = parts[1];
+            Pagination pagination = this.pagination.get(paginationId);
+            if (pagination == null || pagination.removeIfExpired())
+            {
+                event.reply("Pagination interaction expired")
+                    .setEphemeral(true)
+                    .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
+            }
+            else
+            {
+                int pageOrdinal = Integer.parseInt(event.getValue("pagination-ordinal").getAsString());
+                if (pageOrdinal < 1 || pageOrdinal > pagination.pages.length)
+                {
+                    event.reply("Invalid page, must be an integer from 1 to "+pagination.pages.length+", inclusive").setEphemeral(true).queue();
+                }
+                else
+                {
+                    pagination.action(pageOrdinal).queue();
+                    event.deferEdit().queue();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception sync handling of "+id, ex);
+            event.reply("Exception sync handling of "+id+":\n`"+ex+"`").setEphemeral(true).queue();
+        }
+        return true;
+    }
+
+    public void clearDeadPagination()
+    {
+        new ArrayList<>(this.pagination.values()).forEach(Pagination::removeIfExpired);
+    }
+
+    public boolean handle(SlashCommandInteractionEvent event)
+    {
         String fullName = event.getFullCommandName();
         SlashCommandHandler slash = this.slashCmds.get(fullName);
         if (slash == null)
@@ -752,12 +1204,11 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(CommandAutoCompleteInteractionEvent event)
+    public boolean handle(CommandAutoCompleteInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String fullName = event.getFullCommandName() + " " + event.getFocusedOption().getName();
         SlashOption<?> option = this.slashOptions.get(fullName);
         if (option == null)
@@ -776,12 +1227,11 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(MessageContextInteractionEvent event)
+    public boolean handle(MessageContextInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String fullName = event.getFullCommandName();
         MessageCommandHandler message = this.messageCmds.get(fullName);
         if (message == null)
@@ -801,12 +1251,11 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(UserContextInteractionEvent event)
+    public boolean handle(UserContextInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String fullName = event.getFullCommandName();
         UserCommandHandler user = this.userCmds.get(fullName);
         if (user == null)
@@ -826,14 +1275,16 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(ButtonInteractionEvent event)
+    public boolean handle(ButtonInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String id = event.getButton().getId(),
-               parts[] = id.split(":");
+               parts[] = id.split(":"),
+               op = parts[0];
+        if (this.handlePagination(event, id, parts, op))
+            return true;
         ButtonClickHandler button = this.buttonClicks.get(parts[0]);
         if (button == null)
         {
@@ -852,15 +1303,15 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(StringSelectInteractionEvent event)
+    public boolean handle(StringSelectInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String id = event.getSelectMenu().getId(),
-               parts[] = id.split(":");
-        StringSelectHandler select = this.stringSelects.get(parts[0]);
+               parts[] = id.split(":"),
+               op = parts[0];
+        StringSelectHandler select = this.stringSelects.get(op);
         if (select == null)
         {
             if (this.warnMissing) LOG.error("string select handler == null for `"+id+"`");
@@ -878,15 +1329,15 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(EntitySelectInteractionEvent event)
+    public boolean handle(EntitySelectInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String id = event.getSelectMenu().getId(),
-               parts[] = id.split(":");
-        EntitySelectHandler select = this.entitySelects.get(parts[0]);
+               parts[] = id.split(":"),
+               op = parts[0];
+        EntitySelectHandler select = this.entitySelects.get(op);
         if (select == null)
         {
             if (this.warnMissing) LOG.error("entity select handler == null for `"+id+"`");
@@ -904,15 +1355,17 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
-    public void handle(ModalInteractionEvent event)
+    public boolean handle(ModalInteractionEvent event)
     {
-        if (!this.isInGuild(event))
-            return;
         String id = event.getModalId(),
-               parts[] = id.split(":");
-        ModalSubmitHandler submit = this.modalSubmits.get(parts[0]);
+               parts[] = id.split(":"),
+               op = parts[0];
+        if (this.handlePagination(event, id, parts, op))
+            return true;
+        ModalSubmitHandler submit = this.modalSubmits.get(op);
         if (submit == null)
         {
             if (this.warnMissing) LOG.error("modal submit handler == null for `"+id+"`");
@@ -930,6 +1383,7 @@ public class DInteractions
         {
             this.interactionError(event, ex);
         }
+        return event.isAcknowledged();
     }
 
 }

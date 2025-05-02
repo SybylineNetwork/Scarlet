@@ -19,6 +19,20 @@ public interface AvatarSearch_VRCDB
         public String id;
     }
 
+    public static class PutAvatarRequest
+    {
+        public PutAvatarRequest(String id, String userid)
+        {
+            this.id = id;
+            this.userid = userid;
+        }
+        public PutAvatarRequest()
+        {
+        }
+        public String id;
+        public String userid;
+    }
+
     static List<String> search0(String name)
     {
         try (HttpURLInputStream in = HttpURLInputStream.get("https://vrcdb.bs002.de/avatars/Avatar?name="+URLs.encode(name)))
@@ -65,6 +79,19 @@ public interface AvatarSearch_VRCDB
             ex.printStackTrace();
             return null;
         }
+    }
+
+    static boolean putAvatar(String id, String userid)
+    {
+        try (HttpURLInputStream in = HttpURLInputStream.put("https://search.bs002.de/api/Avatar/putavatar", HttpURLInputStream.writeAsJson(null, null, PutAvatarRequest.class, new PutAvatarRequest(id, userid))))
+        {
+        }
+        catch (Exception ex)
+        {
+            ex.printStackTrace();
+            return false;
+        }
+        return true;
     }
 
 }

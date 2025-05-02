@@ -209,4 +209,12 @@ public class URLs
         return (needToChange? sb.toString() : string);
     }
 
+    public static String getNameFromPath(String url)
+    {
+        int end = url.indexOf('?');
+        if (end == -1) end = url.indexOf('#');
+        if (end == -1) end = url.length();
+        return url.substring(url.lastIndexOf('/', end) + 1, end);
+    }
+
 }

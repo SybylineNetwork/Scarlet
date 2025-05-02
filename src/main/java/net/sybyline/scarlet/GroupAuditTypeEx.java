@@ -3,8 +3,10 @@ package net.sybyline.scarlet;
 import java.util.HashMap;
 import java.util.Map;
 
+import net.sybyline.scarlet.server.discord.DEnum;
 
-public enum GroupAuditTypeEx
+
+public enum GroupAuditTypeEx implements DEnum.DEnumString<GroupAuditTypeEx>
 {
     INSTANCE_INACTIVE   ("groupex.instance.inactive"   , "Instance Inactive"     , 0x00_7F7FFF),
     STAFF_JOIN          ("groupex.instance.staff.join" , "Staff Join"            , 0x00_00FF00),
@@ -22,6 +24,18 @@ public enum GroupAuditTypeEx
         this.id = id;
         this.title = title;
         this.color = color;
+    }
+
+    @Override
+    public String value()
+    {
+        return this.id;
+    }
+
+    @Override
+    public String display()
+    {
+        return this.title;
     }
 
     public final String id, title;

@@ -7,33 +7,26 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.time.DateTimeException;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Queue;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -42,8 +35,6 @@ import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import javax.swing.JFileChooser;
 
-import org.apache.commons.text.similarity.FuzzyScore;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,19 +42,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
-import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.api.GroupsApi;
-import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.model.CreateInstanceRequest;
-import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAccessType;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupLimitedMember;
-import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
-import io.github.vrchatapi.model.Instance;
 import io.github.vrchatapi.model.InstanceRegion;
 import io.github.vrchatapi.model.InstanceType;
 import io.github.vrchatapi.model.LimitedUserGroups;
@@ -74,84 +60,62 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
-import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.IncomingWebhookClient;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.Message.Attachment;
 import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.entities.Webhook;
+import net.dv8tion.jda.api.entities.UserSnowflake;
 import net.dv8tion.jda.api.entities.WebhookClient;
-import net.dv8tion.jda.api.entities.channel.ChannelType;
+import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.AudioChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
-import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
-import net.dv8tion.jda.api.entities.channel.unions.GuildChannelUnion;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.command.UserContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.Interaction;
-import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.Command;
-import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
-import net.dv8tion.jda.api.interactions.commands.OptionMapping;
-import net.dv8tion.jda.api.interactions.commands.OptionType;
-import net.dv8tion.jda.api.interactions.commands.build.Commands;
-import net.dv8tion.jda.api.interactions.commands.build.OptionData;
-import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
-import net.dv8tion.jda.api.interactions.components.ActionRow;
+import net.dv8tion.jda.api.interactions.commands.ICommandReference;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
-import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
-import net.dv8tion.jda.api.interactions.components.text.TextInput;
-import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
-import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.FluentRestAction;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.requests.restaction.AbstractWebhookMessageAction;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
-import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
-import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
 import net.dv8tion.jda.api.utils.AttachedFile;
-import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.dv8tion.jda.api.utils.messages.MessageCreateRequest;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
-import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.server.discord.DInteractions;
-import net.sybyline.scarlet.server.discord.DOptionEnum;
-import net.sybyline.scarlet.util.HttpURLInputStream;
+import net.sybyline.scarlet.server.discord.DPerms;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.UniqueStrings;
-import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
-import net.sybyline.scarlet.util.VrcIds;
 
 public class ScarletDiscordJDA implements ScarletDiscord
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/JDA");
 
-    public ScarletDiscordJDA(Scarlet scarlet, File discordBotFile)
+    public ScarletDiscordJDA(Scarlet scarlet, File discordBotFile, File permsFile)
     {
         scarlet.splash.splashSubtext("Configuring Discord");
         this.scarlet = scarlet;
@@ -185,6 +149,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
             this.scarlet.ui.messageModalAsyncError(null, "You can reset the bot token in the Settings page.", "Invalid bot token");
         }
         this.jda = jda;
+        this.perms = new DPerms(permsFile);
+        this.perms.load();
+        this.interactions = new DInteractions(false, scarlet.exec);
         this.init();
     }
 
@@ -227,10 +194,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      pingOnModeration_userUnban,
                                      evidenceEnabled;
     final ScarletUI.Setting<Void> selectEvidenceRoot;
-    final DInteractions interactions = new DInteractions(false);
-    final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
+    final DInteractions interactions;
+    final DPerms perms;
     final Map<String, InstanceCreation> instanceCreation = new ConcurrentHashMap<>();
     final Map<String, Command.Choice> userSf2lastEdited_groupId = new ConcurrentHashMap<>();
+    List<Command> currentCommands = new ArrayList<>();
+    Map<String, ICommandReference> currentSlashCommandsMap = new HashMap<>();
     Map<String, UniqueStrings> scarletPermission2roleSf = new HashMap<>();
     Map<String, String> scarletAuxWh2webhookUrl = new ConcurrentHashMap<>();
     Map<String, IncomingWebhookClient> scarletAuxWh2incomingWebhookClient = new ConcurrentHashMap<>();
@@ -240,67 +209,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
     Map<String, String> auditType2secretChannelSf = new HashMap<>();
     Map<String, String> auditExType2secretChannelSf = new HashMap<>();
     Map<String, Integer> auditType2color = new HashMap<>();
-    @FunctionalInterface interface ImmediateHandler { void handle() throws Exception; }
-    @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
 
-    static final DOptionEnum<GroupAuditType> AUDIT_EVENT_OPTIONS = DOptionEnum.of("audit-event-type", "The VRChat Group Audit Log event type", GroupAuditType.class, GroupAuditType::id, GroupAuditType::title);
-    static final DOptionEnum<GroupAuditTypeEx> AUDIT_EX_EVENT_OPTIONS = DOptionEnum.of("audit-ex-event-type", "The extended audit event type", GroupAuditTypeEx.class, GroupAuditTypeEx::id, GroupAuditTypeEx::title);
-    static final DOptionEnum<ScarletPermission> SCARLET_PERMISSION_OPTIONS = DOptionEnum.of("scarlet-permission", "The Scarlet-specific permission", ScarletPermission.class, ScarletPermission::id, ScarletPermission::title);
-    static final OptionData VRCHAT_USER_OPTION = new OptionData(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
-                            VRCHAT_GROUP_OPTION = new OptionData(OptionType.STRING, "vrchat-group", "The VRChat group id (grp_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true);
-    
-
-    static final Command.Choice[] UTC_OFFSET_HOURS_CHOICES =
-    {
-        new Command.Choice("Midnight for UTC-10:00 (HST)", "-10:00"),
-        new Command.Choice("Midnight for UTC-09:00 (HDT)", "-09:00"),
-        new Command.Choice("Midnight for UTC-08:00 (PST)", "-08:00"),
-        new Command.Choice("Midnight for UTC-07:00 (MST) [PDT]", "-07:00"),
-        new Command.Choice("Midnight for UTC-06:00 (CST) [MDT]", "-06:00"),
-        new Command.Choice("Midnight for UTC-05:00 (EST) [CDT]", "-05:00"),
-        new Command.Choice("Midnight for UTC-04:00 (AST) [EDT]", "-04:00"),
-        new Command.Choice("Midnight for UTC-03:00 (BRT, ART) [ADT]", "-03:00"),
-        new Command.Choice("Midnight for UTC-02:00 [BRST]", "-02:00"),
-        new Command.Choice("Midnight for UTC+00:00 (GMT, WET)", "+00:00"),
-        new Command.Choice("Midnight for UTC+01:00 (CET, WAT, [BST, WEST]", "+01:00"),
-        new Command.Choice("Midnight for UTC+02:00 (EET, CAT, WAST) [CEST]", "+02:00"),
-        new Command.Choice("Midnight for UTC+03:00 (FET, EAT, MSK) [EEST]", "+03:00"),
-        new Command.Choice("Midnight for UTC+04:00 (GST) [MSD]", "+04:00"),
-        new Command.Choice("Midnight for UTC+05:30 (IST)", "+05:30"),
-        new Command.Choice("Midnight for UTC+07:00 (ICT, WIB)", "+07:00"),
-        new Command.Choice("Midnight for UTC+08:00 (HKT, CST, WIT, MYT, PHT, SGT, AWST)", "+08:00"),
-        new Command.Choice("Midnight for UTC+08:30 (PYT)", "+08:30"),
-        new Command.Choice("Midnight for UTC+09:00 (JST, KST, WITA) [AWDT]", "+09:00"),
-        new Command.Choice("Midnight for UTC+09:30 (ACST)", "+09:30"),
-        new Command.Choice("Midnight for UTC+10:00 (AEST)", "+10:00"),
-        new Command.Choice("Midnight for UTC+10:30 [ACDT]", "+10:30"),
-        new Command.Choice("Midnight for UTC+11:00 [AEDT]", "+11:00"),
-        new Command.Choice("Midnight for UTC+12:00 (NZST)", "+12:00"),
-        new Command.Choice("Midnight for UTC+13:00 [NZDT]", "+13:00"),
-    };
-
-    public class ScarletCommands
-    {
-        public final DInteractions.SlashOption<String> OPT_0 = DInteractions.SlashOption.ofString("opt-0", "Option 0", true, null);
-        @DInteractions.SlashCmd(name="test-command")
-        public class TestCommand
-        {
-            @DInteractions.SlashCmd(name="test-command-group")
-            public class TestCommandGroup
-            {
-                @DInteractions.SlashCmd(name="test-command-handler", options={"opt-0"})
-                public void TestCommandHandler(SlashCommandInteractionEvent event, String opt0)
-                {
-                    event.reply(opt0).queue();
-                    LOG.info("Test command handler: "+opt0);
-                }
-            }
-        }
-    }
     void init()
     {
-        this.interactions.getGuildSnowflakesMutable().add(this.guildSf);
-        this.interactions.register(new ScarletCommands());
+        this.perms.getGuildSnowflakesMutable().add(this.guildSf);
+        new ScarletDiscordCommands(this);
+        new ScarletDiscordUI(this);
         if (this.jda == null)
         {
             this.setStaffMode();
@@ -328,11 +242,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         else
         {
-            LOG.warn("Guild "+this.guildSf+": "+guild.getName());
+            LOG.warn("Guild "+this.guildSf+": "+guild.getName()); 
         }
+        
         if (this.scarlet.settings.checkHasVersionChangedSinceLastRun())
         {
             this.updateCommandList();
+        }
+        else
+        {
+            this.jda.retrieveCommands().queue(this::setCurrentCommands);
         }
         this.jda.getPresence().setPresence(OnlineStatus.ONLINE, Activity.playing(Scarlet.NAME+", a VRChat group moderation tool").withState(Scarlet.GITHUB_URL));
         this.audio.init();
@@ -344,263 +263,50 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         try
         {
-        DefaultMemberPermissions defaultCommandPerms = DefaultMemberPermissions.enabledFor(
-            Permission.ADMINISTRATOR,
-            Permission.MANAGE_SERVER,
-            Permission.MANAGE_ROLES);
         this.jda.updateCommands()
-            .addCommands(
-                Commands.slash("create-or-update-moderation-tag", "Creates or updates a moderation tag")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "value", "The internal name of the tag", true, true)
-                    .addOption(OptionType.STRING, "label", "The display name of the tag")
-                    .addOption(OptionType.STRING, "description", "The description text of the tag"),
-                Commands.slash("delete-moderation-tag", "Deletes a moderation tag")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "value", "The internal name of the tag", true, true),
-                Commands.slash("watched-group", "Configures watched groups")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("list", "Lists all watched groups")
-                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of groups to show per page").setRequiredRange(1L, 10L)),
-                        new SubcommandData("export", "Exports watched groups as a JSON file"),
-                        new SubcommandData("import", "Imports watched groups from an attached file")
-                            .addOption(OptionType.ATTACHMENT, "import-file", "Accepts: JSON, CSV", true),
-                        new SubcommandData("add", "Adds a watched group")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
-                        new SubcommandData("add-malicious", "Adds a watched group with a watch type of malicious")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
-                        new SubcommandData("add-nuisance", "Adds a watched group with a watch type of nuisance")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
-                        new SubcommandData("add-community", "Adds a watched group with a watch type of community")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
-                        new SubcommandData("add-affiliated", "Adds a watched group with a watch type of affiliated")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
-                        new SubcommandData("add-other", "Adds a watched group with a watch type of other")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'")
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100))
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS"),
-                        new SubcommandData("delete-watched-group", "Removes a watched group")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("view", "Views a group's watch information")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-critical", "Sets a group's critical status to true")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("unset-critical", "Sets a group's critical status to false")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-silent", "Sets a group's silent status to true")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("unset-silent", "Sets a group's silent status to false")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-type-malicious", "Sets a group's watch type to malicious")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-type-nuisance", "Sets a group's watch type to nuisance")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-type-community", "Sets a group's watch type to community")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-type-affiliated", "Sets a group's watch type to affiliated")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-type-other", "Sets a group's watch type to other")
-                            .addOptions(VRCHAT_GROUP_OPTION),
-                        new SubcommandData("set-priority", "Sets a group's watch type to other")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOptions(new OptionData(OptionType.INTEGER, "group-priority", "The priority of this group").setRequiredRange(-100, 100).setRequired(true)),
-                        new SubcommandData("set-tags", "Sets a group's tags")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tags", "A list of tags, separated by one of ',', ';', '/'"),
-                        new SubcommandData("add-tag", "Adds a tag for a group")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tag", "A tag", true),
-                        new SubcommandData("remove-tag", "Removes a tag from a group")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "group-tag", "A tag", true),
-                        new SubcommandData("set-message", "Sets a group's TTS announcement message")
-                            .addOptions(VRCHAT_GROUP_OPTION)
-                            .addOption(OptionType.STRING, "message", "A message to announce with TTS")
-                    ),
-                Commands.slash("aux-webhooks", "Configures auxiliary webhooks")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("list", "Lists all auxiliary webhooks")
-                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of webhooks to show per page").setRequiredRange(1L, 10L)),
-                        new SubcommandData("add", "Adds an auxiliary webhook")
-                            .addOption(OptionType.STRING, "aux-webhook-id", "The internal id to give the webhook", true)
-                            .addOption(OptionType.STRING, "aux-webhook-url", "The url of the webhook", true),
-                        new SubcommandData("delete", "Removes an auxiliary webhook")
-                            .addOption(OptionType.STRING, "aux-webhook-id", "The internal id of the webhook", true, true)
-                    ),
-//                Commands.slash("associate-ids", "Associates a specific Discord user with a specific VRChat user")
-//                    .setGuildOnly(true)
-//                    .setDefaultPermissions(defaultCommandPerms)
-//                    .addOption(OptionType.USER, "discord-user", "The Discord user", true)
-//                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
-                Commands.slash("staff-list", "Configures the staff list")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("list", "Lists all staff users")
-                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of users to show per page").setRequiredRange(1L, 10L)),
-                        new SubcommandData("add", "Adds a user to the staff list")
-                            .addOptions(VRCHAT_USER_OPTION)
-                            .addOption(OptionType.USER, "discord-user", "The Discord user"),
-                        new SubcommandData("delete", "Removes a user from the staff list")
-                            .addOptions(VRCHAT_USER_OPTION)
-                    ),
-                Commands.slash("secret-staff-list", "Configures the secret staff list")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("list", "Lists all secret staff users")
-                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of users to show per page").setRequiredRange(1L, 10L)),
-                        new SubcommandData("add", "Adds a user to the secret staff list")
-                            .addOptions(VRCHAT_USER_OPTION)
-                            .addOption(OptionType.USER, "discord-user", "The Discord user"),
-                        new SubcommandData("delete", "Removes a user from the secret staff list")
-                            .addOptions(VRCHAT_USER_OPTION)
-                    ),
-                Commands.slash("vrchat-user-info", "Lists internal and audit information for a specific VRChat user")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(VRCHAT_USER_OPTION),
-                Commands.slash("vrchat-user-ban", "Ban a specific VRChat user")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(VRCHAT_USER_OPTION),
-                Commands.slash("vrchat-user-unban", "Unban a specific VRChat user")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(VRCHAT_USER_OPTION),
-                Commands.slash("vrchat-group", "Manages groups")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("open-instance", "Opens an instance")
-//                        .addOptions(VRCHAT_GROUP_OPTION)
-                        .addOption(OptionType.STRING, "vrchat-world", "The VRChat world id (wrld_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true),
-                        new SubcommandData("close-instance", "Closes an instance")
-                            .addOption(OptionType.STRING, "vrchat-location", "The instance to close", true)
-                            .addOptions(new OptionData(OptionType.INTEGER, "close-at", "The number of minutes to wait before closing the instance").setRequiredRange(1L, 600L))
-                    ),
-                Commands.slash("discord-user-info", "Lists internal information for a specific Discord user")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.USER, "discord-user", "The Discord user", true),
-                Commands.slash("query-target-history", "Queries audit events targeting a specific VRChat user")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(VRCHAT_USER_OPTION)
-                    .addOption(OptionType.INTEGER, "days-back", "The number of days into the past to search for events"),
-                Commands.slash("query-actor-history", "Queries audit events actored by a specific VRChat user")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, true)
-                    .addOption(OptionType.INTEGER, "days-back", "The number of days into the past to search for events"),
-                Commands.slash("set-audit-channel", "Sets a given text channel as the channel certain audit event types use")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(AUDIT_EVENT_OPTIONS.option(true))
-                    .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
-                Commands.slash("set-audit-aux-webhooks", "Sets the given webhooks as the webhooks certain audit event types use")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(AUDIT_EVENT_OPTIONS.option(true)),
-                Commands.slash("set-audit-ex-channel", "Sets a given text channel as the channel certain extended event types use")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(AUDIT_EX_EVENT_OPTIONS.option(true))
-                    .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
-                Commands.slash("set-audit-secret-channel", "Sets a given text channel as the secret channel certain audit event types use")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(AUDIT_EVENT_OPTIONS.option(true))
-                    .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
-                Commands.slash("set-audit-ex-secret-channel", "Sets a given text channel as the secret channel certain extended event types use")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOptions(AUDIT_EX_EVENT_OPTIONS.option(true))
-                    .addOption(OptionType.CHANNEL, "discord-channel", "The Discord text channel to use, or omit to remove entry"),
-                Commands.slash("set-voice-channel", "Sets a given voice channel as the channel in which to announce TTS messages")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.CHANNEL, "discord-channel", "The Discord voice channel to use, or omit to remove entry"),
-                Commands.slash("set-tts-voice", "Selects which TTS voice is used to make announcements")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "voice-name", "The name of the installed voice to use", true, true),
-                Commands.slash("scarlet-permission", "Sets a given Scarlet-specific permission to be associated with certain Discord roles")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("list", "Lists all Scarlet permissions and associated roles")
-                            .addOptions(new OptionData(OptionType.INTEGER, "entries-per-page", "The number of permissions to show per page").setRequiredRange(1L, 10L)),
-                        new SubcommandData("add-to-role", "Grants the Scarlet-specific permission to the given role")
-                            .addOptions(SCARLET_PERMISSION_OPTIONS.option(true))
-                            .addOption(OptionType.ROLE, "discord-role", "The Discord role to which to grant the Scarlet-specific permission", true),
-                        new SubcommandData("delete-from-role", "Revokes the Scarlet-specific permission for the given role")
-                            .addOptions(SCARLET_PERMISSION_OPTIONS.option(true))
-                            .addOption(OptionType.ROLE, "discord-role", "The Discord role for which to revoke the Scarlet-specific permission", true),
-                        new SubcommandData("edit-role", "Editd the Scarlet-specific permissions for the given role")
-                            .addOption(OptionType.ROLE, "discord-role", "The Discord role for which to edit the Scarlet-specific permissions", true)
-                    ),
-                Commands.slash("config-info", "Shows information about the current configuration")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms),
-                Commands.slash("config-set", "Configures miscellaneous settings")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("mod-summary-time-of-day", "Set what time of day to generate a summary of the previous 24 hours of moderation activity")
-                            .addOption(OptionType.STRING, "utc-offset-hours", "The hour of the day, relative to UTC, to generate a summary for the last 24 hours", true, true)
-                    ),
-                Commands.slash("moderation-summary", "Generated a summary of moderation actions")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.INTEGER, "hours-back", "The number of hours into the past to search for events"),
-                Commands.slash("export-log", "Attaches a log file")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addOption(OptionType.STRING, "file-name", "The name of the log file", false, true),
-                Commands.slash("server-restart", "Restarts the Scarlet application")
-                    .setGuildOnly(true)
-                    .setDefaultPermissions(defaultCommandPerms)
-                    .addSubcommands(
-                        new SubcommandData("restart-now", "Restarts now"),
-                        new SubcommandData("update-now", "Updates the application now")
-                            .addOption(OptionType.STRING, "target-version", "The version of Scarlet to which to update", true, true)
-                    ),
-                Commands.message("submit-attachments")
-                    .setGuildOnly(true)
-                    .setNameLocalizations(MiscUtils.genLocalized($ -> "Submit Attachments"))
-                    .setDefaultPermissions(defaultCommandPerms)
-            )
+            .addCommands(DPerms.generateCommand("scarlet-discord-permissions"))
             .addCommands(this.interactions.getCommandDataMutable())
-            .queue($ -> LOG.info("Commands updated"), $ -> LOG.error("Failed to update commands", $));
+            .queue($ -> {this.setCurrentCommands($);LOG.info("Commands updated");}, $ -> LOG.error("Failed to update commands", $));
         LOG.info("Queued commands update "+this.interactions.getCommandDataMutable());
         }
         catch (Exception ex)
         {
             LOG.error("Exception queuing commands update", ex);
         }
+    }
+
+    String help_staffListAdd_mention = "`/staff-list add`";
+    String help_scarletDiscordPermissions_mention = "`/scarlet-discord-permissions`";
+    String linkedIdsInfo(ScarletData.AuditEntryMetadata auditEntryMeta)
+    {
+        String id = auditEntryMeta.hasAuxActor() ? auditEntryMeta.auxActorId : auditEntryMeta.entry.getActorId(),
+               display = auditEntryMeta.hasAuxActor() ? auditEntryMeta.auxActorDisplayName : auditEntryMeta.entry.getActorDisplayName(),
+               kind = auditEntryMeta.hasAuxActor() ? "aux actor" : "actor";
+        return "Unknown Discord id for "+kind+" "+display+"\n(Use "+this.help_staffListAdd_mention+" `vrchat-user`:*"+id+"* `discord-user`:*<your Discord user>* to accomplish this)";
+    }
+    String linkedIdsReply(UserSnowflake member)
+    {
+        return "You must have linked ids to perform this action.\n(Use "+this.help_staffListAdd_mention+" `vrchat-user`:*<your VRChat user ID>* `discord-user`:"+member.getAsMention()+" to accomplish this)";
+    }
+    String permsReply(UserSnowflake member)
+    {
+        return "You do not have permission to perform this action.\n(Have your admin use "+this.help_scarletDiscordPermissions_mention+" to assign permissions)";
+    }
+    static final Predicate<ICommandReference> IS_SLASH = $ -> !($ instanceof Command) || Command.Type.SLASH == ((Command)$).getType();
+    void setCurrentCommands(List<Command> currentCommands)
+    {
+        this.perms.buildSuggestions(currentCommands);
+        this.currentCommands = currentCommands;
+        this.currentSlashCommandsMap = this.streamCommandTree().filter(IS_SLASH).collect(Collectors.toMap(ICommandReference::getFullCommandName, Function.identity()));
+        this.help_staffListAdd_mention = this.getCommandTreeSlash("staff-list add").map(ICommandReference::getAsMention).orElse("`/staff-list add`");
+    }
+    public Stream<ICommandReference> streamCommandTree()
+    {
+        return this.currentCommands.stream().flatMap($ -> Stream.concat(Stream.concat(Stream.of($), $.getSubcommands().stream()), $.getSubcommandGroups().stream().flatMap($$ -> Stream.concat(Stream.of($$), $$.getSubcommands().stream()))));
+    }
+    public Optional<ICommandReference> getCommandTreeSlash(String fullCommandName)
+    {
+        return Optional.ofNullable(this.currentSlashCommandsMap.get(fullCommandName));
     }
 
     void setStaffMode()
@@ -626,7 +332,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             int result = chooser.showOpenDialog(null);
             if (result == JFileChooser.APPROVE_OPTION)
             {
-                
+                this.evidenceRoot = chooser.getSelectedFile().getAbsolutePath();
             }
         });
     }
@@ -887,6 +593,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
     public void save()
     {
+        this.perms.save();
         JDASettingsSpec spec = new JDASettingsSpec();
         spec.token = this.token;
         spec.guildSf = this.guildSf;
@@ -919,107 +626,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     void clearDeadPagination()
     {
-        new ArrayList<>(this.pagination.values()).forEach(Pagination::removeIfExpired);
-    }
-    @FunctionalInterface interface Paginator
-    {
-        WebhookMessageEditAction<Message> setContent(InteractionHook hook, @Nullable String messageId);
-        static Paginator one(String string)
-        {
-            return (hook, messageId) -> messageId == null
-                ? hook.editOriginal(string)
-                : hook.editMessageById(messageId, string);
-        }
-        static Paginator one(MessageEmbed[] embeds)
-        {
-            return (hook, messageId) -> messageId == null
-                ? hook.editOriginalEmbeds(embeds)
-                : hook.editMessageEmbedsById(messageId, embeds);
-        }
-        static Paginator[] stringBuilder(StringBuilder sb)
-        {
-            List<Paginator> pages = new ArrayList<>();
-            while (sb.length() > 2000)
-            {
-                int lastBreak = sb.lastIndexOf("\n", 2000);
-                pages.add(one(sb.substring(0, lastBreak)));
-                sb.delete(0, lastBreak + 1);
-            }
-            pages.add(one(sb.toString()));
-            return pages.toArray(new Paginator[pages.size()]);
-        }
-        static Paginator[] embeds(MessageEmbed[] embeds, int perPage)
-        {
-            if (perPage < 1) perPage = 1;
-            if (perPage > Message.MAX_EMBED_COUNT) perPage = Message.MAX_EMBED_COUNT;
-            List<Paginator> pages = new ArrayList<>();
-            for (int idx = 0; idx < embeds.length; idx += perPage)
-                pages.add(one(Arrays.copyOfRange(embeds, idx, Math.min(idx + perPage, embeds.length))));
-            return pages.toArray(new Paginator[pages.size()]);
-        }
-    }
-    class Pagination
-    {
-        Pagination(String paginationId, StringBuilder pages)
-        {
-            this(paginationId, Paginator.stringBuilder(pages));
-        }
-        Pagination(String paginationId, MessageEmbed[] pages, int perPage)
-        {
-            this(paginationId, Paginator.embeds(pages, perPage));
-        }
-        Pagination(String paginationId, Paginator[] pages)
-        {
-            this.paginationId = paginationId;
-            this.pages = pages;
-        }
-        final String paginationId;
-        final Paginator[] pages;
-        InteractionHook hook;
-        String messageId;
-        boolean removeIfExpired()
-        {
-            if (this.hook == null || !this.hook.isExpired())
-                return false;
-            ScarletDiscordJDA.this.pagination.remove(this.paginationId);
-            return true;
-        }
-        WebhookMessageEditAction<Message> action(int pageOrdinal)
-        {
-            if (pageOrdinal < 1) pageOrdinal = 1;
-            if (pageOrdinal > this.pages.length) pageOrdinal = this.pages.length;
-            
-            Button first = Button.secondary("pagination-first:"+this.paginationId, "First"),
-                   prev = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal - 1), "Prev"),
-                   self = Button.primary("pagination-select:"+this.paginationId+":"+pageOrdinal, pageOrdinal+"/"+pages.length),
-                   next = Button.success("pagination:"+this.paginationId+":"+(pageOrdinal + 1), "Next"),
-                   last = Button.secondary("pagination-last:"+this.paginationId, "Last");
-            
-            if (pageOrdinal == 1)
-            {
-                first = first.asDisabled();
-                prev = prev.asDisabled();
-            }
-            if (pageOrdinal == this.pages.length)
-            {
-                next = next.asDisabled();
-                last = last.asDisabled();
-            }
-            
-            int pageIndex = pageOrdinal - 1;
-            return this
-                .pages[pageIndex]
-                .setContent(this.hook, this.messageId)
-                .setActionRow(first, prev, self, next, last);
-        }
-        void queue(InteractionHook hook)
-        {
-            this.hook = hook;
-            this.action(1).queue(message -> {
-                this.messageId = message.getId();
-                ScarletDiscordJDA.this.pagination.put(this.paginationId, this);
-            });
-        }
+        this.interactions.clearDeadPagination();
     }
 
     class InstanceCreation
@@ -1038,6 +645,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         Boolean queueEnabled = Boolean.TRUE;
         Boolean hardClose = Boolean.FALSE;
         Boolean ageGate = Boolean.FALSE;
+        Boolean playerPersistenceEnabled = null;
         Boolean instancePersistenceEnabled = null;
         String displayName = null;
         
@@ -1076,6 +684,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             cir.addProperty(CreateInstanceRequest.SERIALIZED_NAME_HARD_CLOSE, this.hardClose);
             
             cir.addProperty("ageGate", this.ageGate);
+            if (this.playerPersistenceEnabled != null) cir.addProperty("playerPersistenceEnabled", this.playerPersistenceEnabled);
             if (this.instancePersistenceEnabled != null) cir.addProperty("instancePersistenceEnabled", this.instancePersistenceEnabled);
             if (this.displayName != null) cir.addProperty("displayName", this.displayName);
             JsonObject cs = new JsonObject();
@@ -1095,9 +704,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
         }
 
-        boolean isInGuild(Interaction interaction)
+        void interactionPerms(Interaction interaction)
         {
-            return interaction.isFromGuild() && Objects.equals(ScarletDiscordJDA.this.guildSf, interaction.getGuild().getId());
+            if (interaction instanceof IReplyCallback)
+            {
+                IReplyCallback replyCallback = (IReplyCallback)interaction;
+                String reply = ScarletDiscordJDA.this.permsReply(interaction.getMember());
+                (replyCallback.isAcknowledged()
+                    ? replyCallback.getHook().sendMessage(reply)
+                    : replyCallback.reply(reply)
+                ).queue();
+            }
         }
 
         void interactionError(Interaction interaction, Throwable err)
@@ -1114,57 +731,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
         }
 
-        void handleInGuildSync(IReplyCallback event, boolean ephemeral, ImmediateHandler handler)
-        {
-            LOG.trace("Sync handling event of type "+event.getClass().getSimpleName());
-            try
-            {
-                handler.handle();
-            }
-            catch (Exception ex)
-            {
-                LOG.error("Exception async handling event of type "+event.getClass().getSimpleName(), ex);
-                event.reply("Exception async handling event:\n`"+ex+"`").setEphemeral(ephemeral).queue();
-            }
-        }
-
-        void handleInGuildAsync(IReplyCallback event, boolean ephemeral, DeferredHandler handler)
-        {
-            InteractionHook hook = event.deferReply(ephemeral).complete();
-            LOG.trace("Async handling event of type "+event.getClass().getSimpleName());
-            ScarletDiscordJDA.this.scarlet.exec.execute(() ->
-            {
-                try
-                {
-                    handler.handle(hook);
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception async handling event of type "+event.getClass().getSimpleName(), ex);
-                    hook.sendMessage("Exception async handling event:\n`"+ex+"`").setEphemeral(ephemeral).queue();
-                }
-            });
-        }
-
-        void handleInGuildAsync__000(IReplyCallback event, boolean ephemeral, DeferredHandler handler)
-        {
-            LOG.trace("Async handling event of type "+event.getClass().getSimpleName());
-            event.deferReply(ephemeral).queue(hook ->
-            {
-                try
-                {
-                    handler.handle(hook);
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception async handling event of type "+event.getClass().getSimpleName(), ex);
-                    hook.sendMessage("Exception async handling event:\n`"+ex+"`").setEphemeral(ephemeral).queue();
-                }
-            }, ex -> {
-                LOG.error("Exception deferring reply to event of type "+event.getClass().getSimpleName(), ex);
-            });
-        }
-
         @Override
         public void onShutdown(ShutdownEvent event)
         {
@@ -1178,181 +744,41 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onMessageContextInteraction(MessageContextInteractionEvent event)
         {
-            ScarletDiscordJDA.this.interactions.handle(event);
-            if (!this.isInGuild(event))
+            if (!ScarletDiscordJDA.this.perms.check(event))
+            {
+                this.interactionPerms(event);
                 return;
-            try
-            {
-                switch (event.getName())
-                {
-                case "submit-attachments": { // no need to defer
-                    
-                    Message message = event.getTarget();
-                    
-                    event.reply("Select submission type")
-                        .addActionRow(
-                            Button.primary("submit-evidence:"+message.getId(), "Submit moderation evidence"),
-                            Button.primary("import-watched-groups:"+message.getId(), "Import watched groups"))
-                        .setEphemeral(true)
-                        .queue();
-                    
-                } break;
-                }
             }
-            catch (Exception ex)
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
+        }
+
+        @Override
+        public void onUserContextInteraction(UserContextInteractionEvent event)
+        {
+            if (!ScarletDiscordJDA.this.perms.check(event))
             {
-                this.interactionError(event, ex);
+                this.interactionPerms(event);
+                return;
             }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
         }
 
         @Override
         public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event)
         {
-            ScarletDiscordJDA.this.interactions.handle(event);
-            if (!this.isInGuild(event))
-                return;
-            try
+            if (!ScarletDiscordJDA.this.perms.check(event))
             {
-                switch (event.getName())
-                {
-                case "create-or-update-moderation-tag":
-                case "delete-moderation-tag": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "value": {
-                        event.replyChoices(ScarletDiscordJDA.this.scarlet.moderationTags.getTagChoices()).queue();
-                    } break;
-                    }
-                } break;
-                case "watched-group": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "vrchat-group": {
-                        AutoCompleteCallbackAction action = event.replyChoices();
-                        Command.Choice groupChoice = ScarletDiscordJDA.this.userSf2lastEdited_groupId.get(event.getUser().getId());
-                        if (groupChoice != null)
-                        {
-                            action.addChoices(groupChoice);
-                        }
-                        String typing = event.getFocusedOption().getValue();
-                        if (typing != null && !(typing = typing.trim()).isEmpty())
-                        {
-                            action.addChoiceStrings(typing);
-                        }
-                        action.queue();
-                    } break;
-                    }
-                } break;
-                case "aux-webhooks": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "aux-webhook-id": {
-                        event.replyChoiceStrings(ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.keySet().stream().limit(25L).toArray(String[]::new)).queue();
-                    } break;
-                    }
-                } break;
-                case "query-actor-history": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "vrchat-user": {
-                        String value = event.getFocusedOption().getValue();
-                        FuzzyScore fuzzy = new FuzzyScore(Locale.getDefault());
-                        event.replyChoices(Stream.concat(
-                            value == null || value.trim().isEmpty() ? Stream.empty() : Stream.of(new Command.Choice(value, value)),
-                            ScarletDiscordJDA.this.scarlet
-                                .staffList
-                                .getStaffNames(ScarletDiscordJDA.this.scarlet.vrc)
-                                .entrySet()
-                                .stream()
-                                .sorted(Comparator.comparingInt((Map.Entry<String, String> $) -> Math.max(fuzzy.fuzzyScore($.getKey(), value), fuzzy.fuzzyScore($.getValue(), value))).reversed())
-                                .limit(value == null || value.trim().isEmpty() ? 25L : 24L)
-                                .map($ -> new Command.Choice($.getValue(), $.getKey())))
-                            .collect(Collectors.toList())).queue();
-                    } break;
-                    }
-                } break;
-                case "set-audit-channel": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "audit-event-type": {
-                        AUDIT_EVENT_OPTIONS.replyQueue(event);
-                    } break;
-                    }
-                } break;
-                case "set-audit-aux-webhooks": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "audit-event-type": {
-                        AUDIT_EVENT_OPTIONS.replyQueue(event);
-                    } break;
-                    }
-                } break;
-                case "set-audit-ex-channel": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "audit-ex-event-type": {
-                        AUDIT_EX_EVENT_OPTIONS.replyQueue(event);
-                    } break;
-                    }
-                } break;
-                case "set-audit-secret-channel": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "audit-event-type": {
-                        AUDIT_EVENT_OPTIONS.replyQueue(event);
-                    } break;
-                    }
-                } break;
-                case "set-audit-ex-secret-channel": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "audit-ex-event-type": {
-                        AUDIT_EX_EVENT_OPTIONS.replyQueue(event);
-                    } break;
-                    }
-                } break;
-                case "set-tts-voice": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "voice-name": {
-                        event.replyChoiceStrings(ScarletDiscordJDA.this.scarlet.ttsService.getInstalledVoices()).queue();
-                    } break;
-                    }
-                } break;
-                case "config-set": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "utc-offset-hours": {
-                        event.replyChoices(UTC_OFFSET_HOURS_CHOICES).queue();
-                    } break;
-                    }
-                } break;
-                case "export-log": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "file-name": {
-                        event.replyChoiceStrings(ScarletDiscordJDA.this.scarlet.last25logs).queue();
-                    } break;
-                    }
-                } break;
-                case "scarlet-permission": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "scarlet-permission": {
-                        SCARLET_PERMISSION_OPTIONS.replyQueue(event);
-                    } break;
-                    }
-                } break;
-                case "server-restart": {
-                    switch (event.getFocusedOption().getName())
-                    {
-                    case "target-version": {
-                        String[] allVersions = ScarletDiscordJDA.this.scarlet.allVersions;
-                        event.replyChoiceStrings(Arrays.copyOf(allVersions, Math.min(allVersions.length, 25))).queue();
-                    } break;
-                    }
-                } break;
-                }
+                this.interactionPerms(event);
+                return;
+            }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
+            if ("scarlet-discord-permissions".equals(event.getName())) try
+            {
+                ScarletDiscordJDA.this.perms.internal_autocomplete(event);
+                return;
             }
             catch (Exception ex)
             {
@@ -1363,1792 +789,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onSlashCommandInteraction(SlashCommandInteractionEvent event)
         {
-            ScarletDiscordJDA.this.interactions.handle(event);
-            if (!this.isInGuild(event))
-                return;
-            try
+            if (!ScarletDiscordJDA.this.perms.check(event))
             {
-                switch (event.getName())
-                {
-                case "create-or-update-moderation-tag": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String value = event.getOption("value").getAsString(),
-                           label = event.getOption("label", OptionMapping::getAsString),
-                           description = event.getOption("description", OptionMapping::getAsString);
-                    
-                    int result = ScarletDiscordJDA.this.scarlet.moderationTags.addOrUpdateTag(value, label, description);
-                    
-                    switch (result)
-                    {
-                    default: {
-                        hook.sendMessage("Failed to add moderation tag: list == null").setEphemeral(true).queue();
-                    } break;
-                    case -2: {
-                        hook.sendMessage("Failed to add moderation tag: there are already the maximum of 25 moderation tags").setEphemeral(true).queue();
-                    } break;
-                    case -1: {
-                        hook.sendMessage("Failed to add moderation tag: list.add returned false").setEphemeral(true).queue();
-                    } break;
-                    case 0: {
-                        StringBuilder sb = new StringBuilder();
-                        sb.append("Created moderation tag `").append(value).append("`:");
-                        if (label != null)
-                            sb.append(" label=`").append(label).append("`");
-                        if (description != null)
-                            sb.append(" description=`").append(description).append("`");
-                        String msg = sb.toString();
-                        LOG.info(msg);
-                        hook.sendMessage(msg).setEphemeral(true).queue();
-                    } break;
-                    case 1: {
-                        StringBuilder sb = new StringBuilder();
-                        sb.append("Updated moderation tag `").append(value).append("`:");
-                        if (label != null)
-                            sb.append(" label=`").append(label).append("`");
-                        if (description != null)
-                            sb.append(" description=`").append(description).append("`");
-                        String msg = sb.toString();
-                        LOG.info(msg);
-                        hook.sendMessage(msg).setEphemeral(true).queue();
-                    } break;
-                    }
-                    
-                }); break;
-                case "delete-moderation-tag": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String value = event.getOption("value").getAsString();
-                    
-                    int result = ScarletDiscordJDA.this.scarlet.moderationTags.removeTag(value);
-                    
-                    switch (result)
-                    {
-                    default: {
-                        hook.sendMessage("Failed to delete moderation tag: list == null").setEphemeral(true).queue();
-                    } break;
-                    case -3: {
-                        hook.sendMessageFormat("Failed to add the tag: the tag `%s` does not exist", value).setEphemeral(true).queue();
-                    } break;
-                    case -2: {
-                        hook.sendMessage("Failed to delete moderation tag: there are no moderation tags").setEphemeral(true).queue();
-                    } break;
-                    case -1: {
-                        hook.sendMessage("Failed to delete moderation tag: list.remove returned false").setEphemeral(true).queue();
-                    } break;
-                    case 0: {
-                        String msg = "Deleted moderation tag `"+value+"`";
-                        LOG.info(msg);
-                        hook.sendMessage(msg).setEphemeral(true).queue();
-                    } break;
-                    }
-                    
-                }); break;
-                case "watched-group": this.handleInGuildAsync(event, false, hook -> {
-                    
-                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String groupId = event.getOption("vrchat-group", VrcIds::getAsString_group);
-                    Attachment importedFile = event.getOption("import-file", OptionMapping::getAsAttachment);
-                    String groupTags = event.getOption("group-tags", OptionMapping::getAsString);
-                    String groupTag = event.getOption("group-tag", OptionMapping::getAsString);
-                    int priority = event.getOption("group-priority", 0, OptionMapping::getAsInt);
-                    String message = event.getOption("message", OptionMapping::getAsString);
-                    
-                    if (groupId != null && !(groupId = groupId.trim()).isEmpty())
-                    {
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        ScarletDiscordJDA.this.userSf2lastEdited_groupId.put(event.getUser().getId(), new Command.Choice(group != null ? group.getName() : groupId, groupId));
-                    }
-                    
-                    switch (event.getSubcommandName())
-                    {
-                    case "list": {
-                        long within1day = System.currentTimeMillis() - 86400_000L;
-                        MessageEmbed[] embeds = ScarletDiscordJDA.this.scarlet
-                            .watchedGroups
-                            .watchedGroups
-                            .values()
-                            .stream()
-                            .map($ -> $.embed(ScarletDiscordJDA.this.scarlet.vrc.getGroup($.id, within1day)).build())
-                            .toArray(MessageEmbed[]::new)
-                        ;
-                        
-                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
-                        
-                    } break;
-                    case "export": {
-                        LOG.info("Exporting watched groups JSON");
-                        hook.sendFiles(FileUpload.fromData(ScarletDiscordJDA.this.scarlet.watchedGroups.watchedGroupsFile)).setEphemeral(false).queue();
-                    } break;
-                    case "import": {
-                        String fileName = importedFile.getFileName(),
-                               attachmentUrl = importedFile.getUrl();
-                        
-                        if (fileName.endsWith(".csv"))
-                        {
-                            LOG.info("Importing watched groups legacy CSV from attachment: "+fileName);
-                            try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
-                            {
-                                if (ScarletDiscordJDA.this.scarlet.watchedGroups.importLegacyCSV(reader, true))
-                                {
-                                    LOG.info("Successfully imported watched groups legacy CSV");
-                                    hook.sendMessageFormat("Successfully imported watched groups legacy CSV").setEphemeral(true).queue();
-                                }
-                                else
-                                {
-                                    LOG.warn("Failed to import watched groups legacy CSV with unknown reason");
-                                    hook.sendMessageFormat("Failed to import watched groups legacy CSV with unknown reason").setEphemeral(true).queue();
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                LOG.error("Exception importing watched groups legacy CSV from attachment: "+fileName, ex);
-                                hook.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
-                            }
-                        }
-                        else if (fileName.endsWith(".json"))
-                        {
-                            LOG.info("Importing watched groups JSON from attachment: "+fileName);
-                            try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
-                            {
-                                if (ScarletDiscordJDA.this.scarlet.watchedGroups.importJson(reader, true))
-                                {
-                                    LOG.info("Successfully imported watched groups JSON");
-                                    hook.sendMessageFormat("Successfully imported watched groups JSON").setEphemeral(true).queue();
-                                }
-                                else
-                                {
-                                    LOG.warn("Failed to import watched groups JSON with unknown reason");
-                                    hook.sendMessageFormat("Failed to import watched groups JSON with unknown reason").setEphemeral(true).queue();
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                LOG.error("Exception importing watched groups JSON from attachment: "+fileName, ex);
-                                hook.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
-                            }
-                        }
-                        else
-                        {
-                            LOG.warn("Skipping attachment: "+fileName);
-                            hook.sendMessageFormat("File '%s' is not importable.", fileName).setEphemeral(true).queue();
-                        }
-                    } break;
-                    case "add": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup != null)
-                        {
-                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        if (group == null)
-                        {
-                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
-                        watchedGroup.id = groupId;
-                        if (groupTags != null)
-                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
-                        if (message != null)
-                            watchedGroup.message = message;
-                        watchedGroup.priority = priority;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-                        hook.sendMessageFormat("Added group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
-
-                    } break;
-                    case "add-malicious": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup != null)
-                        {
-                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        if (group == null)
-                        {
-                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
-                        watchedGroup.id = groupId;
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.MALICIOUS;
-                        if (groupTags != null)
-                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
-                        if (message != null)
-                            watchedGroup.message = message;
-                        watchedGroup.priority = priority;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-                        hook.sendMessageFormat("Added malicious group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
-
-                    } break;
-                    case "add-nuisance": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup != null)
-                        {
-                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        if (group == null)
-                        {
-                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
-                        watchedGroup.id = groupId;
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.NUISANCE;
-                        if (groupTags != null)
-                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
-                        if (message != null)
-                            watchedGroup.message = message;
-                        watchedGroup.priority = priority;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-                        hook.sendMessageFormat("Added nuisance group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
-
-                    } break;
-                    case "add-community": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup != null)
-                        {
-                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        if (group == null)
-                        {
-                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
-                        watchedGroup.id = groupId;
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.COMMUNITY;
-                        if (groupTags != null)
-                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
-                        if (message != null)
-                            watchedGroup.message = message;
-                        watchedGroup.priority = priority;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-                        hook.sendMessageFormat("Added community group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
-
-                    } break;
-                    case "add-affiliated": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup != null)
-                        {
-                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        if (group == null)
-                        {
-                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
-                        watchedGroup.id = groupId;
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.AFFILIATED;
-                        if (groupTags != null)
-                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
-                        if (message != null)
-                            watchedGroup.message = message;
-                        watchedGroup.priority = priority;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-                        hook.sendMessageFormat("Added affiliated group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
-
-                    } break;
-                    case "add-other": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup != null)
-                        {
-                            hook.sendMessage("That group is already watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                        if (group == null)
-                        {
-                            hook.sendMessage("That group doesn't seem to exist").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup = new ScarletWatchedGroups.WatchedGroup();
-                        watchedGroup.id = groupId;
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.OTHER;
-                        if (groupTags != null)
-                            watchedGroup.tags.clear().addAll(Arrays.stream(groupTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
-                        if (message != null)
-                            watchedGroup.message = message;
-                        watchedGroup.priority = priority;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-                        hook.sendMessageFormat("Added other group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
-
-                    } break;
-                    case "delete-watched-group": {
-                        if (ScarletDiscordJDA.this.scarlet.watchedGroups.removeWatchedGroup(groupId))
-                        {
-                            Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId);
-                            hook.sendMessageFormat("Removed group [%s](https://vrchat.com/home/group/%s)", group == null ? groupId : group.getName(), groupId).setEphemeral(true).queue();
-                        }
-                        else
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                        }
-                    } break;
-                    case "view": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        long within1hour = System.currentTimeMillis() - 360_000L;
-                        Group group = ScarletDiscordJDA.this.scarlet.vrc.getGroup(groupId, within1hour);
-                        hook.sendMessageEmbeds(watchedGroup.embed(group).build()).setEphemeral(true).queue();
-                    } break;
-                    case "set-critical": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.critical)
-                        {
-                            hook.sendMessage("That group is already flagged as critical").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.critical = true;
-                        hook.sendMessage("Flagged group as critical").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "unset-critical": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (!watchedGroup.critical)
-                        {
-                            hook.sendMessage("That group is already not flagged as critical").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.critical = false;
-                        hook.sendMessage("Unflagged group as critical").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-silent": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.silent)
-                        {
-                            hook.sendMessage("That group is already flagged as silent").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.silent = true;
-                        hook.sendMessage("Flagged group as silent").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "unset-silent": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (!watchedGroup.silent)
-                        {
-                            hook.sendMessage("That group is already not flagged as silent").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.silent = false;
-                        hook.sendMessage("Unflagged group as silent").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-type-malicious": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.type == ScarletWatchedGroups.WatchedGroup.Type.MALICIOUS)
-                        {
-                            hook.sendMessage("That group is already marked as malicious").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.MALICIOUS;
-                        hook.sendMessage("Marking group as malicious").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-type-nuisance": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.type == ScarletWatchedGroups.WatchedGroup.Type.NUISANCE)
-                        {
-                            hook.sendMessage("That group is already marked as nuisance").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.NUISANCE;
-                        hook.sendMessage("Marking group as nuisance").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-type-community": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.type == ScarletWatchedGroups.WatchedGroup.Type.COMMUNITY)
-                        {
-                            hook.sendMessage("That group is already marked as community").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.COMMUNITY;
-                        hook.sendMessage("Marking group as community").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-type-affiliated": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.type == ScarletWatchedGroups.WatchedGroup.Type.AFFILIATED)
-                        {
-                            hook.sendMessage("That group is already marked as affiliated").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.AFFILIATED;
-                        hook.sendMessage("Marking group as affiliated").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-type-other": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.type == ScarletWatchedGroups.WatchedGroup.Type.OTHER)
-                        {
-                            hook.sendMessage("That group is already marked as other").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.type = ScarletWatchedGroups.WatchedGroup.Type.OTHER;
-                        hook.sendMessage("Marking group as other").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-priority": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        watchedGroup.priority = priority;
-                        hook.sendMessage("Setting group priority to "+priority).setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-tags": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (groupTags == null)
-                        {
-                            if (watchedGroup.tags.isEmpty())
-                            {
-                                hook.sendMessage("That group already has no tags").setEphemeral(true).queue();
-                                return;
-                            }
-                            else
-                            {
-                                hook.sendMessageFormat("Removing group's tags (was `%s`)",
-                                        watchedGroup.tags.strings().stream().filter(Objects::nonNull).collect(Collectors.joining("`, `")))
-                                    .setEphemeral(true)
-                                    .queue();
-                                watchedGroup.tags.clear();
-                            }
-                        }
-                        else
-                        {
-                            String[] newTags = Arrays.stream(groupTags.split("[,;/]")).map(String::trim).distinct().toArray(String[]::new);
-                            if (watchedGroup.tags.strings().equals(new HashSet<>(Arrays.asList(newTags))))
-                            {
-                                hook.sendMessage("That group already has those exact tags").setEphemeral(true).queue();
-                                return;
-                            }
-                            else
-                            {
-                                hook.sendMessageFormat("Setting group tags to `%s` (was `%s`)",
-                                        Arrays.stream(newTags).filter(Objects::nonNull).collect(Collectors.joining("`, `")),
-                                        watchedGroup.tags.strings().stream().filter(Objects::nonNull).collect(Collectors.joining("`, `")))
-                                    .setEphemeral(true)
-                                    .queue();
-                                watchedGroup.tags.clear().addAll(newTags);
-                            }
-                        }
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "add-tag": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        String groupTag0 = groupTag.trim();
-                        if (watchedGroup.tags.isEmpty())
-                        {
-                            watchedGroup.tags.add(groupTag0);
-                            hook.sendMessageFormat("Added tag `%s` (was empty)", groupTag0).setEphemeral(true).queue();
-                        }
-                        else if (watchedGroup.tags.add(groupTag0))
-                        {
-                            hook.sendMessageFormat("Added tag `%s` (was `%s`)",
-                                    groupTag0,
-                                    watchedGroup.tags.strings().stream().filter(Objects::nonNull).collect(Collectors.joining("`, `")))
-                                .setEphemeral(true)
-                                .queue();
-                        }
-                        else
-                        {
-                            hook.sendMessage("That group already has that").setEphemeral(true).queue();
-                        }
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "remove-tag": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.tags.isEmpty())
-                        {
-                            hook.sendMessage("That group already has no tags").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (watchedGroup.tags.remove(groupTag))
-                        {
-                            hook.sendMessageFormat("Removed group tag `%s`)", groupTag).setEphemeral(true).queue();
-                        }
-                        else
-                        {
-                            hook.sendMessage("That group doesn't have that tag").setEphemeral(true).queue();
-                            return;
-                        }
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    case "set-message": {
-                        ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordJDA.this.scarlet.watchedGroups.getWatchedGroup(groupId);
-                        if (watchedGroup == null)
-                        {
-                            hook.sendMessage("That group is not watched").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (message == null)
-                        {
-                            if (watchedGroup.message == null)
-                            {
-                                hook.sendMessage("That group already has no message").setEphemeral(true).queue();
-                                return;
-                            }
-                            else
-                            {
-                                hook.sendMessageFormat("Removing group's message (was `%s`)", message).setEphemeral(true).queue();
-                            }
-                        }
-                        else
-                        {
-                            if (message.equals(watchedGroup.message))
-                            {
-                                hook.sendMessage("That group's message is already exactly that").setEphemeral(true).queue();
-                                return;
-                            }
-                            else
-                            {
-                                hook.sendMessageFormat("Setting group TTS announcement to `%s` (was `%s`)", message, watchedGroup.message).setEphemeral(true).queue();
-                            }
-                        }
-                        watchedGroup.message = message;
-                        ScarletDiscordJDA.this.scarlet.watchedGroups.save();
-                    } break;
-                    }
-                    
-                }); break;
-                case "aux-webhooks": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String auxWebhookId = event.getOption("aux-webhook-id", OptionMapping::getAsString);
-                    String auxWebhookUrl = event.getOption("aux-webhook-url", OptionMapping::getAsString);
-                    
-                    switch (event.getSubcommandName())
-                    {
-                    case "list": {
-                        MessageEmbed[] embeds = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl
-                            .entrySet()
-                            .stream()
-                            .map($ -> new EmbedBuilder()
-                                .setTitle($.getKey())
-                                .addField("Url", "`"+$.getValue()+"`", false)
-                                .build())
-                            .toArray(MessageEmbed[]::new)
-                        ;
-                        
-                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
-                        
-                    } break;
-                    case "add": {
-                        
-                        String prevWebhookUrl = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.get(auxWebhookId);
-                        if (prevWebhookUrl != null)
-                        {
-                            hook.sendMessage("There is already an auxiliary webhook with that id").setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        if (!Webhook.WEBHOOK_URL.matcher(auxWebhookUrl).matches())
-                        {
-                            hook.sendMessage("Invalid webhook url").setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.put(auxWebhookId, auxWebhookUrl);
-                        hook.sendMessage("Added auxiliary webhook").setEphemeral(true).queue();
-
-                    } break;
-                    case "delete": {
-                        
-                        String prevWebhookUrl = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl.remove(auxWebhookId);
-                        if (prevWebhookUrl != null)
-                        {
-                            hook.sendMessage("There is no auxiliary webhook with that id").setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        hook.sendMessage("Removed auxiliary webhook").setEphemeral(true).queue();
-                        
-                    } break;
-                    }
-                    
-                }); break;
-//                case "associate-ids": this.handleInGuildAsync(event, true, hook -> {
-//                    
-//                    net.dv8tion.jda.api.entities.User user = event.getOption("discord-user").getAsUser();
-//                    String vrcId = event.getOption("vrchat-user").getAsString();
-//
-//                    long within1day = System.currentTimeMillis() - 86400_000L;
-//                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-//                    if (sc == null)
-//                    {
-//                        hook.sendMessageFormat("No VRChat user found with id %s", vrcId).setEphemeral(true).queue();
-//                        return;
-//                    }
-//                    
-//                    ScarletDiscordJDA.this.scarlet.data.linkIdToSnowflake(vrcId, user.getId());
-//                    LOG.info(String.format("Linking VRChat user %s (%s) to Discord user %s (<@%s>)", sc.getDisplayName(), vrcId, user.getEffectiveName(), user.getId()));
-//                    hook.sendMessageFormat("Associating %s with VRChat user [%s](https://vrchat.com/home/user/%s)", user.getEffectiveName(), sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-//                    
-//                }); break;
-                case "staff-list": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String vrcId = event.getOption("vrchat-user", null, VrcIds::getAsString_user);
-                    net.dv8tion.jda.api.entities.User user = event.getOption("discord-user", null, OptionMapping::getAsUser);
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-
-                    switch (event.getSubcommandName())
-                    {
-                    case "list": {
-                        List<GroupRole> roleList = ScarletDiscordJDA.this.scarlet.vrc.getGroupRoles(ScarletDiscordJDA.this.scarlet.vrc.groupId);
-                        Map<String, GroupRole> roles = roleList == null || roleList.isEmpty() ? Collections.emptyMap() : roleList.stream().collect(Collectors.toMap(GroupRole::getId, Function.identity()));
-                        MessageEmbed[] embeds = Arrays.stream(ScarletDiscordJDA.this.scarlet.staffList.getStaffIds())
-                            .map($ -> {
-                                User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser($, within1day);
-                                GroupLimitedMember member = ScarletDiscordJDA.this.scarlet.vrc.getGroupMembership(ScarletDiscordJDA.this.scarlet.vrc.groupId, $);
-                                ScarletData.UserMetadata userMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata($);
-                                EmbedBuilder builder = new EmbedBuilder();
-                                builder.setTitle(sc == null ? $ : sc.getDisplayName(), "https://vrchat.com/home/user/"+$);
-                                if (sc != null)
-                                {
-                                    String thumb = sc.getProfilePicOverrideThumbnail();
-                                    if (thumb == null || thumb.trim().isEmpty())
-                                        thumb = sc.getUserIcon();
-                                    if (thumb == null || thumb.trim().isEmpty())
-                                        thumb = sc.getCurrentAvatarThumbnailImageUrl();
-                                    if (thumb == null || thumb.trim().isEmpty())
-                                        thumb = null;
-                                    builder.setThumbnail(thumb);
-                                    
-                                    String statusDesc = sc.getStatusDescription();
-                                    if (statusDesc == null || statusDesc.trim().isEmpty())
-                                        statusDesc = null;
-                                    builder.setDescription(statusDesc);
-                                }
-                                if (member != null)
-                                {
-                                    if (member.getJoinedAt() != null)
-                                    {
-                                        String epochJoined = Long.toUnsignedString(member.getJoinedAt().toEpochSecond());
-                                        builder.addField("Joined", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
-                                    }
-                                    if (member.getRoleIds() != null && !member.getRoleIds().isEmpty())
-                                    {
-                                        builder.addField("Roles", member.getRoleIds().stream().map(roles::get).filter(Objects::nonNull).map(GroupRole::getName).collect(Collectors.joining(", ")), false);
-                                    }
-                                }
-                                if (userMeta != null && userMeta.userSnowflake != null)
-                                {
-                                    builder.addField("Linked Discord", "<@"+userMeta.userSnowflake+">)", false);
-                                }
-                                return builder.build();
-                            })
-                            .toArray(MessageEmbed[]::new)
-                        ;
-                        
-                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
-                        
-                    } break;
-                    case "add": {
-                        
-                        User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                        if (sc == null)
-                        {
-                            hook.sendMessageFormat("No VRChat user found with id %s", vrcId).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        if (user != null)
-                        {
-                            ScarletDiscordJDA.this.scarlet.data.linkIdToSnowflake(vrcId, user.getId());
-                            LOG.info(String.format("Linking VRChat user %s (%s) to Discord user %s (<@%s>)", sc.getDisplayName(), vrcId, user.getEffectiveName(), user.getId()));
-                            hook.sendMessageFormat("Associating %s with VRChat user [%s](https://vrchat.com/home/user/%s)", user.getEffectiveName(), sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                        }
-                        
-                        if (!ScarletDiscordJDA.this.scarlet.staffList.addStaffId(vrcId))
-                        {
-                            hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already on the staff list", sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        LOG.info(String.format("Adding VRChat user %s (%s) to the staff list", sc.getDisplayName(), vrcId));
-                        hook.sendMessageFormat("Adding VRChat user [%s](https://vrchat.com/home/user/%s) to the staff list", sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                        
-                    } break;
-                    case "delete": {
-                        
-                        User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                        String prefix = sc != null ? "" : ("No VRChat user found with id %s"+vrcId+"\n");
-                        String displayName = sc != null ? sc.getDisplayName() : vrcId;
-                        
-                        if (!ScarletDiscordJDA.this.scarlet.staffList.removeStaffId(vrcId))
-                        {
-                            hook.sendMessageFormat("%sVRChat user [%s](https://vrchat.com/home/user/%s) is not on the staff list", prefix, displayName, vrcId).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        LOG.info(String.format("Removing VRChat user %s (%s) from the staff list", displayName, vrcId));
-                        hook.sendMessageFormat("Removing VRChat user [%s](https://vrchat.com/home/user/%s) from the staff list", displayName, vrcId).setEphemeral(true).queue();
-                        
-                    } break;
-                    }
-                    
-                }); break;
-                case "secret-staff-list": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String vrcId = event.getOption("vrchat-user", null, VrcIds::getAsString_user);
-                    net.dv8tion.jda.api.entities.User user = event.getOption("discord-user", null, OptionMapping::getAsUser);
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-
-                    switch (event.getSubcommandName())
-                    {
-                    case "list": {
-                        List<GroupRole> roleList = ScarletDiscordJDA.this.scarlet.vrc.getGroupRoles(ScarletDiscordJDA.this.scarlet.vrc.groupId);
-                        Map<String, GroupRole> roles = roleList == null || roleList.isEmpty() ? Collections.emptyMap() : roleList.stream().collect(Collectors.toMap(GroupRole::getId, Function.identity()));
-                        MessageEmbed[] embeds = Arrays.stream(ScarletDiscordJDA.this.scarlet.secretStaffList.getSecretStaffIds())
-                            .map($ -> {
-                                User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser($, within1day);
-                                GroupLimitedMember member = ScarletDiscordJDA.this.scarlet.vrc.getGroupMembership(ScarletDiscordJDA.this.scarlet.vrc.groupId, $);
-                                ScarletData.UserMetadata userMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata($);
-                                EmbedBuilder builder = new EmbedBuilder();
-                                builder.setTitle(sc == null ? $ : sc.getDisplayName(), "https://vrchat.com/home/user/"+$);
-                                if (sc != null)
-                                {
-                                    String thumb = sc.getProfilePicOverrideThumbnail();
-                                    if (thumb == null || thumb.trim().isEmpty())
-                                        thumb = sc.getUserIcon();
-                                    if (thumb == null || thumb.trim().isEmpty())
-                                        thumb = sc.getCurrentAvatarThumbnailImageUrl();
-                                    if (thumb == null || thumb.trim().isEmpty())
-                                        thumb = null;
-                                    builder.setThumbnail(thumb);
-                                    
-                                    String statusDesc = sc.getStatusDescription();
-                                    if (statusDesc == null || statusDesc.trim().isEmpty())
-                                        statusDesc = null;
-                                    builder.setDescription(statusDesc);
-                                }
-                                if (member != null)
-                                {
-                                    if (member.getJoinedAt() != null)
-                                    {
-                                        String epochJoined = Long.toUnsignedString(member.getJoinedAt().toEpochSecond());
-                                        builder.addField("Joined", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
-                                    }
-                                    if (member.getRoleIds() != null && !member.getRoleIds().isEmpty())
-                                    {
-                                        builder.addField("Roles", member.getRoleIds().stream().map(roles::get).filter(Objects::nonNull).map(GroupRole::getName).collect(Collectors.joining(", ")), false);
-                                    }
-                                }
-                                if (userMeta != null && userMeta.userSnowflake != null)
-                                {
-                                    builder.addField("Linked Discord", "<@"+userMeta.userSnowflake+">)", false);
-                                }
-                                return builder.build();
-                            })
-                            .toArray(MessageEmbed[]::new)
-                        ;
-                        
-                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
-                        
-                    } break;
-                    case "add": {
-                        
-                        User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                        if (sc == null)
-                        {
-                            hook.sendMessageFormat("No VRChat user found with id %s", vrcId).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        if (user != null)
-                        {
-                            ScarletDiscordJDA.this.scarlet.data.linkIdToSnowflake(vrcId, user.getId());
-                            LOG.info(String.format("Linking VRChat user %s (%s) to Discord user %s (<@%s>)", sc.getDisplayName(), vrcId, user.getEffectiveName(), user.getId()));
-                            hook.sendMessageFormat("Associating %s with VRChat user [%s](https://vrchat.com/home/user/%s)", user.getEffectiveName(), sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                        }
-                        
-                        if (!ScarletDiscordJDA.this.scarlet.secretStaffList.addSecretStaffId(vrcId))
-                        {
-                            hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already on the secret staff list", sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        LOG.info(String.format("Adding VRChat user %s (%s) to the secret staff list", sc.getDisplayName(), vrcId));
-                        hook.sendMessageFormat("Adding VRChat user [%s](https://vrchat.com/home/user/%s) to the secret staff list", sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                        
-                    } break;
-                    case "delete": {
-                        
-                        User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                        String prefix = sc != null ? "" : ("No VRChat user found with id %s"+vrcId+"\n");
-                        String displayName = sc != null ? sc.getDisplayName() : vrcId;
-                        
-                        if (!ScarletDiscordJDA.this.scarlet.secretStaffList.removeSecretStaffId(vrcId))
-                        {
-                            hook.sendMessageFormat("%sVRChat user [%s](https://vrchat.com/home/user/%s) is not on the secret staff list", prefix, displayName, vrcId).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        LOG.info(String.format("Removing VRChat user %s (%s) from the staff list", displayName, vrcId));
-                        hook.sendMessageFormat("Removing VRChat user [%s](https://vrchat.com/home/user/%s) from the secret staff list", displayName, vrcId).setEphemeral(true).queue();
-                        
-                    } break;
-                    }
-                    
-                }); break;
-                case "vrchat-user-ban": this.handleInGuildAsync(event, false, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_BAN_USER, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
-                    
-                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
-                    if (vrcActorId == null)
-                    {
-                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getGroupMembershipStatus(ScarletDiscordJDA.this.scarlet.vrc.groupId, vrcTargetId);
-                    
-                    if (status == GroupMemberStatus.BANNED)
-                    {
-                        hook.sendMessage("This VRChat user is already banned").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, vrcTargetId, vrcActorId) != null)
-                    {
-                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!ScarletDiscordJDA.this.scarlet.vrc.banFromGroup(vrcTargetId))
-                    {
-                        hook.sendMessageFormat("Failed to ban %s", sc.getDisplayName()).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    hook.sendMessageFormat("Banned %s", sc.getDisplayName()).setEphemeral(false).queue();
-                    
-                }); break;
-                case "vrchat-user-unban": this.handleInGuildAsync(event, false, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_UNBAN_USER, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
-                    
-                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
-                    if (vrcActorId == null)
-                    {
-                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getGroupMembershipStatus(ScarletDiscordJDA.this.scarlet.vrc.groupId, vrcTargetId);
-                    
-                    if (status != GroupMemberStatus.BANNED)
-                    {
-                        hook.sendMessage("This VRChat user is not banned").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_UNBAN, vrcTargetId, vrcActorId) != null)
-                    {
-                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!ScarletDiscordJDA.this.scarlet.vrc.unbanFromGroup(vrcTargetId))
-                    {
-                        hook.sendMessageFormat("Failed to unban %s", sc.getDisplayName()).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    hook.sendMessageFormat("Unbanned %s", sc.getDisplayName()).setEphemeral(false).queue();
-                    
-                }); break;
-                case "vrchat-user-info": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
-
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    ScarletData.UserMetadata userMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(vrcId);
-                    if (userMeta == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user metadata found for [%s](https://vrchat.com/home/user/%s)", sc.getDisplayName(), vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("VRChat user metadata for [").append(sc.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
-                    
-                    if (userMeta.auditEntryIds != null && userMeta.auditEntryIds.length > 0)
-                    {
-                        sb.append("\n### Moderation events:");
-                        for (String auditEntryId : userMeta.auditEntryIds)
-                        {
-                            if (auditEntryId != null)
-                            {
-                                sb.append("\n`").append(auditEntryId).append("`");
-                                ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                                if (auditEntryMeta != null && auditEntryMeta.entry != null && !auditEntryMeta.entryRedacted && !auditEntryMeta.hasParentEvent())
-                                {
-                                    String messageLink = auditEntryMeta.getMessageUrl();
-                                    sb.append(" <t:").append(Long.toUnsignedString(auditEntryMeta.entry.getCreatedAt().toEpochSecond())).append(":f>: ");
-                                    if (messageLink == null)
-                                    {
-                                        sb.append(auditEntryMeta.entry.getDescription());
-                                    }
-                                    else
-                                    {
-                                        sb.append("[").append(auditEntryMeta.entry.getDescription()).append("](").append(messageLink).append(")");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (userMeta.evidenceSubmissions != null && userMeta.evidenceSubmissions.length > 0)
-                    {
-                        sb.append("\n### Evidence submissions:");
-                        for (ScarletData.EvidenceSubmission evidenceSubmission : userMeta.evidenceSubmissions)
-                        {
-                            if (evidenceSubmission != null)
-                            {
-                                sb.append("\n[`").append(evidenceSubmission.fileName).append("`](<").append(evidenceSubmission.url).append(">)");
-                                sb.append(" [(proxy)](<").append(evidenceSubmission.proxyUrl).append(">)");
-                                
-                                ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(evidenceSubmission.auditEntryId);
-                                if (auditEntryMeta != null && auditEntryMeta.hasSomeUrl())
-                                {
-                                    sb.append(" for [`").append(evidenceSubmission.auditEntryId).append("`](<").append(auditEntryMeta.getSomeUrl()).append(">)");
-                                }
-                                else
-                                {
-                                    sb.append(" for `").append(evidenceSubmission.auditEntryId).append("`");
-                                }
-                                
-                                sb.append(" from ").append(evidenceSubmission.submitterDisplayName).append(" (<@").append(evidenceSubmission.submitterSnowflake).append(">)");
-                                sb.append(" at <t:").append(Long.toUnsignedString(evidenceSubmission.submissionTime.toEpochSecond())).append(":f>");
-                            }
-                        }
-                    }
-
-                    ScarletDiscordJDA.this.new Pagination(event.getId(), sb).queue(hook);
-                    
-                }); break;
-                case "vrchat-group": this.handleInGuildAsync(event, true, hook -> {
-
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    
-                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
-                    if (vrcActorId == null)
-                    {
-                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
-                        return;
-                    }
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcActorId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcActorId).setEphemeral(true).queue();
-                        return;
-                    }
-                    String vrcActorDisplayName = sc == null ? vrcActorId : sc.getDisplayName();
-
-                    switch (event.getSubcommandName())
-                    {
-                    case "open-instance": {
-
-                        String openGroup = ScarletDiscordJDA.this.scarlet.vrc.groupId;//event.getOption("vrchat-group", VrcIds::getAsString_group);
-                        String openWorld = event.getOption("vrchat-world", VrcIds::getAsString_world);
-                        String openName = ScarletDiscordJDA.this.getLocationName(openWorld);
-                        
-                        if (openName == null)
-                        {
-                            hook.sendMessageFormat("No VRChat world found with id %s", openWorld).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        String ictoken;
-                        do ictoken = UUID.randomUUID().toString();
-                        while (ScarletDiscordJDA.this.instanceCreation.putIfAbsent(ictoken, new InstanceCreation(ictoken, openWorld, openGroup)) != null);
-                        
-                        List<GroupRole> roles = ScarletDiscordJDA.this.scarlet.vrc.getGroupRoles(openGroup);
-                        
-                        hook.sendMessageFormat("Create a new [%s](https://vrchat.com/home/world/%s) instance:", openName, openWorld)
-                            .addActionRow(StringSelectMenu.create("new-instance-access-type:"+ictoken)
-                                    .addOption("Group Public", "public")
-                                    .addOption("Group Plus", "plus")
-                                    .addOption("Group Members", "members")
-                                    .setDefaultValues("public")
-                                    .build())
-                            .addActionRow(StringSelectMenu.create("new-instance-roles:"+ictoken)
-                                    .setPlaceholder("Select roles (Group Members)")
-                                    .addOptions(roles.stream().map($ -> SelectOption.of($.getName(), $.getId())).limit(25L).toArray(SelectOption[]::new))
-                                    .setRequiredRange(1, Math.min(25, roles.size()))
-                                    .build())
-                            .addActionRow(StringSelectMenu.create("new-instance-region:"+ictoken)
-                                    .addOption("Region: US", "us")
-                                    .addOption("Region: US East", "use")
-                                    .addOption("Region: Europe", "eu")
-                                    .addOption("Region: Japan", "jp")
-                                    .setDefaultValues("us")
-                                    .build())
-                            .addActionRow(StringSelectMenu.create("new-instance-flags:"+ictoken)
-                                    .setPlaceholder("Options & Content Settings")
-                                    .addOption("Join queue (users wait to connect when full)", "queueEnabled")
-                                    .addOption("Hard close (kick connected users on close)", "hardClose")
-                                    .addOption("Age gate (Age Verified 18+ users only)", "ageGate")
-//                                    .addOption("Instance persistence (state persists when empty)", "instancePersistenceEnabled")
-                                    .addOption("Content: drones", "contentSettings.drones")
-                                    .addOption("Content: emoji", "contentSettings.emoji")
-                                    .addOption("Content: pedestals", "contentSettings.pedestals")
-                                    .addOption("Content: prints", "contentSettings.prints")
-                                    .addOption("Content: stickers", "contentSettings.stickers")
-                                    .setRequiredRange(0, 8)
-                                    .setDefaultValues("queueEnabled", "contentSettings.drones", "contentSettings.emoji", "contentSettings.pedestals", "contentSettings.prints", "contentSettings.stickers")
-                                    .build())
-                            .addActionRow(Button.success("new-instance-create:"+ictoken, "Create"),
-                                          Button.danger("new-instance-cancel:"+ictoken, "Cancel"),
-                                          Button.secondary("new-instance-modal:"+ictoken, "Additional options..."))
-                            .setEphemeral(true)
-                            .queue();
-                        
-                    } break;
-                    case "close-instance": {
-                        
-                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_manage, event.getMember()))
-                        {
-                            hook.sendMessage("You do not have permission to close instances").setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        String closeLocation = event.getOption("vrchat-location", null, VrcIds::getAsString_location);
-                        Location closeLocationModel = Location.of(closeLocation);
-                        Boolean closeHard = event.getOption("close-hard", null, OptionMapping::getAsBoolean);
-                        Long closeInMinutes = event.getOption("close-in-minutes", null, OptionMapping::getAsLong);
-                        OffsetDateTime closeAt = closeInMinutes == null ? null : OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(closeInMinutes.longValue());
-                        
-                        InstancesApi instances = new InstancesApi(ScarletDiscordJDA.this.scarlet.vrc.client);
-                        Instance instance = instances.closeInstance(closeLocationModel.world, closeLocationModel.instance, closeHard, closeAt);
-                        
-                        LOG.info(String.format("%s (%s) closed an instance: %s", vrcActorDisplayName, vrcActorId, instance.getId()));
-                        hook.sendMessageFormat("Closed instance `%s`", instance.getId()).setEphemeral(true).queue();
-                        
-                    } break;
-                    }
-                    
-                }); break;
-                case "discord-user-info": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    net.dv8tion.jda.api.entities.User user = event.getOption("discord-user").getAsUser();
-                    
-                    StringBuilder sb = new StringBuilder();
-                    
-                    String vrcId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(user.getId());
-                    if (vrcId != null)
-                    {
-                        long within1day = System.currentTimeMillis() - 86400_000L;
-                        User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                        if (sc != null && !ScarletDiscordJDA.this.shouldRedact(vrcId, event.getMember().getId()))
-                        {
-                            
-                            sb.append(String.format("### Linked VRChat user:\n[%s](https://vrchat.com/home/user/%s) `%s`\n", sc.getDisplayName(), vrcId, vrcId));
-                        }
-                    }
-                    
-                    sb.append("### Scarlet permissions:");
-                    for (ScarletPermission permission : ScarletPermission.values())
-                    {
-                        UniqueStrings roleSfs = ScarletDiscordJDA.this.scarletPermission2roleSf.get(permission.id);
-                        sb.append('\n').append(permission.title).append(": from ");
-                        if (roleSfs == null || roleSfs.isEmpty())
-                        {
-                            sb.append("no roles");
-                        }
-                        else
-                        {
-                            String roleMentions = event
-                                .getMember()
-                                .getRoles()
-                                .stream()
-                                .filter(role -> roleSfs.contains(role.getId()))
-                                .map(Role::getAsMention)
-                                .collect(Collectors.joining(", "));
-                            if (roleMentions.isEmpty())
-                            {
-                                sb.append("no roles");
-                            }
-                            else
-                            {
-                                sb.append(roleMentions);
-                            }
-                        }
-                    }
-                    sb.append('\n');
-
-                    ScarletDiscordJDA.this.new Pagination(event.getId(), sb).queue(hook);
-                    
-                }); break;
-                case "query-target-history": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
-                    int daysBack = Math.max(1, Math.min(2048, event.getOption("days-back", 7, OptionMapping::getAsInt)));
-
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    List<GroupAuditLogEntry> entries = ScarletDiscordJDA.this.scarlet.vrc.auditQueryTargeting(vrcId, daysBack);
-                    if (entries == null)
-                    {
-                        hook.sendMessageFormat("Error querying audit target history for [%s](<https://vrchat.com/home/user/%s>) (%s)", sc.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    else if (entries.isEmpty())
-                    {
-                        hook.sendMessageFormat("No audit target history for [%s](<https://vrchat.com/home/user/%s>) (%s)", sc.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("VRChat audit target history for [").append(sc.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
-                    
-                    ScarletData.UserMetadata userMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(vrcId);
-                    if (userMeta != null && userMeta.userSnowflake != null && !ScarletDiscordJDA.this.shouldRedact(vrcId, event.getMember().getId()))
-                    {
-                        sb.append("\n### Linked Discord id:\n`").append(userMeta.userSnowflake).append("`");
-                    }
-                    
-                    sb.append("\n### Audit target events:");
-                    for (GroupAuditLogEntry entry : entries)
-                    {
-                        sb.append("\n`").append(entry.getId()).append("`").append(" <t:").append(Long.toUnsignedString(entry.getCreatedAt().toEpochSecond())).append(":f>: ");
-                        ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(entry.getId());
-                        if (auditEntryMeta != null && auditEntryMeta.hasMessage())
-                            sb.append("[").append(entry.getDescription()).append("](").append(auditEntryMeta.getMessageUrl()).append(")");
-                        else
-                            sb.append(entry.getDescription());
-                    }
-
-                    ScarletDiscordJDA.this.new Pagination(event.getId(), sb).queue(hook);
-                    
-                }); break;
-                case "query-actor-history": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
-                    int daysBack = Math.max(1, Math.min(2048, event.getOption("days-back", 7, OptionMapping::getAsInt)));
-
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    List<GroupAuditLogEntry> entries = ScarletDiscordJDA.this.scarlet.vrc.auditQueryActored(vrcId, daysBack);
-                    
-                    if (entries == null)
-                    {
-                        hook.sendMessageFormat("Error querying audit actor history for [%s](<https://vrchat.com/home/user/%s>) (%s)", sc.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    else if (entries.isEmpty()
-                        // Check is here to avoid side chain vulnerabilities
-                        || ScarletDiscordJDA.this.shouldRedact(vrcId, event.getMember().getId()))
-                    {
-                        hook.sendMessageFormat("No audit actor history for [%s](<https://vrchat.com/home/user/%s>) (%s)", sc.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("VRChat audit actor history for [").append(sc.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
-                    
-                    ScarletData.UserMetadata userMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(vrcId);
-                    if (userMeta != null && userMeta.userSnowflake != null)
-                    {
-                        sb.append("\n### Linked Discord id:\n`").append(userMeta.userSnowflake).append("`");
-                    }
-                    
-                    sb.append("\n### Audit actor events:");
-                    for (GroupAuditLogEntry entry : entries)
-                    {
-                        sb.append("\n`").append(entry.getId()).append("`").append(" <t:").append(Long.toUnsignedString(entry.getCreatedAt().toEpochSecond())).append(":f>: ");
-                        ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(entry.getId());
-                        if (auditEntryMeta != null && auditEntryMeta.hasMessage())
-                            sb.append("[").append(entry.getDescription()).append("](").append(auditEntryMeta.getMessageUrl()).append(")");
-                        else
-                            sb.append(entry.getDescription());
-                    }
-
-                    ScarletDiscordJDA.this.new Pagination(event.getId(), sb).queue(hook);
-                    
-                }); break;
-                case "config-info": this.handleInGuildAsync(event, false, hook -> {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("Configuration Information:");
-                    
-                    String lastQueryEpoch = Long.toUnsignedString(ScarletDiscordJDA.this.scarlet.settings.lastAuditQuery.getOrSupply().toEpochSecond()),
-                         lastRefreshEpoch = Long.toUnsignedString(ScarletDiscordJDA.this.scarlet.settings.lastAuthRefresh.getOrSupply().toEpochSecond());
-                    
-                    sb.append("\n### Last Audit Query:")
-                        .append("\n<t:").append(lastQueryEpoch).append(":F>")
-                        .append(" (<t:").append(lastQueryEpoch).append(":R>)");
-
-                    sb.append("\n### Last Auth Refresh:")
-                        .append("\n<t:").append(lastRefreshEpoch).append(":F>")
-                        .append(" (<t:").append(lastRefreshEpoch).append(":R>)");
-                    
-                    OffsetDateTime nms = ScarletDiscordJDA.this.scarlet.settings.nextModSummary.getOrNull();
-                    if (nms != null)
-                    {
-                        String nmsEpoch = Long.toUnsignedString(nms.toEpochSecond());
-                        sb.append("\n### Next Moderation Summary:")
-                            .append("\n<t:").append(nmsEpoch).append(":F>")
-                            .append(" (<t:").append(nmsEpoch).append(":R>)");
-                    }
-                    
-                    sb.append("\n### Auditing Channels:");
-                    for (GroupAuditType auditType : GroupAuditType.values())
-                    {
-                        String channelSf = ScarletDiscordJDA.this.auditType2channelSf.get(auditType.id);
-                        sb.append("\n")
-                            .append(auditType.title)
-                            .append(" (")
-                            .append(auditType.id)
-                            .append("): ")
-                            .append(channelSf == null ? "unassigned" : ("<#"+channelSf+">"));
-                        UniqueStrings auxWhs = ScarletDiscordJDA.this.auditType2scarletAuxWh.get(auditType.id);
-                        if (auxWhs != null && !auxWhs.isEmpty())
-                        {
-                            sb.append(auxWhs.stream().collect(Collectors.joining(", ", " (Auxiliary webhooks: ", ")")));
-                        }
-                    }
-                    
-                    sb.append("\n### Extended auditing Channels:");
-                    for (GroupAuditTypeEx auditTypeEx : GroupAuditTypeEx.values())
-                    {
-                        String channelSf = ScarletDiscordJDA.this.auditExType2channelSf.get(auditTypeEx.id);
-                        sb.append("\n")
-                            .append(auditTypeEx.title)
-                            .append(" (")
-                            .append(auditTypeEx.id)
-                            .append("): ")
-                            .append(channelSf == null ? "unassigned" : ("<#"+channelSf+">"));
-                    }
-                    List<String> pages = MiscUtils.paginateOnLines(sb, 2000);
-                    for (String page : pages)
-                    {
-                        hook.sendMessage(page).setEphemeral(false).queue();
-                    }
-                }); break;
-                case "config-set": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    switch (event.getSubcommandName())
-                    {
-                    case "mod-summary-time-of-day": {
-                        String utcOffsetHours = event.getOption("utc-offset-hours", "+00:00:00", OptionMapping::getAsString);
-                        ZoneOffset zoneOffset;
-                        try
-                        {
-                            try
-                            {
-                                zoneOffset = ZoneOffset.ofHours(Integer.parseInt(utcOffsetHours));
-                            }
-                            catch (NumberFormatException nfex)
-                            {
-                                try
-                                {
-                                    zoneOffset = ZoneOffset.ofTotalSeconds((int)(Float.parseFloat(utcOffsetHours) * 3600.0F));
-                                }
-                                catch (NumberFormatException nfex0)
-                                {
-                                    zoneOffset = ZoneOffset.of(utcOffsetHours);
-                                }
-                            }
-                        }
-                        catch (DateTimeException dtex)
-                        {
-                            hook.sendMessageFormat("%s", dtex.getMessage()).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC),
-                                       offset = now.withHour(0).withMinute(0).withSecond(0).withNano(0).minusSeconds(zoneOffset.getTotalSeconds());
-                        while (offset.isBefore(now))
-                            offset = offset.plusHours(24L);
-                        ScarletDiscordJDA.this.scarlet.settings.nextModSummary.set(offset);
-                        String epochNext = Long.toUnsignedString(offset.plusHours(24L).toEpochSecond());
-                        hook.sendMessageFormat("Set mod summary generation time to %s\nNext summary at <t:%s:f>", zoneOffset, epochNext).setEphemeral(true).queue();
-                    } break;
-                    }
-                    
-                }); break;
-                case "moderation-summary": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    int hoursBack = event.getOption("hours-back", 24, OptionMapping::getAsInt);
-                    ScarletDiscordJDA.this.emitModSummary(ScarletDiscordJDA.this.scarlet, OffsetDateTime.now(ZoneOffset.UTC), hoursBack, hook::sendMessageEmbeds);
-                    
-                }); break;
-                case "export-log": this.handleInGuildAsync(event, false, hook -> {
-                    
-                    String fileName = event.getOption("file-name", OptionMapping::getAsString);
-                    if (fileName == null)
-                    {
-                        String[] last25logs = ScarletDiscordJDA.this.scarlet.last25logs;
-                        if (last25logs.length == 0)
-                        {
-                            hook.sendMessage("No log files detected, strange...").setEphemeral(false).queue();
-                            return;
-                        }
-                        fileName = last25logs[0];
-                    }
-                    
-                    if (!ScarletLogger.lfpattern.matcher(fileName).find())
-                    {
-                        hook.sendMessage("Invalid log file name").setEphemeral(false).queue();
-                        return;
-                    }
-                    
-                    File logs = new File(Scarlet.dir, "logs"),
-                         target = new File(logs, fileName);
-                    
-                    if (!target.isFile())
-                    {
-                        hook.sendMessage("That log file does not exist").setEphemeral(false).queue();
-                        return;
-                    }
-                    
-                    hook.sendMessageFormat("`%s`", fileName).addFiles(FileUpload.fromData(target)).setEphemeral(false).queue();
-                }); break;
-                case "set-audit-channel": this.handleInGuildAsync(event, true, hook -> {
-                    String auditType0 = event.getOption("audit-event-type").getAsString();
-                    GroupAuditType auditType = GroupAuditType.of(auditType0);
-                    if (auditType == null)
-                    {
-                        hook.sendMessageFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
-                        return;
-                    }
-                    OptionMapping channel0 = event.getOption("discord-channel");
-
-                    if (channel0 == null)
-                    {
-                        ScarletDiscordJDA.this.setAuditChannel(auditType, null);
-                        hook.sendMessageFormat("Unassociating VRChat group audit log event type %s (%s) from any channels", auditType.title, auditType.id).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GuildChannelUnion channel = channel0.getAsChannel();
-                    if (!channel.getType().isMessage())
-                    {
-                        hook.sendMessageFormat("The channel %s doesn't support message sending", channel.getName()).setEphemeral(true).queue();
-                    }
-                    else
-                    {
-                        ScarletDiscordJDA.this.setAuditChannel(auditType, channel);
-                        hook.sendMessageFormat("Associating VRChat group audit log event type %s (%s) with channel <#%s>", auditType.title, auditType.id, channel.getId()).setEphemeral(true).queue();
-                    }
-                    
-                }); break;
-                case "set-audit-aux-webhooks": this.handleInGuildAsync(event, true, hook -> {
-                    String auditType0 = event.getOption("audit-event-type").getAsString();
-                    GroupAuditType auditType = GroupAuditType.of(auditType0);
-                    if (auditType == null)
-                    {
-                        hook.sendMessageFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    SelectOption[] options = ScarletDiscordJDA.this.scarletAuxWh2webhookUrl
-                            .keySet()
-                            .stream()
-                            .limit(25L)
-                            .map($ -> SelectOption.of($, $))
-                            .toArray(SelectOption[]::new);
-                    UniqueStrings scarletAuxWhs = ScarletDiscordJDA.this.auditType2scarletAuxWh.get(auditType0);
-                    String[] defaultOptions = scarletAuxWhs == null ? new String[0] : scarletAuxWhs
-                            .strings()
-                            .stream()
-                            .filter(ScarletDiscordJDA.this.scarletAuxWh2webhookUrl::containsKey)
-                            .toArray(String[]::new);
-                    
-                    hook.sendMessageComponents(ActionRow.of(StringSelectMenu.create("set-audit-aux-webhooks:"+auditType0)
-                            .addOptions(options)
-                            .setDefaultValues(defaultOptions)
-                            .build())).setEphemeral(true).queue();
-                    
-                }); break;
-                case "set-audit-ex-channel": this.handleInGuildAsync(event, true, hook -> {
-                    String auditExType0 = event.getOption("audit-ex-event-type").getAsString();
-                    GroupAuditTypeEx auditExType = GroupAuditTypeEx.of(auditExType0);
-                    if (auditExType == null)
-                    {
-                        hook.sendMessageFormat("%s isn't a valid extended audit event type", auditExType0).setEphemeral(true).queue();
-                        return;
-                    }
-                    OptionMapping channel0 = event.getOption("discord-channel");
-
-                    if (channel0 == null)
-                    {
-                        ScarletDiscordJDA.this.setAuditExChannel(auditExType, null);
-                        hook.sendMessageFormat("Unassociating VRChat extended group audit event type %s (%s) from any channels", auditExType.title, auditExType.id).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GuildChannelUnion channel = channel0.getAsChannel();
-                    if (!channel.getType().isMessage())
-                    {
-                        hook.sendMessageFormat("The channel %s doesn't support message sending", channel.getName()).setEphemeral(true).queue();
-                    }
-                    else
-                    {
-                        ScarletDiscordJDA.this.setAuditExChannel(auditExType, channel);
-                        hook.sendMessageFormat("Associating VRChat extended group audit event type %s (%s) with channel <#%s>", auditExType.title, auditExType.id, channel.getId()).setEphemeral(true).queue();
-                    }
-                    
-                }); break;
-                case "set-audit-secret-channel": this.handleInGuildAsync(event, true, hook -> {
-                    String auditType0 = event.getOption("audit-event-type").getAsString();
-                    GroupAuditType auditType = GroupAuditType.of(auditType0);
-                    if (auditType == null)
-                    {
-                        hook.sendMessageFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
-                        return;
-                    }
-                    OptionMapping channel0 = event.getOption("discord-channel");
-
-                    if (channel0 == null)
-                    {
-                        ScarletDiscordJDA.this.setAuditSecretChannel(auditType, null);
-                        hook.sendMessageFormat("Unassociating VRChat group audit log event type %s (%s) from any secret channels", auditType.title, auditType.id).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GuildChannelUnion channel = channel0.getAsChannel();
-                    if (!channel.getType().isMessage())
-                    {
-                        hook.sendMessageFormat("The channel %s doesn't support message sending", channel.getName()).setEphemeral(true).queue();
-                    }
-                    else
-                    {
-                        ScarletDiscordJDA.this.setAuditSecretChannel(auditType, channel);
-                        hook.sendMessageFormat("Associating VRChat group audit log event type %s (%s) with secret channel <#%s>", auditType.title, auditType.id, channel.getId()).setEphemeral(true).queue();
-                    }
-                    
-                }); break;
-                case "set-audit-ex-secret-channel": this.handleInGuildAsync(event, true, hook -> {
-                    String auditExType0 = event.getOption("audit-ex-event-type").getAsString();
-                    GroupAuditTypeEx auditExType = GroupAuditTypeEx.of(auditExType0);
-                    if (auditExType == null)
-                    {
-                        hook.sendMessageFormat("%s isn't a valid extended audit event type", auditExType0).setEphemeral(true).queue();
-                        return;
-                    }
-                    OptionMapping channel0 = event.getOption("discord-channel");
-
-                    if (channel0 == null)
-                    {
-                        ScarletDiscordJDA.this.setAuditExSecretChannel(auditExType, null);
-                        hook.sendMessageFormat("Unassociating VRChat extended group audit event type %s (%s) from any secret channels", auditExType.title, auditExType.id).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GuildChannelUnion channel = channel0.getAsChannel();
-                    if (!channel.getType().isMessage())
-                    {
-                        hook.sendMessageFormat("The channel %s doesn't support message sending", channel.getName()).setEphemeral(true).queue();
-                    }
-                    else
-                    {
-                        ScarletDiscordJDA.this.setAuditExSecretChannel(auditExType, channel);
-                        hook.sendMessageFormat("Associating VRChat extended group audit event type %s (%s) with secret channel <#%s>", auditExType.title, auditExType.id, channel.getId()).setEphemeral(true).queue();
-                    }
-                    
-                }); break;
-                case "set-voice-channel": this.handleInGuildAsync(event, true, hook -> {
-                    OptionMapping channel0 = event.getOption("discord-channel");
-
-                    if (channel0 == null)
-                    {
-                        ScarletDiscordJDA.this.audioChannelSf = null;
-                        hook.sendMessage("Disabling/disconnecting from voice channel").setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.audio.updateChannel();
-                        ScarletDiscordJDA.this.save();
-                        return;
-                    }
-                    
-                    GuildChannelUnion channel = channel0.getAsChannel();
-                    if (channel.getType() != ChannelType.VOICE)
-                    {
-                        hook.sendMessageFormat("The channel %s isn't a voice channel", channel.getName()).setEphemeral(true).queue();
-                    }
-                    else
-                    {
-                        ScarletDiscordJDA.this.audioChannelSf = channel.getId();
-                        hook.sendMessageFormat("Enabling/connecting from voice channel <#%s>", channel.getId()).setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.audio.updateChannel();
-                        ScarletDiscordJDA.this.save();
-                    }
-                    
-                }); break;
-                case "set-tts-voice": this.handleInGuildAsync(event, true, hook -> {
-                    String voiceName = event.getOption("voice-name").getAsString();
-                    
-                    if (!ScarletDiscordJDA.this.scarlet.ttsService.selectVoice(voiceName))
-                    {
-                        hook.sendMessageFormat("Tried to set TTS voice to `%s` (subprocess not responsive)", voiceName).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!ScarletDiscordJDA.this.scarlet.ttsService.getInstalledVoices().contains(voiceName))
-                    {
-                        hook.sendMessageFormat("TTS voice `%s` is not installed on this system", voiceName).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    ScarletDiscordJDA.this.scarlet.eventListener.ttsVoiceName.set(voiceName);
-                    
-                    hook.sendMessageFormat("Setting TTS voice to `%s`", voiceName).setEphemeral(true).queue();
-                    
-                }); break;
-                case "scarlet-permission": this.handleInGuildAsync(event, true, hook -> {
-                    int perPage = event.getOption("entries-per-page", 4, OptionMapping::getAsInt);
-                    String scarletPermission0 = event.getOption("scarlet-permission", null, OptionMapping::getAsString);
-                    Role role = event.getOption("discord-role", null, OptionMapping::getAsRole);
-
-                    switch (event.getSubcommandName())
-                    {
-                    case "list": {
-                        MessageEmbed[] embeds = Arrays
-                            .stream(ScarletPermission.values())
-                            .map(scarletPermission ->
-                            {
-                                UniqueStrings roleSfs = ScarletDiscordJDA.this.scarletPermission2roleSf.get(scarletPermission.id);
-                                String roles = roleSfs == null || roleSfs.isEmpty() 
-                                    ? "<none>"
-                                    : roleSfs.stream().collect(Collectors.joining(">\n<@&", "<@&", ">"));
-                                return new EmbedBuilder()
-                                    .setTitle(scarletPermission.title)
-                                    .addField("`"+scarletPermission.id+"`", roles, false)
-                                    .build();
-                            })
-                            .toArray(MessageEmbed[]::new);
-                        
-                        ScarletDiscordJDA.this.new Pagination(event.getId(), embeds, perPage).queue(hook);
-                        
-                    } break;
-                    case "add-to-role": {
-                        ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
-                        if (scarletPermission == null)
-                        {
-                            event.replyFormat("%s isn't a valid Scarlet permission", scarletPermission0).setEphemeral(true).queue();
-                            return;
-                        }
-                        if (ScarletDiscordJDA.this.checkRoleHasPermission(scarletPermission, role))
-                        {
-                            event.replyFormat("That role already has that permission", scarletPermission0).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        ScarletDiscordJDA.this.addPermissionRole(scarletPermission, role);
-                        hook.sendMessageFormat("Adding Scarlet permission %s (%s) to %s", scarletPermission.title, scarletPermission.id, role.getAsMention()).setEphemeral(true).queue();
-                        
-                    } break;
-                    case "delete-from-role": {
-                        ScarletPermission scarletPermission = ScarletPermission.of(scarletPermission0);
-                        if (scarletPermission == null)
-                        {
-                            event.replyFormat("%s isn't a valid Scarlet permission", scarletPermission0).setEphemeral(true).queue();
-                            return;
-                        }
-                        if (!ScarletDiscordJDA.this.checkRoleHasPermission(scarletPermission, role))
-                        {
-                            event.replyFormat("That role already doesn't have that permission", scarletPermission0).setEphemeral(true).queue();
-                            return;
-                        }
-                        
-                        ScarletDiscordJDA.this.deletePermissionRole(scarletPermission, role);
-                        hook.sendMessageFormat("Removing Scarlet permission %s (%s) from %s", scarletPermission.title, scarletPermission.id, role.getAsMention()).setEphemeral(true).queue();
-                        
-                    } break;
-                    case "edit-role": {
-                        LOG.error("edit-role: <@&"+role+">");
-                        ScarletPermission[] scarletPermissions = ScarletPermission.values();
-                        StringSelectMenu.Builder builder = StringSelectMenu
-                            .create("select-role-scarlet-permissions:"+role.getId())
-                            .setMinValues(0)
-                            .setMaxValues(scarletPermissions.length)
-                            .setPlaceholder("Select Scarlet permissions")
-                            ;
-                        
-                        List<String> hadPerms = new ArrayList<>();
-                        for (ScarletPermission scarletPermission : ScarletPermission.values())
-                        {
-                            builder.addOption(scarletPermission.title, scarletPermission.id);
-                            if (ScarletDiscordJDA.this.checkRoleHasPermission(scarletPermission, role))
-                            {
-                                hadPerms.add(scarletPermission.id);
-                            }
-                        }
-                        builder.setDefaultValues(hadPerms);
-                        
-                        hook.sendMessageComponents(ActionRow.of(builder.build())).setEphemeral(true).queue();
-                    } break;
-                    }
-                    
-                }); break;
-                case "server-restart": this.handleInGuildAsync(event, false, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.CONFIG_SERVER_RESTART, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to restart the application server.").setEphemeral(true).queue();
-                        return;
-                    }
-                    String targetVersion = event.getOption("target-version", OptionMapping::getAsString);
-                    
-                    switch (event.getSubcommandName())
-                    {
-                    case "restart-now": {
-                        hook.sendMessage("Restarting...").setEphemeral(false).queue();
-                        ScarletDiscordJDA.this.scarlet.restart();
-                    } break;
-                    case "update-now": {
-                        
-                        switch (ScarletDiscordJDA.this.scarlet.update(targetVersion))
-                        {
-                        case 1: {
-                            hook.sendMessageFormat("Invalid version syntax `%s`", targetVersion).setEphemeral(false).queue();
-                        } break;
-                        case 2: {
-                            hook.sendMessageFormat("Nonexistant version `%s`, manually set the contents of `scarlet.version` to this version if you want to actually do this", targetVersion).setEphemeral(false).queue();
-                        } break;
-                        case 3: {
-                            hook.sendMessageFormat("Local IO failed for target version `%s`", targetVersion).setEphemeral(false).queue();
-                        } break;
-                        case 0: {
-                            hook.sendMessage("Updating...").setEphemeral(false).queue();
-                        } break;
-                        case -1: {
-                            hook.sendMessage("Shutdown already queued!").setEphemeral(false).queue();
-                        } break;
-                        }
-                    } break;
-                    }
-                    
-                    
-                }); break;
-                }
+                this.interactionPerms(event);
+                return;
+            }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
+            if ("scarlet-discord-permissions".equals(event.getName())) try
+            {
+                ScarletDiscordJDA.this.perms.internal_handle(event);
+                return;
             }
             catch (Exception ex)
             {
@@ -3159,1008 +810,51 @@ public class ScarletDiscordJDA implements ScarletDiscord
         @Override
         public void onButtonInteraction(ButtonInteractionEvent event)
         {
-            ScarletDiscordJDA.this.interactions.handle(event);
-            if (!this.isInGuild(event))
+            if (!ScarletDiscordJDA.this.perms.check(event))
+            {
+                this.interactionPerms(event);
                 return;
-            try
-            {
-                String[] parts = event.getButton().getId().split(":");
-                switch (parts[0])
-                {
-                case "pagination": try
-                {
-                    String paginationId = parts[1];
-                    int pageOrdinal = MiscUtils.parseIntElse(parts[2], 1);
-                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
-                    if (pagination == null || pagination.removeIfExpired())
-                    {
-                        event.reply("Pagination interaction expired")
-                            .setEphemeral(true)
-                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
-                    }
-                    else
-                    {
-                        pagination.action(pageOrdinal).queue();
-                        event.deferEdit().queue();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception sync handling of pagination", ex);
-                    event.reply("Exception sync handling of pagination:\n`"+ex+"`").setEphemeral(true).queue();
-                } break;
-                case "pagination-first": try
-                {
-                    String paginationId = parts[1];
-                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
-                    if (pagination == null || pagination.removeIfExpired())
-                    {
-                        event.reply("Pagination interaction expired")
-                            .setEphemeral(true)
-                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
-                    }
-                    else
-                    {
-                        pagination.action(1).queue();
-                        event.deferEdit().queue();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception sync handling of pagination-first", ex);
-                    event.reply("Exception sync handling of pagination-first:\n`"+ex+"`").setEphemeral(true).queue();
-                } break;
-                case "pagination-last": try
-                {
-                    String paginationId = parts[1];
-                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
-                    if (pagination == null || pagination.removeIfExpired())
-                    {
-                        event.reply("Pagination interaction expired")
-                            .setEphemeral(true)
-                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
-                    }
-                    else
-                    {
-                        pagination.action(pagination.pages.length).queue();
-                        event.deferEdit().queue();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception sync handling of pagination-last", ex);
-                    event.reply("Exception sync handling of pagination-last:\n`"+ex+"`").setEphemeral(true).queue();
-                } break;
-                case "pagination-select": try
-                {
-                    String paginationId = parts[1];
-                    int pageOrdinal = MiscUtils.parseIntElse(parts[2], 1);
-                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
-                    if (pagination == null || pagination.removeIfExpired())
-                    {
-                        event.reply("Pagination interaction expired")
-                            .setEphemeral(true)
-                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
-                    }
-                    else
-                    {
-                        event.replyModal(Modal.create(event.getButton().getId(), "Pagination")
-                            .addActionRow(TextInput.create("pagination-ordinal", "Page (1 to "+pagination.pages.length+", inclusive)", TextInputStyle.SHORT)
-                                .setRequiredRange(1, Integer.toString(pagination.pages.length).length())
-                                .setValue(Integer.toString(pageOrdinal))
-                                .build())
-                            .build()).queue();
-                        
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception sync handling of pagination-select", ex);
-                    event.reply("Exception sync handling of pagination-select:\n`"+ex+"`").setEphemeral(true).queue();
-                } break;
-                case "edit-tags": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SET_TAGS, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to select event tags.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    // TODO : set default selected
-                    
-                    List<ScarletModerationTags.Tag> tags = ScarletDiscordJDA.this.scarlet.moderationTags.getTags();
-                    
-                    if (tags == null || tags.isEmpty())
-                    {
-                        hook.sendMessage("No moderation tags!").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = parts[1];
-                    
-                    StringSelectMenu.Builder builder = StringSelectMenu
-                        .create("select-tags:"+auditEntryId)
-                        .setMinValues(0)
-                        .setMaxValues(tags.size())
-                        .setPlaceholder("Select tags")
-                        ;
-                    
-                    for (ScarletModerationTags.Tag tag : tags)
-                    {
-                        String value = tag.value,
-                               label = tag.label != null ? tag.label : tag.value,
-                               desc = tag.description;
-                        if (desc == null)
-                            builder.addOption(label, value);
-                        else
-                            builder.addOption(label, value, desc);
-                    }
-                    
-                    ActionRow ar = ActionRow.of(builder.build());
-                    
-                    hook.sendMessageComponents(ar)
-                        .setEphemeral(true)
-                        .queue();
-                    
-                }); break;
-                case "vrchat-user-ban": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_BAN_USER, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
-                        return;
-                    }
-
-                    String vrcTargetId = parts[1];
-                    
-                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
-                    if (vrcActorId == null)
-                    {
-                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getGroupMembershipStatus(ScarletDiscordJDA.this.scarlet.vrc.groupId, vrcTargetId);
-                    
-                    if (status == GroupMemberStatus.BANNED)
-                    {
-                        hook.sendMessage("This VRChat user is already banned").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, vrcTargetId, vrcActorId) != null)
-                    {
-                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!ScarletDiscordJDA.this.scarlet.vrc.banFromGroup(vrcTargetId))
-                    {
-                        hook.sendMessageFormat("Failed to ban %s", sc.getDisplayName()).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    hook.sendMessageFormat("Banned %s", sc.getDisplayName()).setEphemeral(false).queue();
-                }); break;
-                case "vrchat-user-unban": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_UNBAN_USER, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
-                        return;
-                    }
-
-                    String vrcTargetId = parts[1];
-                    
-                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
-                    if (vrcActorId == null)
-                    {
-                        hook.sendMessage("You must have linked ids to perform this action").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcTargetId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    GroupMemberStatus status = ScarletDiscordJDA.this.scarlet.vrc.getGroupMembershipStatus(ScarletDiscordJDA.this.scarlet.vrc.groupId, vrcTargetId);
-                    
-                    if (status != GroupMemberStatus.BANNED)
-                    {
-                        hook.sendMessage("This VRChat user is not banned").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.USER_UNBAN, vrcTargetId, vrcActorId) != null)
-                    {
-                        hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!ScarletDiscordJDA.this.scarlet.vrc.unbanFromGroup(vrcTargetId))
-                    {
-                        hook.sendMessageFormat("Failed to unban %s", sc.getDisplayName()).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    hook.sendMessageFormat("Unbanned %s", sc.getDisplayName()).setEphemeral(false).queue();
-                }); break;
-                case "event-redact": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_REDACT, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to redact events.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = parts[1];
-                    
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                    if (auditEntryMeta == null)
-                    {
-                        hook.sendMessage("Failed to find the audit event.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (auditEntryMeta.entryRedacted)
-                    {
-                        hook.sendMessage("Event is already redacted.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    auditEntryMeta.entryRedacted = true;
-                    
-                    hook.sendMessage("Event redacted.").setEphemeral(false).queue();
-                    ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId, auditEntryMeta);
-                    this.updateAuxMessage(event.getChannel(), auditEntryMeta);
-                }); break;
-                case "event-unredact": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_UNREDACT, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to unredact events.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = parts[1];
-                    
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                    if (auditEntryMeta == null)
-                    {
-                        hook.sendMessage("Failed to find the audit event.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!auditEntryMeta.entryRedacted)
-                    {
-                        hook.sendMessage("Event isn't yet redacted.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    auditEntryMeta.entryRedacted = false;
-                    
-                    hook.sendMessage("Event unredacted.").setEphemeral(false).queue();
-                    ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId, auditEntryMeta);
-                    this.updateAuxMessage(event.getChannel(), auditEntryMeta);
-                }); break;
-                case "new-instance-create": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    long within1day = System.currentTimeMillis() - 86400_000L;
-                    
-                    String vrcActorId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
-                    if (vrcActorId == null)
-                    {
-                        hook.sendMessage("You must have linked ids to perform this action.").setEphemeral(true).queue();
-                        return;
-                    }
-                    User sc = ScarletDiscordJDA.this.scarlet.vrc.getUser(vrcActorId, within1day);
-                    if (sc == null)
-                    {
-                        hook.sendMessageFormat("No VRChat user found with id %s", vrcActorId).setEphemeral(true).queue();
-                        return;
-                    }
-                    String vrcActorDisplayName = sc == null ? vrcActorId : sc.getDisplayName();
-                    
-                    String ictoken = parts[1];
-                    
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    
-                    if (ic == null)
-                    {
-                        hook.deleteMessageById(event.getMessageId()).queue();
-                        hook.sendMessage("This interaction timed out.").queue();
-                        hook.deleteOriginal().delay(5_000L, TimeUnit.MILLISECONDS).queue();
-                        return;
-                    }
-                    
-                    switch (ic.groupAccessType)
-                    {
-                    case PUBLIC: {
-                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_public_create, event.getMember()))
-                        {
-                            hook.sendMessage("You do not have permission to create group public instances.").setEphemeral(true).queue();
-                            return;
-                        }
-                    } break;
-                    case PLUS: {
-                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_plus_create, event.getMember()))
-                        {
-                            hook.sendMessage("You do not have permission to create group plus instances.").setEphemeral(true).queue();
-                            return;
-                        }
-                    } break;
-                    case MEMBERS: {
-                        if (!ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_open_create, event.getMember()))
-                        {
-                            hook.sendMessage("You do not have permission to create group member-only instances.").setEphemeral(true).queue();
-                            return;
-                        }
-                        if (ic.roleIds != null && !ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_restricted_create, event.getMember()))
-                        {
-                            hook.sendMessage("You do not have permission to create role-restricted instances.").setEphemeral(true).queue();
-                            return;
-                        }
-                    } break;
-                    }
-
-                    if (ic.ageGate != null && ic.ageGate.booleanValue() && !ScarletDiscordJDA.this.checkMemberHasVRChatPermission(GroupPermissions.group_instance_age_gated_create, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to create age gated instances.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    hook.deleteMessageById(event.getMessageId()).queue();
-                    
-                    Instance instance;
-                    try
-                    {
-//                        instance = new InstancesApi(ScarletDiscordJDA.this.scarlet.vrc.client).createInstance(ic.createRequest());
-                        instance = ScarletDiscordJDA.this.scarlet.vrc.createInstanceEx(ic.createRequestEx());
-                    }
-                    catch (ApiException apiex)
-                    {
-                        String message = apiex.getResponseBody();
-                        try
-                        {
-                            message = JSON.<io.github.vrchatapi.model.Error>deserialize(message, io.github.vrchatapi.model.Error.class).getError().getMessage();
-                        }
-                        catch (Exception ex)
-                        {
-                        }
-                        hook.sendMessageFormat("Failed to create new instance: %s", message).setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    ScarletDiscordJDA.this.scarlet.pendingModActions.addPending(GroupAuditType.INSTANCE_CREATE, instance.getId(), vrcActorId);
-                    String worldName = ScarletDiscordJDA.this.getLocationName(instance.getWorldId());
-                    
-                    LOG.info(String.format("%s (%s) opened an instance of %s: %s", vrcActorDisplayName, vrcActorId, worldName, instance.getId()));
-                    hook.sendMessageFormat("Created [new %s instance](https://vrchat.com/home/launch?worldId=%s&instanceId=%s)", worldName, instance.getWorldId(), instance.getInstanceId()).setEphemeral(true).queue();
-                    
-                }); break;
-                case "new-instance-cancel": this.handleInGuildAsync(event, true, hook -> {
-                    String ictoken = parts[1];
-                    ScarletDiscordJDA.this.instanceCreation.remove(ictoken);
-                    hook.deleteMessageById(event.getMessageId()).queue();
-                    hook.deleteOriginal().queue();
-                }); break;
-                case "new-instance-modal": {
-                    String ictoken = parts[1];
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    event.replyModal(Modal.create("new-instance-modal:"+ictoken, "Additional options")
-                            .addActionRow(TextInput.create("display-name:"+ictoken, "Display name (unknown purpose)", TextInputStyle.SHORT)
-                                .setValue(ic == null ? null : ic.displayName)
-                                .build())
-                            .build())
-                        .queue();
-                } break;
-                case "edit-desc": { // FIXME : can't defer a modal
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SET_DESCRIPTION, event.getMember()))
-                    {
-                        event.reply("You do not have permission to set event descriptions.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = parts[1];
-                    
-                    TextInput.Builder ti = TextInput
-                        .create("input-desc:"+auditEntryId, "Input description", TextInputStyle.PARAGRAPH)
-                        .setRequired(true)
-                        .setPlaceholder("Event description")
-                        ;
-                    
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                    if (auditEntryMeta != null)
-                        ti.setValue(auditEntryMeta.entryDescription);
-                    
-                    Modal.Builder m = Modal.create("edit-desc:"+auditEntryId, "Edit description")
-                        .addActionRow(ti.build())
-                        ;
-                    
-                    event.replyModal(m.build()).queue();
-                    
-                } break;
-                case "vrchat-report": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_USE_REPORT_LINK, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to use the event report link.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = parts[1];
-                    
-                    String targetUserId = null,
-                           targetDisplayName = null,
-                           actorUserId = null,
-                           actorDisplayName = null,
-                           metaDescription = null,
-                           metaTags[] = null;
-                    
-                    String eventUserSnowflake = event.getUser().getId(),
-                           eventUserId = ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(eventUserSnowflake);
-                    
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                    if (auditEntryMeta != null && auditEntryMeta.entry != null)
-                    {
-                        targetUserId = auditEntryMeta.entry.getTargetId();
-                        actorUserId = auditEntryMeta.hasAuxActor() ? auditEntryMeta.auxActorId : auditEntryMeta.entry.getActorId();
-                        actorDisplayName = auditEntryMeta.hasAuxActor() ? auditEntryMeta.auxActorDisplayName : auditEntryMeta.entry.getActorDisplayName();
-                        metaDescription = auditEntryMeta.entryDescription;
-                        metaTags = auditEntryMeta.entryTags.toArray();
-
-                        long within1day = System.currentTimeMillis() - 86400_000L;
-                        User targetUser = ScarletDiscordJDA.this.scarlet.vrc.getUser(targetUserId, within1day);
-                        if (targetUser != null)
-                        {
-                            targetDisplayName = targetUser.getDisplayName();
-                        }
-                    }
-                    
-                    String reportSubject = targetDisplayName;
-                    
-                    String location = auditEntryMeta == null ? null : auditEntryMeta.getData("location");
-                    
-                    ScarletVRChatReportTemplate.FormatParams params = ScarletDiscordJDA.this.scarlet.vrcReport.new FormatParams()
-                        .group(ScarletDiscordJDA.this.scarlet.vrc, ScarletDiscordJDA.this.scarlet.vrc.groupId, ScarletDiscordJDA.this.scarlet.vrc.group)
-                        .location(ScarletDiscordJDA.this.scarlet.vrc, location)
-                        .actor(ScarletDiscordJDA.this.scarlet.vrc, actorUserId, actorDisplayName)
-                        .target(ScarletDiscordJDA.this.scarlet.vrc, targetUserId, targetDisplayName)
-                        .targetEx(
-                            parts.length < 3 ? null : OffsetDateTime.ofInstant(Instant.ofEpochSecond(Long.parseUnsignedLong(parts[2])), ZoneOffset.UTC).format(ScarletVRChatReportTemplate.DTF),
-                            auditEntryMeta == null ? null : auditEntryMeta.entry.getCreatedAt().format(ScarletVRChatReportTemplate.DTF)
-                        )
-                        .audit(
-                            auditEntryId,
-                            metaDescription,
-                            metaTags == null ? null : Arrays.stream(metaTags).map(ScarletDiscordJDA.this.scarlet.moderationTags::getTagLabel).filter(Objects::nonNull).toArray(String[]::new)
-                        )
-                        ;
-                    
-                    StringBuilder reportDesc = new StringBuilder();
-                    if (metaDescription != null)
-                    {
-                        reportDesc.append(metaDescription);
-                    }
-                    if (metaTags != null && metaTags.length > 0)
-                    {
-                        if (reportDesc.length() != 0)
-                        {
-                            reportDesc.append("<br><br>");
-                        }
-                        reportDesc.append("User's Group internal moderation tags:<ul>");
-                        for (String metaTag : metaTags)
-                        {
-                            reportDesc.append("<li>")
-                                      .append(ScarletDiscordJDA.this.scarlet.moderationTags.getTagLabel(metaTag))
-                                      .append("</li>");
-                        }
-                        reportDesc.append("</ul>");
-                    }
-                    // Footer
-                    {
-                        if (reportDesc.length() != 0)
-                        {
-                            reportDesc.append("<br><br>");
-                        }
-                        reportDesc.append("Partially autofilled with ")
-                                  .append(Scarlet.NAME)
-                                  .append(" version ")
-                                  .append(Scarlet.VERSION)
-                                  .append("<br>")
-                                  .append("Group ID: ")
-                                  .append(ScarletDiscordJDA.this.scarlet.vrc.groupId)
-                                  .append("<br>")
-                                  .append("Audit ID: ")
-                                  .append(auditEntryId)
-                                  ;
-                    }
-                    
-                    String requestingUserId = eventUserId != null ? eventUserId : actorUserId;
-                    
-                    String requestingEmail = ScarletDiscordJDA.this.requestingEmail.get();
-                    
-                    String link = VRChatHelpDeskURLs.newModerationRequest(
-                        requestingEmail,
-                        VRChatHelpDeskURLs.ModerationCategory.USER_REPORT,
-                        requestingUserId,
-                        targetUserId,
-                        reportSubject,
-                        reportDesc.length() == 0 ? null : reportDesc.toString()
-                    );
-                    
-                    
-                    hook.sendMessageEmbeds(new EmbedBuilder()
-                            .setTitle("Help desk link")
-                            .appendDescription("[Open new VRChat User Moderation Request](<")
-                            .appendDescription(link)
-                            .appendDescription(">)")
-                        .build(), new EmbedBuilder()
-                            .setTitle("Templated link")
-                            .appendDescription("[Templated link](<")
-                            .appendDescription(params.url(requestingEmail, requestingUserId, reportSubject, ScarletDiscordJDA.this.appendTemplateFooter.get()))
-                            .appendDescription(">)")
-                        .build())
-                        .setContent(eventUserId != null ? null : "## WARNING\nThis link autofills the requesting user id of the **audit actor, not necessarily you**\nAssociate your Discord and VRChat ids with `/associate-ids`.\n\n")
-                        .setEphemeral(true)
-                        .queue();
-                    
-                }); break;
-                case "submit-evidence": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String messageSnowflake = parts[1];
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.EVENT_SUBMIT_EVIDENCE, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to submit event attachments.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!ScarletDiscordJDA.this.evidenceEnabled.get())
-                    {
-                        hook.sendMessage("This feature is not enabled.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String evidenceRoot = ScarletDiscordJDA.this.evidenceRoot;
-                    
-                    if (evidenceRoot == null || (evidenceRoot = evidenceRoot.trim()).isEmpty())
-                    {
-                        hook.sendMessage("The evidence folder hasn't been specified.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    if (!event.getChannelType().isThread())
-                    {
-                        hook.sendMessage("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
-                        return;
-                    }
-                    Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
-                    
-                    String[] partsRef = event.getChannel()
-                        .asThreadChannel()
-                        .getHistoryFromBeginning(2)
-                        .complete()
-                        .getRetrievedHistory()
-                        .stream()
-                        .map(Message::getButtons)
-                        .flatMap(List::stream)
-                        .filter($ -> $.getId().startsWith("edit-tags:"))
-                        .findFirst()
-                        .map($ -> $.getId().split(":"))
-                        .orElse(null)
-                        ;
-                    
-                    if (partsRef == null)
-                    {
-                        hook.sendMessage("Could not determine audit event id.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    List<Message.Attachment> attachments = message.getAttachments();
-                    
-                    if (attachments.isEmpty())
-                    {
-                        hook.sendMessage("No attachments.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryId = partsRef[1];
-                    
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata(auditEntryId);
-                    if (auditEntryMeta == null || auditEntryMeta.entry == null)
-                    {
-                        hook.sendMessage("Could not load audit event.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String auditEntryTargetId = auditEntryMeta.entry.getTargetId();
-                    
-                    String requesterSf = event.getUser().getId(),
-                           requesterDisplayName = event.getUser().getEffectiveName();
-                    OffsetDateTime timestamp = event.getTimeCreated();
-                    
-                    // TODO : better model for avoiding race conditions
-                    synchronized (auditEntryTargetId.intern())
-                    {
-                        
-                        ScarletData.UserMetadata auditEntryTargetUserMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId);
-                        if (auditEntryTargetUserMeta == null)
-                            auditEntryTargetUserMeta = new ScarletData.UserMetadata();
-                        
-                        // TODO : async ?
-                        
-                        for (Message.Attachment attachment : attachments)
-                        {
-                            String fileName = attachment.getFileName(),
-                                   attachmentUrl = attachment.getUrl(),
-                                   attachmentProxyUrl = attachment.getProxyUrl();
-                            
-                            ScarletEvidence.FormatParams filePath = new ScarletEvidence.FormatParams()
-                                .group(ScarletDiscordJDA.this.scarlet.vrc, auditEntryMeta.entry.getGroupId(), null)
-                                .actor(ScarletDiscordJDA.this.scarlet.vrc,
-                                       auditEntryMeta.hasAuxActor() ? auditEntryMeta.auxActorId : auditEntryMeta.entry.getActorId(),
-                                       auditEntryMeta.hasAuxActor() ? auditEntryMeta.auxActorDisplayName : auditEntryMeta.entry.getActorDisplayName())
-                                .target(ScarletDiscordJDA.this.scarlet.vrc, auditEntryMeta.entry.getTargetId(), null)
-                                .file(fileName)
-                                .audit(auditEntryId)
-                                .index(auditEntryTargetUserMeta.getUserCaseEvidenceCount())
-                                ;
-                            File dest = filePath.nextFile(evidenceRoot, ScarletDiscordJDA.this.evidenceFilePathFormat.get());
-                            if (dest.isFile())
-                            {
-                                hook.sendMessageFormat("File '%s' already exists, skipping.", fileName).setEphemeral(true).queue();
-                            }
-                            else try
-                            {
-                                if (!dest.getParentFile().isDirectory())
-                                    dest.getParentFile().mkdirs();
-                                attachment.getProxy().downloadToFile(dest).join();
-                                
-                                auditEntryTargetUserMeta.addUserCaseEvidence(new ScarletData.EvidenceSubmission(auditEntryId, requesterSf, requesterDisplayName, timestamp, fileName, filePath.prevFormat(), attachmentUrl, attachmentProxyUrl));
-                                
-                                hook.sendMessageFormat("Saved '%s'.", filePath.prevFormat()).setEphemeral(true).queue();
-                                LOG.info(String.format("%s (<@%s>) saved evidence to '%s'.", requesterDisplayName, requesterSf, filePath.prevFormat()));
-                            }
-                            catch (Exception ex)
-                            {
-                                hook.sendMessageFormat("Exception saving '%s' as '%s'.", attachment.getFileName(), filePath.prevFormat()).setEphemeral(true).queue();
-                                LOG.error("Exception whilst saving attachment", ex);
-                            }
-                        }
-                        
-                        ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryTargetId, auditEntryTargetUserMeta);
-                    
-                    }
-                    
-                }); break;
-                case "import-watched-groups": this.handleInGuildAsync(event, true, hook -> {
-                    
-                    String messageSnowflake = parts[1];
-                    
-                    if (!ScarletDiscordJDA.this.checkMemberHasPermission(ScarletPermission.CONFIG_IMPORT_WATCHED_GROUPS, event.getMember()))
-                    {
-                        hook.sendMessage("You do not have permission to import watched groups.").setEphemeral(true).queue();
-                        return;
-                    }
-                    Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
-                    
-                    List<Message.Attachment> attachments = message.getAttachments();
-                    
-                    if (attachments.isEmpty())
-                    {
-                        hook.sendMessage("No attachments.").setEphemeral(true).queue();
-                        return;
-                    }
-                    
-                    String requesterSf = event.getUser().getId(),
-                           requesterDisplayName = event.getUser().getEffectiveName();
-                    
-                    LOG.info(String.format("%s (<@%s>) Importing watched groups", requesterDisplayName, requesterSf));
-                    
-                    for (Message.Attachment attachment : attachments)
-                    {
-                        String fileName = attachment.getFileName(),
-                               attachmentUrl = attachment.getUrl();
-                        
-                        if (fileName.endsWith(".csv"))
-                        {
-                            LOG.info("Importing watched groups legacy CSV from attachment: "+fileName);
-                            try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
-                            {
-                                if (ScarletDiscordJDA.this.scarlet.watchedGroups.importLegacyCSV(reader, true))
-                                {
-                                    LOG.info("Successfully imported watched groups legacy CSV");
-                                    hook.sendMessageFormat("Successfully imported watched groups legacy CSV").setEphemeral(true).queue();
-                                }
-                                else
-                                {
-                                    LOG.warn("Failed to import watched groups legacy CSV with unknown reason");
-                                    hook.sendMessageFormat("Failed to import watched groups legacy CSV with unknown reason").setEphemeral(true).queue();
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                LOG.error("Exception importing watched groups legacy CSV from attachment: "+fileName, ex);
-                                hook.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
-                            }
-                        }
-                        else if (fileName.endsWith(".json"))
-                        {
-                            LOG.info("Importing watched groups JSON from attachment: "+fileName);
-                            try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
-                            {
-                                if (ScarletDiscordJDA.this.scarlet.watchedGroups.importJson(reader, true))
-                                {
-                                    LOG.info("Successfully imported watched groups JSON");
-                                    hook.sendMessageFormat("Successfully imported watched groups JSON").setEphemeral(true).queue();
-                                }
-                                else
-                                {
-                                    LOG.warn("Failed to import watched groups JSON with unknown reason");
-                                    hook.sendMessageFormat("Failed to import watched groups JSON with unknown reason").setEphemeral(true).queue();
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                LOG.error("Exception importing watched groups JSON from attachment: "+fileName, ex);
-                                hook.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
-                            }
-                        }
-                        else
-                        {
-                            LOG.warn("Skipping attachment: "+fileName);
-                            hook.sendMessageFormat("File '%s' is not importable.", fileName).setEphemeral(true).queue();
-                        }
-                    }
-                
-                }); break;
-                }
             }
-            catch (Exception ex)
-            {
-                this.interactionError(event, ex);
-            }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
         }
 
         @Override
         public void onModalInteraction(ModalInteractionEvent event)
         {
-            ScarletDiscordJDA.this.interactions.handle(event);
-            if (!this.isInGuild(event))
+            if (!ScarletDiscordJDA.this.perms.check(event))
+            {
+                this.interactionPerms(event);
                 return;
-            try
-            {
-                String[] parts = event.getModalId().split(":");
-                switch (parts[0])
-                {
-                case "pagination-select": try
-                {
-                    String paginationId = parts[1];
-                    int pageOrdinal = MiscUtils.parseIntElse(parts[2], 1);
-                    Pagination pagination = ScarletDiscordJDA.this.pagination.get(paginationId);
-                    if (pagination == null || pagination.removeIfExpired())
-                    {
-                        event.reply("Pagination interaction expired")
-                            .setEphemeral(true)
-                            .queue(m -> m.deleteOriginal().queueAfter(3L, TimeUnit.SECONDS));
-                    }
-                    else try
-                    {
-                        pageOrdinal = Integer.parseInt(event.getValue("pagination-ordinal").getAsString());
-                        if (pageOrdinal < 1 || pageOrdinal > pagination.pages.length)
-                        {
-                            event.reply("Invalid page, must be an integer from 1 to "+pagination.pages.length+", inclusive").setEphemeral(true).queue();
-                        }
-                        else
-                        {
-                            pagination.action(pageOrdinal).queue();
-                            event.deferEdit().queue();
-                        }
-                    }
-                    catch (NumberFormatException nfex)
-                    {
-                        event.reply("Invalid integer").setEphemeral(true).queue();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception sync handling of pagination", ex);
-                    event.reply("Exception sync handling of pagination:\n`"+ex+"`").setEphemeral(true).queue();
-                } break;
-                case "edit-desc": {
-                    String desc = event.getValue("input-desc:"+parts[1]).getAsString();
-                    event.replyFormat("### Setting description:\n%s", desc).setEphemeral(true).queue();
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata_setDescription(parts[1], desc);
-                    this.updateAuxMessage(event.getChannel(), auditEntryMeta);
-                } break;
-                case "new-instance-modal": {
-                    String ictoken = parts[1];
-                    String displayName = event.getValue("display-name:"+parts[1]).getAsString();
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    if (ic == null)
-                    {
-                        event.reply("This interaction has timed out.").queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
-                        return;
-                    }
-                    ic.displayName = displayName;
-                    event.deferEdit().queue();
-                } break;
-                }
             }
-            catch (Exception ex)
-            {
-                this.interactionError(event, ex);
-            }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
         }
 
         @Override
         public void onStringSelectInteraction(StringSelectInteractionEvent event)
         {
-            ScarletDiscordJDA.this.interactions.handle(event);
-            if (!this.isInGuild(event))
+            if (!ScarletDiscordJDA.this.perms.check(event))
+            {
+                this.interactionPerms(event);
                 return;
-            try
-            {
-                String[] parts = event.getSelectMenu().getId().split(":");
-                switch (parts[0])
-                {
-                case "select-tags": {
-                    String joined = event.getValues().stream().map(ScarletDiscordJDA.this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
-                    event.replyFormat("### Setting tags:\n%s", joined).setEphemeral(true).queue();
-                    ScarletData.AuditEntryMetadata auditEntryMeta = ScarletDiscordJDA.this.scarlet.data.auditEntryMetadata_setTags(parts[1], event.getValues().toArray(new String[0]));
-                    this.updateAuxMessage(event.getChannel(), auditEntryMeta);
-                } break;
-                case "set-audit-aux-webhooks": {
-                    String auditType0 = parts[1];
-                    GroupAuditType auditType = GroupAuditType.of(auditType0);
-                    if (auditType == null)
-                    {
-                        event.replyFormat("%s isn't a valid audit log event type", auditType0).setEphemeral(true).queue();
-                        return;
-                    }
-                    if (event.getValues().isEmpty())
-                    {
-                        event.replyFormat("Removing auxiliary webhooks for %s", auditType0).setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.auditType2scarletAuxWh.remove(auditType0);
-                    }
-                    else
-                    {
-                        event.replyFormat("Setting auxiliary webhooks for %s:\n%s", auditType0, event.getValues().stream().collect(Collectors.joining(", "))).setEphemeral(true).queue();
-                        ScarletDiscordJDA.this.auditType2scarletAuxWh.put(auditType0, new UniqueStrings(event.getValues()));
-                    }
-                } break;
-                case "select-role-scarlet-permissions": {
-                    String roleSf = parts[1];
-                    Role role = event.getGuild().getRoleById(roleSf);
-                    if (role == null)
-                    {
-                        event.replyFormat("<@&%s> isn't a valid role", roleSf).setEphemeral(true).queue();
-                        return;
-                    }
-                    if (event.getValues().isEmpty())
-                    {
-                        event.replyFormat("Removing scarlet permissions for <@&%s>", roleSf).setEphemeral(true).queue();
-                        for (ScarletPermission scarletPermission : ScarletPermission.values())
-                        {
-                            ScarletDiscordJDA.this.deletePermissionRole(scarletPermission, role);
-                        }
-                    }
-                    else
-                    {
-                        List<ScarletPermission> scarletPermissions = event.getValues().stream().map(ScarletPermission::of).filter(Objects::nonNull).collect(Collectors.toList());
-                        event.replyFormat("Setting scarlet permissions for <@&%s>:\n%s", roleSf, scarletPermissions.stream().map(ScarletPermission::title).collect(Collectors.joining(", "))).setEphemeral(true).queue();
-                        for (ScarletPermission scarletPermission : scarletPermissions)
-                        {
-                            ScarletDiscordJDA.this.addPermissionRole(scarletPermission, role);
-                        }
-                    }
-                } break;
-                case "new-instance-region": {
-                    String ictoken = parts[1];
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    if (ic != null) try
-                    {
-                        ic.region = event.getValues().stream().findFirst().map(InstanceRegion::fromValue).get();
-                        event.deferEdit().queue();
-                        return;
-                    }
-                    catch (RuntimeException rex)
-                    {
-                    }
-                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
-                } break;
-                case "new-instance-access-type": {
-                    String ictoken = parts[1];
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    if (ic != null) try
-                    {
-                        ic.groupAccessType = event.getValues().stream().findFirst().map(GroupAccessType::fromValue).get();
-                        event.deferEdit().queue();
-                        return;
-                    }
-                    catch (RuntimeException rex)
-                    {
-                    }
-                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
-                } break;
-                case "new-instance-roles": {
-                    String ictoken = parts[1];
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    if (ic != null) try
-                    {
-                        ic.roleIds = new ArrayList<>(event.getValues());
-                        event.deferEdit().queue();
-                        return;
-                    }
-                    catch (RuntimeException rex)
-                    {
-                    }
-                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
-                } break;
-                case "new-instance-flags": {
-                    String ictoken = parts[1];
-                    InstanceCreation ic = ScarletDiscordJDA.this.instanceCreation.get(ictoken);
-                    if (ic != null) try
-                    {
-                        ic.queueEnabled = event.getValues().contains("queueEnabled");
-                        ic.hardClose = event.getValues().contains("hardClose");
-                        ic.ageGate = event.getValues().contains("ageGate");
-//                        ic.instancePersistenceEnabled = event.getValues().contains("instancePersistenceEnabled");
-                        ic.contentSettings_drones = event.getValues().contains("contentSettings.drones");
-                        ic.contentSettings_emoji = event.getValues().contains("contentSettings.emoji");
-                        ic.contentSettings_pedestals = event.getValues().contains("contentSettings.pedestals");
-                        ic.contentSettings_prints = event.getValues().contains("contentSettings.prints");
-                        ic.contentSettings_stickers = event.getValues().contains("contentSettings.stickers");
-                        event.deferEdit().queue();
-                        return;
-                    }
-                    catch (RuntimeException rex)
-                    {
-                    }
-                    event.reply("Interaction timed out").setEphemeral(true).queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
-                } break;
-                }
             }
-            catch (Exception ex)
-            {
-                this.interactionError(event, ex);
-            }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
         }
-        
-        void updateAuxMessage(MessageChannel channel, ScarletData.AuditEntryMetadata auditEntryMeta)
+
+        @Override
+        public void onEntitySelectInteraction(EntitySelectInteractionEvent event)
         {
-            if (auditEntryMeta.hasMessage() && auditEntryMeta.auxMessageSnowflake != null && auditEntryMeta.entry != null)
+            if (!ScarletDiscordJDA.this.perms.check(event))
             {
-                ScarletData.UserMetadata actorMeta = ScarletDiscordJDA.this.scarlet.data.userMetadata(auditEntryMeta.entry.getActorId());
-                String content = auditEntryMeta.entryRedacted ? "# **__REDACTED__**\n\n" : "";
-                content = content + (actorMeta == null || actorMeta.userSnowflake == null ? ("Unknown Discord id for actor "+auditEntryMeta.entry.getActorDisplayName()) : ("<@"+actorMeta.userSnowflake+">"));
-                if (auditEntryMeta.entryTags != null && auditEntryMeta.entryTags.size() > 0)
-                {
-                    String joined = auditEntryMeta.entryTags.strings().stream().map(ScarletDiscordJDA.this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
-                    content = content + "\n### Tags:\n" + joined;
-                }
-                if (auditEntryMeta.entryDescription != null && !auditEntryMeta.entryDescription.trim().isEmpty())
-                {
-                    content = content + "\n### Descripton:\n" + auditEntryMeta.entryDescription;
-                }
-                channel.editMessageById(auditEntryMeta.auxMessageSnowflake, content).queue();
+                this.interactionPerms(event);
+                return;
             }
+            if (ScarletDiscordJDA.this.interactions.handle(event))
+                return;
         }
-        
+
     }
     
     boolean shouldRedact(String infoId, String requesterSf)
@@ -4169,7 +863,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
            && !ScarletDiscordJDA.this.scarlet.secretStaffList.isSecretStaffId(ScarletDiscordJDA.this.scarlet.data.globalMetadata_getSnowflakeId(requesterSf));
     }
 
-    public void setAuditChannel(GroupAuditType auditType, GuildChannelUnion channel)
+    public void setAuditChannel(GroupAuditType auditType, Channel channel)
     {
         if (channel != null)
         {
@@ -4184,7 +878,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.save();
     }
 
-    public void setAuditExChannel(GroupAuditTypeEx auditExType, GuildChannelUnion channel)
+    public void setAuditExChannel(GroupAuditTypeEx auditExType, Channel channel)
     {
         if (channel != null)
         {
@@ -4199,7 +893,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.save();
     }
 
-    public void setAuditSecretChannel(GroupAuditType auditType, GuildChannelUnion channel)
+    public void setAuditSecretChannel(GroupAuditType auditType, Channel channel)
     {
         if (channel != null)
         {
@@ -4214,7 +908,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.save();
     }
 
-    public void setAuditExSecretChannel(GroupAuditTypeEx auditExType, GuildChannelUnion channel)
+    public void setAuditExSecretChannel(GroupAuditTypeEx auditExType, Channel channel)
     {
         if (channel != null)
         {
@@ -4227,59 +921,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
             LOG.info(String.format("Unsetting audit secret channel for %s (%s)", auditExType.title, auditExType.id));
         }
         this.save();
-    }
-
-    public boolean deletePermissionRole(ScarletPermission scarletPermission, Role role)
-    {
-        if (scarletPermission == null || role == null)
-            return false;
-        UniqueStrings roleSfs = this.scarletPermission2roleSf.computeIfAbsent(scarletPermission.id, $ -> new UniqueStrings());
-        if (roleSfs == null || !roleSfs.remove(role.getId()))
-            return false;
-        LOG.info(String.format("Removed role for Scarlet permission %s (%s): %s (%s)", scarletPermission.title, scarletPermission.id, role.getName(), "<@"+role.getId()+">"));
-        this.save();
-        return true;
-    }
-
-    public boolean addPermissionRole(ScarletPermission scarletPermission, Role role)
-    {
-        if (scarletPermission == null || role == null)
-            return false;
-        UniqueStrings roleSfs = this.scarletPermission2roleSf.computeIfAbsent(scarletPermission.id, $ -> new UniqueStrings());
-        if (!roleSfs.add(role.getId()))
-            return false;
-        LOG.info(String.format("Adding role for Scarlet permission %s (%s): %s (%s)", scarletPermission.title, scarletPermission.id, role.getName(), "<@"+role.getId()+">"));
-        this.save();
-        return true;
-    }
-
-    public boolean checkMemberHasPermission(ScarletPermission scarletPermission, Member member)
-    {
-        {
-            String userId = this.scarlet.data.globalMetadata_getSnowflakeId(member.getId());
-            if (userId != null && this.scarlet.secretStaffList.isSecretStaffId(userId))
-                return true;
-        }
-        return this.checkRolesHavePermission(scarletPermission, member.getRoles());
-    }
-    public boolean checkRolesHavePermission(ScarletPermission scarletPermission, List<Role> roles)
-    {
-        if (scarletPermission == null)
-            return true;
-        UniqueStrings roleSfs = this.scarletPermission2roleSf.get(scarletPermission.id);
-        if (roleSfs == null || roleSfs.isEmpty())
-            return false;
-        return roles.stream().map(Role::getId).anyMatch(roleSfs::contains);
-    }
-
-    public boolean checkRoleHasPermission(ScarletPermission scarletPermission, Role role)
-    {
-        if (scarletPermission == null)
-            return true;
-        UniqueStrings roleSfs = this.scarletPermission2roleSf.get(scarletPermission.id);
-        if (roleSfs == null || roleSfs.isEmpty())
-            return false;
-        return roleSfs.contains(role.getId());
     }
 
     public boolean checkMemberHasVRChatPermission(GroupPermissions vrchatPermission, Member member)
@@ -4546,9 +1187,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             
             String content = actorMeta == null || actorMeta.userSnowflake == null
-                    ? (entryMeta.hasAuxActor()
-                        ? ("Unknown Discord id for aux actor "+entryMeta.auxActorDisplayName+" (add with `/staff-list` or `/associate-ids`)")
-                        : ("Unknown Discord id for actor "+entryMeta.entry.getActorDisplayName()+" (add with `/staff-list` or `/associate-ids`)"))
+                    ? ScarletDiscordJDA.this.linkedIdsInfo(entryMeta)
                     : (mention
                         ? ("<@"+actorMeta.userSnowflake+">")
                         : (entryMeta.hasAuxActor() ? entryMeta.auxActorDisplayName : entryMeta.entry.getActorDisplayName()));
@@ -4885,6 +1524,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) joined [a group instance](https://vrchat.com/home/launch?worldId=%s)",
                             MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+                    .addField("User ID", "`"+userId+"`", false)
 //                    .setTitle(MarkdownSanitizer.escape(displayName)+" joined a group instance", "https://vrchat.com/home/user/"+userId)
 //                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.USER_JOIN.color)
@@ -4903,6 +1543,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) left [a group instance](https://vrchat.com/home/launch?worldId=%s)",
                             MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+                    .addField("User ID", "`"+userId+"`", false)
 //                    .setTitle(MarkdownSanitizer.escape(displayName)+" left a group instance", "https://vrchat.com/home/user/"+userId)
 //                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.USER_LEAVE.color)
@@ -4920,6 +1561,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             return channel.sendMessageEmbeds(new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" switched avatars", "https://vrchat.com/home/user/"+userId)
+                    .addField("User ID", "`"+userId+"`", false)
                     .addField("Location", "`"+location+"`", false)
                     .addField("Avatar Name", MarkdownSanitizer.escape(avatarDisplayName), false)
                     .setDescription(Arrays.stream(potentialIds).limit(32).collect(Collectors.joining("`\n`", "Potential ids:\n`", "`")))
@@ -4939,6 +1581,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             EmbedBuilder builder = new EmbedBuilder()
                     .setDescription(String.format("### [%s](https://vrchat.com/home/user/%s) was targeted by a vote-to-kick in [a group instance](https://vrchat.com/home/launch?worldId=%s)",
                             MarkdownSanitizer.escape(displayName), userId, location.replace(":", "&instanceId=")))
+                    .addField("Target User ID", "`"+userId+"`", false)
 //                    .setTitle(MarkdownSanitizer.escape(displayName)+" was targeted by a vote-to-kick", "https://vrchat.com/home/user/"+userId)
 //                    .addField("Location", "`"+location+"`", false)
                     .setColor(GroupAuditTypeEx.VTK_START.color)
@@ -4947,9 +1590,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
             if (optActorId != null)
             {
                 builder.setAuthor(MarkdownSanitizer.escape(optActorDisplayName), "https://vrchat.com/home/user/"+optActorId);
+                builder.addField("Initiating User ID", "`"+optActorId+"`", false);
             }
             return channel.sendMessageEmbeds(builder
                     .build())
+                .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                              Button.success("vrchat-user-unban:"+userId, "Unban user"))
                 .complete();
         });
     }
@@ -5057,7 +1703,31 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 }
             }
         }
+        
+        
         StringBuilder sb = new StringBuilder();
+        {
+            List<GroupAuditLogEntry> entries2 = this.scarlet.vrc.auditQuery(startOfDay, endOfDay, null, "group.member.join,group.member.leave,group.member.remove", null);
+            if (entries2 != null)
+            {
+                long gjoins = 0L,
+                     gleaves = 0L,
+                     gremoves = 0L;
+                for (GroupAuditLogEntry entry : entries2) switch (entry.getEventType())
+                {
+                case "group.member.join": {
+                    gjoins++;
+                } break;
+                case "group.member.leave": {
+                    gleaves++;
+                } break;
+                case "group.member.remove": {
+                    gremoves++;
+                } break;
+                }
+                sb.append("### "+Long.toUnsignedString(gjoins)+"/"+Long.toUnsignedString(gleaves)+"/"+Long.toUnsignedString(gremoves)+" group joins/leaves/kicks\n");
+            }
+        }
         {
             String[] exUJoinEventIds = this.scarlet.data.customEvent_filter(GroupAuditTypeEx.USER_JOIN, startOfDay, endOfDay);
             if (exUJoinEventIds != null)
@@ -5121,7 +1791,6 @@ public class ScarletDiscordJDA implements ScarletDiscord
             sb.append(String.format("(skipped %d for inactivity)\n", skippedForInactivity));
         }
         sb.append(String.format("Staff totals: %d / %d / %d / %d\n", twarns, tkicks, tbans, tjoins));
-        
         
         Message message = mca.apply(new EmbedBuilder()
             .setTitle("Moderation Summary")

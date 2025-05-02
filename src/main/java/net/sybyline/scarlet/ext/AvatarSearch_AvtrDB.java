@@ -101,6 +101,24 @@ public interface AvatarSearch_AvtrDB
         public String result;
     }
 
+    public static class IngestRequest
+    {
+        public IngestRequest(String[] avatar_ids, String attribution)
+        {
+            this.avatar_ids = avatar_ids;
+            this.attribution = attribution;
+        }
+        public IngestRequest()
+        {
+        }
+        public String[] avatar_ids;
+        public String attribution;
+    }
+    public static class IngestResponse
+    {
+        public long valid_avatar_ids;
+    }
+
     static Long index()
     {
         try (HttpURLInputStream in = HttpURLInputStream.get(API_ROOT+"/avatar/index"))
@@ -153,11 +171,24 @@ public interface AvatarSearch_AvtrDB
         }
     }
 
-    static RefetchResponse request_refetch( String avatar_id, String token)
+    static RefetchResponse request_refetch(String avatar_id, String token)
     {
         try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/avatar/request_refetch", HttpURLInputStream.writeAsJson(null, null, RefetchRequest.class, new RefetchRequest(avatar_id, token))))
         {
             return in.readAsJson(null, null, RefetchResponse.class);
+        }
+        catch (IOException ioex)
+        {
+            ioex.printStackTrace();
+            return null;
+        }
+    }
+
+    static IngestResponse request_ingest(String[] avatar_ids, String attribution)
+    {
+        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/avatar/ingest", HttpURLInputStream.writeAsJson(null, null, IngestRequest.class, new IngestRequest(avatar_ids, attribution))))
+        {
+            return in.readAsJson(null, null, IngestResponse.class);
         }
         catch (IOException ioex)
         {

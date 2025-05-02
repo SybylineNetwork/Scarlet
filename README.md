@@ -44,6 +44,10 @@ Discord slash commands:
   - `aux-webhooks`<br>
     Configures auxiliary webhooks<br>
     Example: `/aux-webhooks add "External Webhook One" "https://discord.com/api/webhooks/123456789123456789/IdzL4t3KvfQQ_CKYWd8Q2NM6Z7IaSOppoTTL4LS1Da_aMZ-eK1MbML-3ILnLjotWcDkp"`
+  - `vrchat-search <world|user|group|avatar> <search-query:string>`<br>
+    Search for VRChat content<br>
+    Example: `/vrchat-search user "Vinyarion"`
+    - `search-query` The search query
   - `vrchat-user-ban <vrchat-user:string>`<br>
     Ban a specific VRChat user<br>
     Example: `/vrchat-user-ban "usr_00000000-0000-0000-0000-000000000000"`
@@ -119,10 +123,15 @@ Discord slash commands:
   - `server-restart`<br>
     Restarts the Scarlet server application<br>
     Example: `/server-restart`
+  - `vrchat-animated-emoji`<br>
+    Generates a VRChat animated emoji spritesheet from a gif<br>
+    Example: `/vrchat-animated-emoji from-url "https://tenor.com/view/rat-spin-gif-10300642414513246571"`
 
-Discord message command:
+Discord message commands:
   - `submit-attachments`<br>
     Submits files attached to this message to Scarlet, such as moderation evidence
+  - `vrchat-animated-emoji`<br>
+    Generates a VRChat animated emoji spritesheet from a gif
 
 Attachments submitted to moderation events are stored in a subdirectory of the path specified by `evidenceRoot` in the `discord_bot.json` settings file.
 If a submitted attachment has the same name as a file already submitted on the same target user, the submitting user is notified and the new attachment is not saved.

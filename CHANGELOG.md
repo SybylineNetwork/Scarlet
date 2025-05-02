@@ -7,6 +7,17 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.11-rc9
+  - Internal overhaul of all Discord commands and interactions
+  - Added the `/scarlet-discord-permissions` Discord command
+  - Added the `/vrchat-search` Discord command
+  - Added file lock so multiple instances of Scarlet do not run for the same group at the same time on a given system
+  - Added Discord commands (`vrchat-animated-emoji`) that convert gifs into spritesheets for VRChat Gallery animated emoji
+  - Removed the `/scarlet-permissions` Discord command (old configuration will not be lost if you update)
+  - Changed the `/watched-groups` Discord command to consolidate subcommands
+  - Changed Discord command default permissions to requiring only either `MODERATE_MEMBERS` or `MANAGE_SERVER`, depending on the sensitivity of the command
+  - Fixed selector in settings tab for evidence root not having any effect
+
 ## 0.4.11-rc8
   - Added functionality to paginated Discord command responses
   - Changed WorldBalancer domain from `avatarwb.worldbalancer.duia.us` to `avatar.worldbalancer.com`
