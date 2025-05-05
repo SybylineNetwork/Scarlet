@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -190,11 +191,13 @@ public class DPerms
                 Role role = isMember ? null : event.getOption("target").getAsRole();
                 
                 String mention = isMember ? member.getAsMention() : role.getAsMention();
-                boolean success = isMember ? this.set(type, member, name, value) : this.set(type, role, name, value);
-                
-                String successStr = success ? "Updated" : "Merged";
-                String valueStr = boolStr(value);
-                event.replyFormat("%s %s permission `%s` for %s: %s", successStr, type.display, name, mention, valueStr).setEphemeral(true).queue();
+                Boolean prev = isMember ? this.set(type, member, name, value) : this.set(type, role, name, value);
+
+                event.replyFormat(Objects.equals(prev, value)
+                        ? "The %s permission `%s` for %s is already %s" // Mismatched format args count is intentional
+                        : "Set %s permission `%s` for %s to %s (was %s)",
+                    type.display, name, mention, boolStr(value), boolStr(prev)
+                ).setEphemeral(true).queue();
             } break;
             case "list": {
                 Member member = event.getOption("target").getAsMember();
@@ -322,7 +325,7 @@ public class DPerms
             if (spec.byUser != null)
             {
                 this.byUser.clear();
-                spec.byUser.forEach((sf, map) -> map.forEach((perm, value) -> this.set(this.byRole, sf, perm, value)));
+                spec.byUser.forEach((sf, map) -> map.forEach((perm, value) -> this.set(this.byUser, sf, perm, value)));
             }
             if (spec.byRole != null)
             {
@@ -356,13 +359,13 @@ public class DPerms
             Map<String, Boolean> map = by.get(sf);
             return map == null ? null : map.get(perm);
         }
-        boolean set(Map<String, Map<String, Boolean>> by, String sf, String perm, Boolean value)
+        Boolean set(Map<String, Map<String, Boolean>> by, String sf, String perm, Boolean value)
         {
             Map<String, Boolean> map = by.get(sf);
             if (map == null)
             {
                 if (value == null)
-                    return false;
+                    return null;
                 by.put(sf, map = new ConcurrentHashMap<>());
             }
             return value == null ? map.remove(perm) : map.put(perm, value);
@@ -381,11 +384,11 @@ public class DPerms
         {
             return this.get(this.byRole, role.getId(), perm);
         }
-        public boolean set(Member member, String perm, Boolean value)
+        public Boolean set(Member member, String perm, Boolean value)
         {
             return this.set(this.byUser, member.getId(), perm, value);
         }
-        public boolean set(Role role, String perm, Boolean value)
+        public Boolean set(Role role, String perm, Boolean value)
         {
             return this.set(this.byRole, role.getId(), perm, value);
         }
@@ -416,11 +419,11 @@ public class DPerms
             return Boolean.TRUE;
         return this.permissions.get(kind).get(role, perm);
     }
-    public boolean set(PermType kind, Member member, String perm, Boolean value)
+    public Boolean set(PermType kind, Member member, String perm, Boolean value)
     {
         return this.permissions.get(kind).set(member, perm, value);
     }
-    public boolean set(PermType kind, Role role, String perm, Boolean value)
+    public Boolean set(PermType kind, Role role, String perm, Boolean value)
     {
         return this.permissions.get(kind).set(role, perm, value);
     }

@@ -7,6 +7,13 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.11-rc10
+  - Added ban/unban buttons to Vote-to-Kick log entries
+  - Added snapshot repository to dependency downloader
+  - Changed periodic report to include group joins, leaves, and kicks
+  - Fixed crash loading permissions data
+  - Fixed bug with empty pagination
+
 ## 0.4.11-rc9
   - Internal overhaul of all Discord commands and interactions
   - Added the `/scarlet-discord-permissions` Discord command

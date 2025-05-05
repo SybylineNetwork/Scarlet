@@ -33,6 +33,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.IMentionable;
 import net.dv8tion.jda.api.entities.Member;
@@ -883,6 +884,14 @@ public class DInteractions
             }
             
             int pageIndex = pageOrdinal - 1;
+            if (pageIndex < 0)
+            {
+                MessageEmbed embed = new EmbedBuilder().setDescription("There's nothing to see here.").build();
+                return (this.messageId == null
+                    ? this.hook.editOriginalEmbeds(embed)
+                    : this.hook.editMessageEmbedsById(this.messageId, embed))
+                        .setActionRow(first.asDisabled(), prev.asDisabled(), self.asDisabled(), next.asDisabled(), last.asDisabled());
+            }
             return this
                 .pages[pageIndex]
                 .applyContent(this.hook, this.messageId)

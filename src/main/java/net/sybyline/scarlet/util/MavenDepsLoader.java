@@ -35,6 +35,7 @@ public class MavenDepsLoader
     {
         "https://search.maven.org/remotecontent?filepath=",
         "https://jitpack.io/",
+        "https://oss.sonatype.org/content/repositories/snapshots/",
     };
 
     static Path jarPath = null;
