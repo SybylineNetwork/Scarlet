@@ -56,6 +56,9 @@ public class ScarletVRChatLogs implements Closeable
         
         void log_vtkInit(boolean preamble, LocalDateTime timestamp, String targetDisplayName, String nullable_actorDisplayName);
         
+        void log_playerSpawnPedestal(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String contentType, String contentId);
+        void log_playerSpawnSticker(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String stickerId);
+        
 //        void log_explicitTokenRequest(boolean preamble, LocalDateTime timestamp, String fileId, int fileVersion, String fileVariant);
         
     }
@@ -141,6 +144,24 @@ public class ScarletVRChatLogs implements Closeable
                 }
                 this.listener.log_vtkInit(preamble, timestamp, targetDisplayName, nullable_actorDisplayName);
             }
+        }
+        else if (text.startsWith("[SharingManager] User ") && (cidx = text.lastIndexOf(") created sharing pedestal for ")) != -1)
+        {
+            int oidx = text.indexOf(" ("),
+                sidx = text.lastIndexOf(" ");
+            String userId = text.substring(22, oidx),
+                   userDisplayName = text.substring(oidx + 2, cidx),
+                   contentType = text.substring(cidx + 31, sidx),
+                   contentId = text.substring(sidx + 1);
+            this.listener.log_playerSpawnPedestal(preamble, timestamp, userDisplayName, userId, contentType, contentId);
+        }
+        else if (text.startsWith("[StickersManager] User ") && (cidx = text.lastIndexOf(") spawned sticker ")) != -1)
+        {
+            int oidx = text.indexOf(" (");
+            String userId = text.substring(23, oidx),
+                   userDisplayName = text.substring(oidx + 2, cidx),
+                   stickerId = text.substring(cidx + 18);
+            this.listener.log_playerSpawnSticker(preamble, timestamp, userDisplayName, userId, stickerId);
         }
         else if (text.startsWith("VRCApplication: HandleApplicationQuit at "))
         {

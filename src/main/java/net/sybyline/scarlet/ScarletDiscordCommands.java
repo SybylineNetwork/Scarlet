@@ -37,7 +37,10 @@ import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.Instance;
+import io.github.vrchatapi.model.LimitedUser;
+import io.github.vrchatapi.model.LimitedWorld;
 import io.github.vrchatapi.model.User;
+import io.github.vrchatapi.model.World;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
@@ -96,10 +99,54 @@ public class ScarletDiscordCommands
     public final SlashOption<io.github.vrchatapi.model.User> _vrchatUser = SlashOption.ofString("vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, this::_vrchatUser, true, this::_vrchatUser);
     io.github.vrchatapi.model.User _vrchatUser(String id) { return this.discord.scarlet.vrc.getUser(id); }
     void _vrchatUser(CommandAutoCompleteInteractionEvent event) {
+        String value = VrcIds.resolveUserId(event.getFocusedOption().getValue());
+        if (value.isEmpty())
+        {
+            event.replyChoices().queue();
+            return;
+        }
+        if (VrcIds.id_user.matcher(value).matches())
+        {
+            User user = this.discord.scarlet.vrc.getUser(value);
+            if (user != null)
+            {
+                event.replyChoice(user.getId()+": "+user.getDisplayName(), user.getId()).queue();
+                return;
+            }
+        }
+        List<LimitedUser> lusers = this.discord.scarlet.vrc.searchUsers(value, 25, 0);
+        if (lusers == null)
+        {
+            event.replyChoices().queue();
+            return;
+        }
+        event.replyChoices(lusers.stream().map($ -> new Command.Choice($.getId()+": "+$.getDisplayName(), $.getId())).limit(25L).toArray(Command.Choice[]::new)).queue();
     }
     public final SlashOption<io.github.vrchatapi.model.World> _vrchatWorld = SlashOption.ofString("vrchat-world", "The VRChat world id (wrld_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, this::_vrchatWorld, true, this::_vrchatWorld);
     io.github.vrchatapi.model.World _vrchatWorld(String id) { return this.discord.scarlet.vrc.getWorld(id); }
     void _vrchatWorld(CommandAutoCompleteInteractionEvent event) {
+        String value = VrcIds.resolveWorldId(event.getFocusedOption().getValue());
+        if (value.isEmpty())
+        {
+            event.replyChoices().queue();
+            return;
+        }
+        if (VrcIds.id_world.matcher(value).matches())
+        {
+            World world = this.discord.scarlet.vrc.getWorld(value);
+            if (world != null)
+            {
+                event.replyChoice(world.getId()+": "+world.getName()+" by "+world.getAuthorName(), world.getId()).queue();
+                return;
+            }
+        }
+        List<LimitedWorld> lworlds = this.discord.scarlet.vrc.searchWorlds(value, 25, 0);
+        if (lworlds == null)
+        {
+            event.replyChoices().queue();
+            return;
+        }
+        event.replyChoices(lworlds.stream().map($ -> new Command.Choice($.getId()+": "+$.getName()+" by "+$.getAuthorName(), $.getId())).limit(25L).toArray(Command.Choice[]::new)).queue();
     }
     public final SlashOption<GroupAuditType> _auditEventType = SlashOption.ofEnum("audit-event-type", "The VRChat Group Audit Log event type", true, GroupAuditType.class);
     public final SlashOption<GroupAuditTypeEx> _auditExEventType = SlashOption.ofEnum("audit-ex-event-type", "The extended audit event type", true, GroupAuditTypeEx.class);
@@ -116,7 +163,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("vrchat-search")
     @Desc("Searches for VRChat things")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class VrchatSearch
     {
         public final SlashOption<String> _searchQuery = SlashOption.ofString("search-query", "The search query", true, null);
@@ -185,7 +232,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("moderation-tags")
     @Desc("Configures custom moderation tags")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class ModerationTags
     {
         @SlashCmd("list")
@@ -272,7 +319,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("watched-group")
     @Desc("Configures watched groups")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class WatchedGroup_
     {
         @SlashCmd("list")
@@ -702,7 +749,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("staff-list")
     @Desc("Configures the staff list")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class StaffList extends _StaffList
     {
         @Override
@@ -847,7 +894,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("secret-staff-list")
     @Desc("Configures the secret staff list")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class SecretStaffList extends _StaffList
     {
         @Override
@@ -894,7 +941,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("vrchat-user-info")
     @Desc("Lists internal and audit information for a specific VRChat user")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void vrchatUserInfo(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser) throws Exception
     {
         String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
@@ -973,7 +1020,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("vrchat-user-ban")
     @Desc("Ban a specific VRChat user")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void vrchatUserBan(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser) throws Exception
     {
         String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
@@ -992,8 +1039,11 @@ public class ScarletDiscordCommands
         
         if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
         {
-            hook.sendMessage("You do not have permission to ban users.").setEphemeral(true).queue();
-            return;
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                hook.sendMessage("You do not have permission to ban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
         }
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
@@ -1020,7 +1070,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("vrchat-user-unban")
     @Desc("Unban a specific VRChat user")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void vrchatUserUnban(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser) throws Exception
     {
         String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
@@ -1039,8 +1089,11 @@ public class ScarletDiscordCommands
         
         if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
         {
-            hook.sendMessage("You do not have permission to unban users.").setEphemeral(true).queue();
-            return;
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                hook.sendMessage("You do not have permission to unban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
         }
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
@@ -1067,7 +1120,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("vrchat-group")
     @Desc("Manages groups")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class VrchatGroups
     {
         private io.github.vrchatapi.model.User actor(SlashCommandInteractionEvent event, InteractionHook hook)
@@ -1181,7 +1234,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("discord-user-info")
     @Desc("Lists internal information for a specific Discord user")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void discordUserInfo(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("discord-user") Member discordUser) throws Exception
     {
         StringBuilder sb = new StringBuilder();
@@ -1234,7 +1287,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("query-target-history")
     @Desc("Queries audit events targeting a specific VRChat user")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void queryTargetHistory(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("days-back") int daysBack) throws Exception
     {
         String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
@@ -1283,7 +1336,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("query-actor-history")
     @Desc("Queries audit events actored by a specific VRChat user")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void queryActorHistory(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("days-back") int daysBack) throws Exception
     {
         String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
@@ -1335,7 +1388,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("moderation-summary")
     @Desc("Generates a summary of moderation actions")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void moderationSummary(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("hours-back") int hoursBack)
     {
         this.discord.emitModSummary(this.discord.scarlet, OffsetDateTime.now(ZoneOffset.UTC), hoursBack, hook::sendMessageEmbeds);
@@ -1344,7 +1397,7 @@ public class ScarletDiscordCommands
     // submit-attachments
 
     @MsgCmd("submit-attachments")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void submitAttachments(MessageContextInteractionEvent event)
     {
         Message message = event.getTarget();
@@ -1361,7 +1414,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("config-info")
     @Desc("Shows information about the current configuration")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void configInfo(SlashCommandInteractionEvent event, InteractionHook hook) throws Exception
     {//event.deferReply().queue();
         StringBuilder sb = new StringBuilder();
@@ -1427,7 +1480,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("config-set")
     @Desc("Configures miscellaneous settings")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class ConfigSet
     {
         public final SlashOption<ZoneId> _timeZoneId = SlashOption.ofString("time-zone-id", "The time zone", true, null, ZoneId::of, true, new SlashOptionStrings(ZoneId.getAvailableZoneIds().stream().sorted(), true));
@@ -1482,13 +1535,34 @@ public class ScarletDiscordCommands
             String epochNext = Long.toUnsignedString(offset.plusHours(24L).toEpochSecond());
             event.replyFormat("Set mod summary generation time: next summary at <t:%s:f>", epochNext).setEphemeral(true).queue();
         }
+        @SlashCmd("suggested-moderation")
+        @Desc("Suggested moderation settings")
+        public class SuggestedMod
+        {
+            public final SlashOption<Integer> _kickCount = SlashOption.ofInt("kick-count", "The number of instance kicks to trigger suggested moderation", true, 3).with($->$.setRequiredRange(1L, 1000L));
+            public final SlashOption<Integer> _periodDays = SlashOption.ofInt("period-days", "The number of days of history for which to consider instance kicks", true, 3).with($->$.setRequiredRange(1L, 1000L));
+            @SlashCmd("kick-count")
+            @Desc("The kick count")
+            public void kickCount(SlashCommandInteractionEvent event, @SlashOpt("kick-count") int kickCount) throws Exception
+            {
+                ScarletDiscordCommands.this.discord.scarlet.settings.heuristicKickCount.set(kickCount);
+                event.replyFormat("Set suggested moderation kick count: %d", kickCount).setEphemeral(true).queue();
+            }
+            @SlashCmd("period-days")
+            @Desc("The period")
+            public void periodDays(SlashCommandInteractionEvent event, @SlashOpt("period-days") int periodDays) throws Exception
+            {
+                ScarletDiscordCommands.this.discord.scarlet.settings.heuristicPeriodDays.set(periodDays);
+                event.replyFormat("Set suggested moderation period: %d day%s", periodDays, periodDays==1?"":"s").setEphemeral(true).queue();
+            }
+        }
     }
 
     // server-restart
 
     @SlashCmd("server-restart")
     @Desc("Restarts the Scarlet application")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class ServerRestart
     {
         @SlashCmd("restart-now")
@@ -1544,7 +1618,7 @@ public class ScarletDiscordCommands
     void _fileName(CommandAutoCompleteInteractionEvent event) { event.replyChoiceStrings(this.discord.scarlet.last25logs).queue(); }
     @SlashCmd("export-log")
     @Desc("Attaches a log file")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void exportLog(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("file-name") String fileName) throws Exception
     {
         if (fileName == null)
@@ -1580,7 +1654,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("set-audit-channel")
     @Desc("Sets a given text channel as the channel certain audit event types use")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setAuditChannel(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("audit-event-type") GroupAuditType auditEventType, @SlashOpt("discord-text-channel") Channel textChannel) throws Exception
     {
         if (textChannel == null)
@@ -1603,7 +1677,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("set-audit-aux-webhooks")
     @Desc("Sets the given webhooks as the webhooks certain audit event types use")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setAuditAuxWebhooks(SlashCommandInteractionEvent event, @SlashOpt("audit-event-type") GroupAuditType auditEventType) throws Exception
     {
         SelectOption[] options = this.discord.scarletAuxWh2webhookUrl
@@ -1629,7 +1703,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("aux-webhooks")
     @Desc("Configures auxiliary webhooks")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class AuxWebhooks
     {
         @SlashCmd("list")
@@ -1693,7 +1767,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("set-audit-ex-channel")
     @Desc("Sets a given text channel as the channel certain extended event types use")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setAuditExChannel(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("audit-ex-event-type") GroupAuditTypeEx auditEventTypeEx, @SlashOpt("discord-text-channel") Channel textChannel) throws Exception
     {
         if (textChannel == null)
@@ -1716,7 +1790,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("set-audit-secret-channel")
     @Desc("Sets a given text channel as the secret channel certain audit event types use")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setAuditSecretChannel(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("audit-event-type") GroupAuditType auditEventType, @SlashOpt("discord-text-channel") Channel textChannel) throws Exception
     {
         if (textChannel == null)
@@ -1739,7 +1813,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("set-audit-secret-ex-channel")
     @Desc("Sets a given text channel as the secret channel certain extended event types use")
-    @DefaultPerms(Permission.MANAGE_SERVER)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setAuditSecretExChannel(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("audit-ex-event-type") GroupAuditTypeEx auditEventTypeEx, @SlashOpt("discord-text-channel") Channel textChannel) throws Exception
     {
         if (textChannel == null)
@@ -1762,7 +1836,7 @@ public class ScarletDiscordCommands
 
     @SlashCmd("set-voice-channel")
     @Desc("Sets a given voice channel as the channel in which to announce TTS messages")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setVoiceChannel(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("discord-voice-channel") Channel voiceChannel) throws Exception
     {
         if (voiceChannel == null)
@@ -1791,7 +1865,7 @@ public class ScarletDiscordCommands
     void _voiceName(CommandAutoCompleteInteractionEvent event) { event.replyChoiceStrings(this.discord.scarlet.ttsService.getInstalledVoices()).queue(); }
     @SlashCmd("set-tts-voice")
     @Desc("Selects which TTS voice is used to make announcements")
-    @DefaultPerms(Permission.MODERATE_MEMBERS)
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setTtsVoice(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("voice-name") String voiceName) throws Exception
     {
         if (!this.discord.scarlet.ttsService.selectVoice(voiceName))
@@ -1853,6 +1927,7 @@ public class ScarletDiscordCommands
     }
 
     @MsgCmd("vrchat-animated-emoji")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void vrchatAnimatedEmoji(MessageContextInteractionEvent event) throws Exception
     {
         String raw = event.getTarget().getContentRaw();

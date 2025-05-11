@@ -136,6 +136,11 @@ public class DPerms
         }
     }
 
+    public void registerOther(String... perms)
+    {
+        Arrays.stream(perms).forEachOrdered(this.permissions.get(PermType.OTHER)::addSuggestion);
+    }
+
     static final Pattern SAN = Pattern.compile("[^0-9a-z]");
     public void internal_autocomplete(CommandAutoCompleteInteractionEvent event)
     {

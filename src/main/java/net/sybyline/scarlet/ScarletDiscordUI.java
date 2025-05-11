@@ -22,6 +22,7 @@ import com.google.gson.JsonObject;
 import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.GroupAccessType;
+import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.Instance;
@@ -118,6 +119,64 @@ public class ScarletDiscordUI
         this.updateAuxMessage(event.getChannel(), auditEntryMeta);
     }
 
+    @ButtonClk("vrchat-user-edit-manager-notes")
+    public void vrchatUserEditManagerNotes(ButtonInteractionEvent event)
+    {
+        String[] parts = event.getButton().getId().split(":");
+
+        String vrcTargetId = parts[1];
+        
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        if (vrcActorId == null)
+        {
+            event.reply(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
+            return;
+        }
+        
+        long within1day = System.currentTimeMillis() - 86400_000L;
+        User sc = this.discord.scarlet.vrc.getUser(vrcTargetId, within1day);
+        if (sc == null)
+        {
+            event.replyFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
+            return;
+        }
+        
+        GroupLimitedMember glm = this.discord.scarlet.vrc.getGroupMembership(this.discord.scarlet.vrc.groupId, vrcTargetId);
+        String value = glm == null ? null : glm.getManagerNotes();
+        
+        event.replyModal(Modal.create("vrchat-user-edit-manager-notes:"+vrcTargetId, "Manager notes for "+MarkdownSanitizer.escape(sc.getDisplayName()))
+                .addActionRow(TextInput.create("manager-notes:"+vrcTargetId, "Notes", TextInputStyle.PARAGRAPH)
+                    .setValue(value).build())
+            .build());
+    }
+
+    @ModalSub("vrchat-user-edit-manager-notes")
+    public void vrchatUserEditManagerNotesModal(ModalInteractionEvent event)
+    {
+        String[] parts = event.getModalId().split(":");
+
+        String vrcTargetId = parts[1];
+        
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        if (vrcActorId == null)
+        {
+            event.reply(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
+            return;
+        }
+        
+        long within1day = System.currentTimeMillis() - 86400_000L;
+        User sc = this.discord.scarlet.vrc.getUser(vrcTargetId, within1day);
+        if (sc == null)
+        {
+            event.replyFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
+            return;
+        }
+        
+        String value = event.getValue("manager-notes:"+vrcTargetId).getAsString();
+        this.discord.scarlet.vrc.updateGroupMembershipNotes(this.discord.scarlet.vrc.groupId, vrcTargetId, value);
+        event.reply("Updated manager notes.").queue($ -> $.deleteOriginal().queueAfter(3_000L, TimeUnit.MILLISECONDS));
+    }
+
     @ButtonClk("vrchat-user-ban")
     public void vrchatUserBan(ButtonInteractionEvent event, InteractionHook hook)
     {
@@ -138,6 +197,15 @@ public class ScarletDiscordUI
         {
             hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
             return;
+        }
+
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        {
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                hook.sendMessage("You do not have permission to ban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
         }
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
@@ -184,6 +252,15 @@ public class ScarletDiscordUI
         {
             hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
             return;
+        }
+        
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        {
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                hook.sendMessage("You do not have permission to unban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
         }
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
@@ -355,6 +432,37 @@ public class ScarletDiscordUI
         }
         
         hook.deleteMessageById(event.getMessageId()).queue();
+
+        switch (ic.groupAccessType)
+        {
+        case PUBLIC: {
+            if (!this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_public_create))
+            {
+                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_public_create)).setEphemeral(true).queue();
+            }
+        } break;
+        case PLUS: {
+            if (!this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_plus_create))
+            {
+                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_plus_create)).setEphemeral(true).queue();
+            }
+        } break;
+        case MEMBERS: {
+            if (!this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_open_create))
+            {
+                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_open_create)).setEphemeral(true).queue();
+            }
+            if (ic.roleIds != null && !this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_restricted_create))
+            {
+                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_restricted_create)).setEphemeral(true).queue();
+            }
+        } break;
+        }
+        
+        if (ic.ageGate != null && ic.ageGate.booleanValue() && !this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_age_gated_create))
+        {
+            hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_age_gated_create)).setEphemeral(true).queue();
+        }
         
         Instance instance;
         try

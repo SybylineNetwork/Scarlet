@@ -3,6 +3,7 @@ package net.sybyline.scarlet;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -48,12 +50,18 @@ import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
+import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.Instance;
+import io.github.vrchatapi.model.LimitedUser;
 import io.github.vrchatapi.model.LimitedUserGroups;
+import io.github.vrchatapi.model.LimitedWorld;
+import io.github.vrchatapi.model.OrderOption;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
+import io.github.vrchatapi.model.SortOption;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
 import io.github.vrchatapi.model.TwoFactorEmailCode;
+import io.github.vrchatapi.model.UpdateGroupMemberRequest;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
@@ -139,6 +147,7 @@ public class ScarletVRChat implements Closeable
         this.groupId = MiscUtils.extractTypedUuid("grp", "", scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false));
         this.groupOwnerId = null;
         this.group = null;
+        this.groupLimitedMember = null;
         this.currentUserId = null;
         scarlet.settings.setNamespace(this.groupId);
         this.cachedUsers = new ScarletJsonCache<>("usr", User.class);
@@ -154,6 +163,7 @@ public class ScarletVRChat implements Closeable
     final String groupId;
     String groupOwnerId;
     Group group;
+    GroupLimitedMember groupLimitedMember;
     String currentUserId;
     final ScarletJsonCache<User> cachedUsers;
     final ScarletJsonCache<World> cachedWorlds;
@@ -358,6 +368,11 @@ public class ScarletVRChat implements Closeable
                 {
                     this.groupOwnerId = group.getOwnerId();
                     this.group = group;
+                    this.groupLimitedMember = this.getGroupMembership(this.groupId, this.currentUserId);
+                    if (group.getRoles() == null)
+                    {
+                        group.setRoles(this.getGroupRoles(this.groupId));
+                    }
                 }
             }
         }
@@ -433,6 +448,19 @@ public class ScarletVRChat implements Closeable
             return null;
         }
     }
+    public List<LimitedUser> searchUsers(String name, Integer n, Integer offset)
+    {
+        UsersApi users = new UsersApi(this.client);
+        try
+        {
+            return users.searchUsers(name, null, n, offset);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            return null;
+        }
+    }
 
     public User getUser(String userId)
     {
@@ -463,6 +491,19 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    public List<LimitedWorld> searchWorlds(String name, Integer n, Integer offset)
+    {
+        WorldsApi worlds = new WorldsApi(this.client);
+        try
+        {
+            return worlds.searchWorlds(null, SortOption.RELEVANCE, null, null, n, OrderOption.DESCENDING, offset, null, null, null, null, null, null, null, null);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            return null;
+        }
+    }
     public World getWorld(String worldId)
     {
         return this.getWorld(worldId, Long.MIN_VALUE);
@@ -597,6 +638,20 @@ public class ScarletVRChat implements Closeable
             return null;
         }
     }
+    public GroupLimitedMember updateGroupMembershipNotes(String groupId, String targetUserId, String managerNotes)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            return groups.updateGroupMember(groupId, targetUserId, new UpdateGroupMemberRequest().managerNotes(managerNotes));
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error updating group member notes: "+apiex.getMessage());
+            return null;
+        }
+    }
     public List<GroupRole> getGroupRoles(String groupId)
     {
         GroupsApi groups = new GroupsApi(this.client);
@@ -642,6 +697,26 @@ public class ScarletVRChat implements Closeable
             LOG.error("Error during unban from group: "+apiex.getMessage());
             return false;
         }
+    }
+
+    public boolean checkSelfUserHasVRChatPermission(GroupPermissions vrchatPermission)
+    {
+        GroupLimitedMember glm = this.groupLimitedMember;
+        return this.checkUserHasVRChatPermission(glm, vrchatPermission);
+    }
+    public boolean checkUserHasVRChatPermission(GroupPermissions vrchatPermission, String userId)
+    {
+        if (userId == null)
+            return false;
+        GroupLimitedMember glm = this.getGroupMembership(this.groupId, userId);
+        return this.checkUserHasVRChatPermission(glm, vrchatPermission);
+    }
+    public boolean checkUserHasVRChatPermission(GroupLimitedMember glm, GroupPermissions vrchatPermission)
+    {
+        if (glm == null)
+            return false;
+        List<GroupRole> grl = this.group.getRoles();
+        return grl != null && grl.stream().filter(Objects::nonNull).filter($ -> glm.getRoleIds().contains($.getId())).map(GroupRole::getPermissions).filter(Objects::nonNull).anyMatch($ -> $.contains(GroupPermissions.group_all) || $.contains(vrchatPermission));
     }
 
     public Avatar getAvatar(String avatarId)
@@ -728,6 +803,20 @@ public class ScarletVRChat implements Closeable
             LOG.error("Exception whilst fetching user represented group", ex);
         }
         return lugs;
+    }
+
+    public void modalNeedPerms(GroupPermissions perms)
+    {
+        this.scarlet.ui.submitModalAsync(
+            null,
+            "The bot VRChat account `"+this.currentUserId+"` is missing the necessary permission `"+perms.getValue()+"`",
+            "Missing permissions",
+            () -> MiscUtils.AWTDesktop.browse(URI.create("https://vrchat.com/home/group/"+this.groupId+"/settings")),
+            null);
+    }
+    public String messageNeedPerms(GroupPermissions perms)
+    {
+        return String.format("The [bot VRChat account](<https://vrchat.com/home/user/%s>) is missing the [necessary permission `%s`](<https://vrchat.com/home/group/%s/settings>)", this.currentUserId, perms.getValue(), this.groupId);
     }
 
     public void save()

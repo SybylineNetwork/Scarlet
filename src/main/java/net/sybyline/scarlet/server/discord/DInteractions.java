@@ -81,7 +81,7 @@ public class DInteractions
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/Discord/DCmd");
 
-    public static final DefaultMemberPermissions DEFAULT_PERMISSIONS = DefaultMemberPermissions.enabledFor(Permission.MODERATE_MEMBERS);
+    public static final DefaultMemberPermissions DEFAULT_PERMISSIONS = DefaultMemberPermissions.enabledFor(Permission.USE_APPLICATION_COMMANDS);
 
     @Target(ElementType.PARAMETER)
     @Retention(RetentionPolicy.RUNTIME)

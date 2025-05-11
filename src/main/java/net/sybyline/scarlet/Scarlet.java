@@ -33,6 +33,7 @@ import com.google.gson.GsonBuilder;
 
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
+import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.User;
 
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
@@ -65,7 +66,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.11-rc10",
+        VERSION = "0.4.11-rc11",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -288,6 +289,10 @@ public class Scarlet implements Closeable
         {
             LOG.error("Failed to authenticate with VRChat", ex);
             return;
+        }
+        if (!this.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_audit_view))
+        {
+            this.vrc.modalNeedPerms(GroupPermissions.group_audit_view);
         }
         this.splash.splashSubtext("Checking for updates");
         this.checkUpdate();

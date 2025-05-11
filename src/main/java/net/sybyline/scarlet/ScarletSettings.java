@@ -52,6 +52,8 @@ public class ScarletSettings
         this.lastUpdateCheck = new RegistryOffsetDateTime("lastUpdateCheck");
         this.nextModSummary = new RegistryOffsetDateTime("nextModSummary");
         this.uiBounds = new RegistryRectangle("uiBounds");
+        this.heuristicKickCount = new FileValued<>("heuristicKickCount", Integer.class, 3);
+        this.heuristicPeriodDays = new FileValued<>("heuristicPeriodDays", Integer.class, 3);
     }
 
     public void setNamespace(String namespace)
@@ -68,6 +70,7 @@ public class ScarletSettings
     public final RegistryString lastRunVersion;
     public final RegistryOffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck, nextModSummary;
     public final RegistryRectangle uiBounds;
+    public final FileValued<Integer> heuristicKickCount, heuristicPeriodDays;
 
     public boolean checkHasVersionChangedSinceLastRun()
     {
@@ -98,6 +101,55 @@ public class ScarletSettings
     {
         this.lastRunVersion.set(Scarlet.VERSION);
         this.lastRunTime.set(OffsetDateTime.now(ZoneOffset.UTC));
+    }
+
+    public class FileValued<T>
+    {
+        FileValued(String name, Class<T> type, T ifNull)
+        {
+            this(name, type, () -> ifNull);
+        }
+        FileValued(String name, Class<T> type, Supplier<T> ifNull)
+        {
+            this.name = name;
+            this.type = type;
+            this.ifNull = ifNull != null ? ifNull : () -> null;
+            this.cached = null;
+        }
+        final String name;
+        final Class<T> type;
+        final Supplier<T> ifNull;
+        T cached;
+        public T getOrNull()
+        {
+            return this.get(false);
+        }
+        public T getOrSupply()
+        {
+            return this.get(true);
+        }
+        private T get(boolean orDefault)
+        {
+            T cached_ = this.cached;
+            if (cached_ == null)
+            {
+                cached_ = ScarletSettings.this.getObject(this.name, this.type);
+                this.cached = cached_;
+            }
+            if (cached_ == null && orDefault)
+            {
+                cached_ = this.ifNull.get();
+                this.cached = cached_;
+            }
+            return cached_;
+        }
+        public void set(T value_)
+        {
+            if (value_ == null)
+                return;
+            this.cached = value_;
+            ScarletSettings.this.setObject(this.name, this.type, value_);
+        }
     }
 
     public class RegistryStringValued<T>

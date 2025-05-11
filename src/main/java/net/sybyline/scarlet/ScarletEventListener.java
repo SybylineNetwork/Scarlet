@@ -334,6 +334,34 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         }
     }
 
+    @Override
+    public void log_playerSpawnPedestal(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String contentType, String contentId)
+    {
+        if (!preamble)
+        {
+            if (this.isInGroupInstance)
+            {
+                this.scarlet.discord.emitExtendedUserSpawnPedestal(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, contentType, contentId);
+                OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+                this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_PEDESTAL, odt, userId, userDisplayName, contentId, null);
+            }
+        }
+    }
+
+    @Override
+    public void log_playerSpawnSticker(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String stickerId)
+    {
+        if (!preamble)
+        {
+            if (this.isInGroupInstance)
+            {
+                this.scarlet.discord.emitExtendedUserSpawnSticker(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, stickerId);
+                OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+                this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_STICKER, odt, userId, userDisplayName, stickerId, null);
+            }
+        }
+    }
+
     // TTSService.Listener
 
     @Override

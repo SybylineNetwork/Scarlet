@@ -7,6 +7,11 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.11-rc11
+  - Added User Spawn Pedestal, User Spawn Sticker, and Suggested Moderation extended events
+  - Added autocomplete to VRChat User and VRChat World options for Discord commands
+  - Changed default Discord commands permissions to `USE_APPLICATION_COMMANDS`
+
 ## 0.4.11-rc10
   - Added ban/unban buttons to Vote-to-Kick log entries
   - Added snapshot repository to dependency downloader

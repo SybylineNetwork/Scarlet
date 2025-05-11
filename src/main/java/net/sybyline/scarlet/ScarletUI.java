@@ -621,10 +621,18 @@ public class ScarletUI implements AutoCloseable
     {
         return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
     }
+    public void confirmModalAsync(Component component, Object message, String title, Runnable then, Runnable otherwise)
+    {
+        this.scarlet.execModal.execute(() -> Optional.ofNullable(this.confirmModal(component, message, title) ? then : otherwise).ifPresent(Runnable::run));
+    }
 
     public boolean submitModal(Component component, Object message, String title)
     {
         return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION;
+    }
+    public void submitModalAsync(Component component, Object message, String title, Runnable then, Runnable otherwise)
+    {
+        this.scarlet.execModal.execute(() -> Optional.ofNullable(this.submitModal(component, message, title) ? then : otherwise).ifPresent(Runnable::run));
     }
 
     public void messageModalAsync(Component component, Object message, String title)
