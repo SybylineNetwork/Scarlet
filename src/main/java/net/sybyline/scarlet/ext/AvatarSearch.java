@@ -29,7 +29,7 @@ public interface AvatarSearch
     String
         URL_ROOT_AVATARRECOVERY = "https://api.avatarrecovery.com/Avatar/vrcx",
         URL_ROOT_AVTRDB = AvatarSearch_AvtrDB.API_ROOT+"/avatar/search/vrcx",
-        URL_ROOT_NEKOSUNEVR = AvatarSearch_VRCDS.API_ROOT+"/vrcx_search.php",
+        URL_ROOT_NEKOSUNEVR = AvatarSearch_VRCDS.API_ROOT+"/vrcx_search",
         URL_ROOT_VRCDB = "https://vrcx.vrcdb.com/avatars/Avatar/VRCX",
         URL_ROOT_WORLDBALANCER = AvatarSearch_WorldBalancer.API_ROOT+"/vrcx_search.php",
         URL_ROOTS[] =
