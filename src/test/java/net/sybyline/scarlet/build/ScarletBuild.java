@@ -127,6 +127,7 @@ public class ScarletBuild
             bat.append("").println();
             bat.append("setlocal enableextensions enabledelayedexpansion").println();
             bat.append("set \"SCARLET_VERSION=").append(Scarlet.VERSION).append("\"").println();
+            bat.append("title Scarlet !SCARLET_VERSION! - configuring").println();
             bat.append("set \"ORIGINAL_PATH=%PATH%\"").println();
             bat.append("if exist \"%CD%\\scarlet.version\" (").println();
             bat.append("    set /p SCARLET_VERSION=<%CD%\\scarlet.version").println();
@@ -182,7 +183,9 @@ public class ScarletBuild
             bat.append("        set \"JVM_OPTS=!JVM_OPTS! !LINE!\"").println();
             bat.append("    )").println();
             bat.append(")").println();
+            bat.append("title Scarlet !SCARLET_VERSION! - running").println();
             bat.append("java !JVM_OPTS! -jar scarlet-!SCARLET_VERSION!.jar").println();
+            bat.append("title Scarlet !SCARLET_VERSION! - stopped").println();
             bat.append("if %ERRORLEVEL% EQU 69 goto RUN").println();
             bat.append("if %ERRORLEVEL% EQU 70 goto UPDATE").println();
             bat.append("if %ERRORLEVEL% EQU 0 (").println();

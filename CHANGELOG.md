@@ -11,6 +11,7 @@
   - Added User Spawn Print extended event
   - Added Bundle ID to User Switch Avatar extended event (when available)
   - Added user age verification status to Instance UI
+  - Added title to runner
 
 ## 0.4.11-rc11
   - Added User Spawn Pedestal, User Spawn Sticker, and Suggested Moderation extended events
