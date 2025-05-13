@@ -51,6 +51,7 @@ import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.InstanceRegion;
 import io.github.vrchatapi.model.InstanceType;
 import io.github.vrchatapi.model.LimitedUserGroups;
+import io.github.vrchatapi.model.Print;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
@@ -104,10 +105,12 @@ import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
+import net.sybyline.scarlet.util.LRUMap;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.UniqueStrings;
+import net.sybyline.scarlet.util.VersionedFile;
 
 public class ScarletDiscordJDA implements ScarletDiscord
 {
@@ -269,12 +272,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
             datas.add(DPerms.generateCommand("scarlet-discord-permissions"));
             for (CommandData data : datas)
             {
-                if (cmds.removeIf($ -> {
+                if (!cmds.removeIf($ -> {
                     if (!Objects.equals(data.getType(), $.getType()))
                         return false;
                     if (!Objects.equals(data.getName(), $.getName()))
                         return false;
-                    this.jda.editCommandById($.getId()).queue($$ -> LOG.info("Edited "+$$.getType()+" command "+$$.getName()));
+                    this.jda.editCommandById($.getId()).apply(data).queue($$ -> LOG.info("Edited "+$$.getType()+" command "+$$.getName()));
                     return true;
                 }))
                 {
@@ -1580,7 +1583,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.condEmitEx(GroupAuditTypeEx.USER_AVATAR, false, false, location, (channelSf, guild, channel) ->
         {
-            return channel.sendMessageEmbeds(new EmbedBuilder()
+            EmbedBuilder builder = new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" switched avatars", "https://vrchat.com/home/user/"+userId)
                     .addField("User ID", "`"+userId+"`", false)
                     .addField("Location", "`"+location+"`", false)
@@ -1589,8 +1592,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setColor(GroupAuditTypeEx.USER_AVATAR.color)
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
-                    .build())
-                .complete();
+            ;
+            VersionedFile versionedFile = this.avatarName2Bundle.get(avatarDisplayName);
+            if (versionedFile != null)
+                return channel.sendMessageEmbeds(builder.addField("Bundle ID", "`"+versionedFile.id+"`", false).build()).complete();
+            Message message = channel.sendMessageEmbeds(builder.build()).complete();
+            List<AviSwitch> list = this.avatarName2Switches.get(avatarDisplayName);
+            if (list == null)
+                this.avatarName2Switches.put(avatarDisplayName, list = new ArrayList<>());
+            list.add(new AviSwitch(message, builder));
+            return message;
         });
     }
 
@@ -1658,6 +1669,81 @@ public class ScarletDiscordJDA implements ScarletDiscord
             .complete();
         });
     }
+
+    @Override
+    public void emitExtendedUserSpawnPrint(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String printId, Print print)
+    {
+        this.condEmitEx(GroupAuditTypeEx.SPAWN_PRINT, false, false, location, (channelSf, guild, channel) ->
+        {
+            String fileId = print.getFiles().getFileId(),
+                   image = print.getFiles().getImage();
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                .setTitle(MarkdownSanitizer.escape(displayName)+" spawned a print", "https://vrchat.com/home/user/"+userId)
+                .addField("User ID", "`"+userId+"`", false)
+                .addField("Location", "`"+location+"`", false)
+                .addField("Print ID", "`"+printId+"`", false)
+                .addField("File ID", "`"+fileId+"`", false)
+                .setImage(image != null ? image : ("https://api.vrchat.cloud/api/1/file/"+fileId+"/1/file"))
+                .setColor(GroupAuditTypeEx.SPAWN_PRINT.color)
+                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .build())
+            .complete();
+        });
+    }
+
+    private final LRUMap<String, VersionedFile> avatarName2Bundle = LRUMap.of();
+    private final LRUMap<String, List<AviSwitch>> avatarName2Switches = LRUMap.of();
+    class AviSwitch
+    {
+        AviSwitch(Message message, EmbedBuilder builder)
+        {
+            this.message = message;
+            this.builder = builder;
+        }
+        final Message message;
+        final EmbedBuilder builder;
+        void update(VersionedFile versionedFile)
+        {
+            try
+            {
+                this.message.editMessageEmbeds(this.builder.addField("Bundle ID", "`"+versionedFile.id+"`", false).build()).completeAfter(1_000L, TimeUnit.MILLISECONDS);
+            }
+            catch (RuntimeException rex)
+            {
+            }
+        }
+    }
+
+    @Override
+    public void tryEmitExtendedAvatarBundles(Scarlet scarlet, LocalDateTime timestamp, String location, String name, VersionedFile file)
+    {
+        this.avatarName2Bundle.put(name, file);
+        List<AviSwitch> aviSwitchs = this.avatarName2Switches.remove(name);
+        if (aviSwitchs != null)
+        {
+            this.scarlet.exec.execute(() -> aviSwitchs.forEach($ -> $.update(file)));
+        }
+    }
+
+//    @Override
+//    public void emitExtendedUserSpawnEmoji(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String emojiId)
+//    {
+//        this.condEmitEx(GroupAuditTypeEx.SPAWN_EMOJI, false, false, location, (channelSf, guild, channel) ->
+//        {
+//            return channel.sendMessageEmbeds(new EmbedBuilder()
+//                .setTitle(MarkdownSanitizer.escape(displayName)+" spawned an emoji", "https://vrchat.com/home/user/"+userId)
+//                .addField("User ID", "`"+userId+"`", false)
+//                .addField("Location", "`"+location+"`", false)
+//                .addField("Emoji ID", "`"+emojiId+"`", false)
+//                .setImage(!emojiId.startsWith("file_") ? null : ("https://api.vrchat.cloud/api/1/file/"+emojiId+"/1/file"))
+//                .setColor(GroupAuditTypeEx.SPAWN_EMOJI.color)
+//                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+//                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+//                .build())
+//            .complete();
+//        });
+//    }
 
     @Override
     public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, InstanceEmbedMessage instanceEmbedMessage)
@@ -1880,7 +1966,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         for (GroupAuditLogEntry entry : entries)
         {
             ScarletData.AuditEntryMetadata entryMeta = this.scarlet.data.auditEntryMetadata(entry.getId());
-            if (entryMeta == null || entryMeta.entryRedacted)
+            if (entryMeta == null || !entryMeta.entryRedacted)
             {
                 kicks++;
             }

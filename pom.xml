@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.11-rc11</version><!--scarlet-version-->
+  <version>0.4.11</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -42,7 +42,7 @@
     <dependency>
       <groupId>com.github.vrchatapi</groupId>
       <artifactId>vrchatapi-java</artifactId>
-      <version>1.19.1</version>
+      <version>1.19.2</version>
     </dependency>
     <dependency>
       <groupId>com.google.code.gson</groupId>

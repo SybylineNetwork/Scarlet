@@ -17,6 +17,8 @@ public enum GroupAuditTypeEx implements DEnum.DEnumString<GroupAuditTypeEx>
     VTK_START                   ("groupex.instance.vtk"                , "Vote-to-Kick Initiated"        , 0x00_FF7F00),
     SPAWN_PEDESTAL              ("groupex.instance.user.pedestal"      , "User Spawn Pedestal"           , 0x00_7F007F),
     SPAWN_STICKER               ("groupex.instance.user.sticker"       , "User Spawn Sticker"            , 0x00_7F007F),
+    SPAWN_PRINT                 ("groupex.instance.user.print"         , "User Spawn Print"              , 0x00_7F007F),
+//    SPAWN_EMOJI                 ("groupex.instance.user.emoji"         , "User Spawn Emoji"              , 0x00_7F007F),
     INSTANCE_MONITOR            ("groupex.instance.monitor"            , "Instance Monitor"              , 0x00_007F7F),
     MOD_SUMMARY                 ("groupex.periodic.mod_summary"        , "Moderation Summary"            , 0x00_7F7FFF),
     SUGGESTED_MODERATION        ("groupex.heuristic.mod"               , "Suggested Moderation"          , 0x00_FF007F),

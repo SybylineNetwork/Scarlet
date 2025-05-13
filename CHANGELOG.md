@@ -7,6 +7,11 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.11
+  - Added User Spawn Print extended event
+  - Added Bundle ID to User Switch Avatar extended event (when available)
+  - Added user age verification status to Instance UI
+
 ## 0.4.11-rc11
   - Added User Spawn Pedestal, User Spawn Sticker, and Suggested Moderation extended events
   - Added autocomplete to VRChat User and VRChat World options for Discord commands

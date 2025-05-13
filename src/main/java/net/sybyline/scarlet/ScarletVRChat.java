@@ -39,7 +39,9 @@ import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.ProgressResponseBody;
 import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
+import io.github.vrchatapi.api.FilesApi;
 import io.github.vrchatapi.api.GroupsApi;
+import io.github.vrchatapi.api.PrintsApi;
 import io.github.vrchatapi.api.SystemApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
@@ -56,8 +58,10 @@ import io.github.vrchatapi.model.Instance;
 import io.github.vrchatapi.model.LimitedUser;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.LimitedWorld;
+import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.OrderOption;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
+import io.github.vrchatapi.model.Print;
 import io.github.vrchatapi.model.SortOption;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
 import io.github.vrchatapi.model.TwoFactorEmailCode;
@@ -155,6 +159,8 @@ public class ScarletVRChat implements Closeable
         this.cachedGroups = new ScarletJsonCache<>("grp", Group.class);
         this.cachedUserGroups = new ScarletJsonCache<>("gmem", new TypeToken<List<LimitedUserGroups>>(){});
         this.cachedAvatars = new ScarletJsonCache<>("avtr", Avatar.class);
+        this.cachedPrints = new ScarletJsonCache<>("prnt", Print.class);
+        this.cachedModelFiles = new ScarletJsonCache<>("file", ModelFile.class);
     }
 
     final Scarlet scarlet;
@@ -170,6 +176,8 @@ public class ScarletVRChat implements Closeable
     final ScarletJsonCache<Group> cachedGroups;
     final ScarletJsonCache<List<LimitedUserGroups>> cachedUserGroups;
     final ScarletJsonCache<Avatar> cachedAvatars;
+    final ScarletJsonCache<Print> cachedPrints;
+    final ScarletJsonCache<ModelFile> cachedModelFiles;
     long localDriftMillis = 0L;
 
     public ApiClient getClient()
@@ -747,6 +755,65 @@ public class ScarletVRChat implements Closeable
             return null;
         }
     }
+
+    public Print getPrint(String printId)
+    {
+        return this.getPrint(printId, Long.MIN_VALUE);
+    }
+    public Print getPrint(String printId, long minEpoch)
+    {
+        Print print = this.cachedPrints.get(printId, minEpoch);
+        if (print != null)
+            return print;
+        if (this.cachedPrints.is404(printId))
+            return null;
+        PrintsApi prints = new PrintsApi(this.client);
+        try
+        {
+            print = prints.getPrint(printId);
+            this.cachedPrints.put(printId, print);
+            return print;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedPrints.add404(printId);
+            else
+                LOG.error("Error during get print: "+apiex.getMessage());
+            return null;
+        }
+    }
+
+    public ModelFile getModelFile(String fileId)
+    {
+        return this.getModelFile(fileId, Long.MIN_VALUE);
+    }
+    public ModelFile getModelFile(String fileId, long minEpoch)
+    {
+        ModelFile file = this.cachedModelFiles.get(fileId, minEpoch);
+        if (file != null)
+            return file;
+        if (this.cachedModelFiles.is404(fileId))
+            return null;
+        FilesApi files = new FilesApi(this.client);
+        try
+        {
+            file = files.getFile(fileId);
+            this.cachedModelFiles.put(fileId, file);
+            return file;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedModelFiles.add404(fileId);
+            else
+                LOG.error("Error during get file: "+apiex.getMessage());
+            return null;
+        }
+    }
+
     public Instance createInstanceEx(JsonObject createInstanceRequest) throws ApiException
     {
         Map<String, String> headers = new HashMap<>();

@@ -58,8 +58,8 @@ public class ScarletVRChatLogs implements Closeable
         
         void log_playerSpawnPedestal(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String contentType, String contentId);
         void log_playerSpawnSticker(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String stickerId);
-        
-//        void log_explicitTokenRequest(boolean preamble, LocalDateTime timestamp, String fileId, int fileVersion, String fileVariant);
+
+        void log_apiRequest(boolean preamble, LocalDateTime timestamp, int index, String method, String url);
         
     }
 
@@ -112,19 +112,14 @@ public class ScarletVRChatLogs implements Closeable
                 this.listener.log_playerSwitchAvatar(preamble, timestamp, displayName, avatarDisplayName);
             }
         }
-//        else if (text.startsWith("[ATM] "))
-//        {
-//            if (text.startsWith("Explicit token request for '", 6))
-//            {
-//                int colon0 = text.indexOf(':', 34),
-//                    colon1 = text.indexOf(':', colon0 + 1),
-//                    endquote = text.indexOf('\'', colon1);
-//                String fileId = text.substring(34, colon0);
-//                int fileVersion = MiscUtils.parseIntElse(text.substring(colon0 + 1, colon1), 1);
-//                String fileVariant = text.substring(colon1 + 1, endquote);
-//                this.listener.log_explicitTokenRequest(preamble, timestamp, fileId, fileVersion, fileVariant);
-//            }
-//        }
+        else if (text.startsWith("[API] [") && (cidx = text.indexOf("] Sending ")) != -1)
+        {
+            int sep1 = text.indexOf(" request to ", cidx + 10),
+                idx = MiscUtils.parseIntElse(text.substring(7, cidx), -1);
+            String method = text.substring(cidx + 10, sep1).intern(), // intern because is constantly one of a few short strings
+                   url = text.substring(sep1 + 12);
+            this.listener.log_apiRequest(preamble, timestamp, idx, method, url);
+        }
         else if (text.startsWith("[ModerationManager] "))
         {
             if (text.startsWith("A vote kick has been initiated against ", 20) && text.endsWith(", do you agree?"))

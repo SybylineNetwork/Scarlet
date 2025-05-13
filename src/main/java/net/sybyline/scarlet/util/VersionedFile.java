@@ -17,7 +17,7 @@ public class VersionedFile
         Matcher matcher = pattern.matcher(string);
         if (!matcher.find())
             return null;
-        return new VersionedFile(matcher.group(), matcher.group("id"), Integer.parseInt(matcher.group("version"), 1), matcher.group("qualifier"));
+        return new VersionedFile(matcher.group(), matcher.group("id"), MiscUtils.parseIntElse(matcher.group("version"), 1), matcher.group("qualifier"));
     }
 
     public static VersionedFile of(String id)
@@ -88,19 +88,21 @@ public class VersionedFile
             ;
     }
 
+    public String toString(char delimiter)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append(this.id).append(delimiter).append(this.version);
+        if (!this.qualifier.isEmpty())
+            sb.append(delimiter).append(this.qualifier);
+        return sb.toString();
+    }
+
     @Override
     public String toString()
     {
         String toString = this.toString;
         if (toString == null)
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.append(this.id).append('/').append(this.version);
-            if (!this.qualifier.isEmpty())
-                sb.append('/').append(this.qualifier);
-            toString = sb.toString();
-            this.toString = toString;
-        }
+            this.toString = toString = this.toString('/');
         return toString;
     }
 

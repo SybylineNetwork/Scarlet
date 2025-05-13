@@ -39,6 +39,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JPopupMenu;
@@ -91,6 +92,11 @@ public class PropsTable<E> extends JTable
     {
         protected PropsInfo(String name, boolean editable, boolean enabled, Class<P> type, Function<E, P> getFrom)
         {
+            if (type.isEnum())
+            {
+                @SuppressWarnings({"unchecked", "rawtypes", "unused"})
+                boolean editorExisted = PropsTable.this.createDefaultEnumEditor((Class)type, false);
+            }
             this.name = name;
             this.editable = editable;
             this.type = Primitives.wrap(type);
@@ -308,6 +314,8 @@ public class PropsTable<E> extends JTable
         this.defaultRenderersByColumnClass.put(Period.class, (UIDefaults.LazyValue) t -> new PropsTemporalAmountRenderer());
         this.defaultRenderersByColumnClass.put(Duration.class, (UIDefaults.LazyValue) t -> new PropsTemporalAmountRenderer());
         this.defaultRenderersByColumnClass.put(TemporalAmount.class, (UIDefaults.LazyValue) t -> new PropsTemporalAmountRenderer());
+        // Enum
+        this.defaultRenderersByColumnClass.put(Enum.class, (UIDefaults.LazyValue) t -> new PropsObjectRenderer());
     }
     private static final Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
     class PropsObjectRenderer extends PropsTableCellRenderer.PropsUIResource
@@ -637,6 +645,18 @@ public class PropsTable<E> extends JTable
         super.createDefaultEditors();
         this.defaultEditorsByColumnClass.put(Action.class, (UIDefaults.LazyValue) t -> new ActionEditor());
     }
+    public <EE extends Enum<EE>> boolean createDefaultEnumEditor(Class<EE> type, boolean replace)
+    {
+        return this.createDefaultEnumEditor(type, replace, type.getEnumConstants());
+    }
+    @SuppressWarnings("unchecked")
+    public <EE extends Enum<EE>> boolean createDefaultEnumEditor(Class<EE> type, boolean replace, EE... permittedValues)
+    {
+        UIDefaults.LazyValue lazyValue = t -> new EnumEditor<>(type, permittedValues);
+        return null == (replace
+            ? this.defaultEditorsByColumnClass.put(type, lazyValue)
+            : this.defaultEditorsByColumnClass.putIfAbsent(type, lazyValue));
+    }
     class ActionEditor extends PropsTableCellEditor
     {
         private static final long serialVersionUID = -8640097463662002706L;
@@ -645,6 +665,14 @@ public class PropsTable<E> extends JTable
             super(new JButton());
             JButton button = (JButton)this.getComponent();
             button.setHorizontalAlignment(JButton.CENTER);
+        }
+    }
+    class EnumEditor<EE extends Enum<EE>> extends PropsTableCellEditor
+    {
+        private static final long serialVersionUID = -8640097463662002706L;
+        EnumEditor(Class<EE> type, EE[] values)
+        {
+            super(new JComboBox<EE>(values));
         }
     }
 

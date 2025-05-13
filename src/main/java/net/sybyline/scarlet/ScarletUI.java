@@ -73,6 +73,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
+import io.github.vrchatapi.model.AgeVerificationStatus;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.User;
 
@@ -180,6 +181,7 @@ public class ScarletUI implements AutoCloseable
             player.advisory = advisory;
             player.text_color = text_color;
             player.priority = priority;
+            player.ageVerificationStatus = user.getAgeVerificationStatus();
             if (initialPreamble)
             {
                 ; // noop
@@ -202,6 +204,7 @@ public class ScarletUI implements AutoCloseable
             player.advisory = advisory;
             player.text_color = text_color;
             player.priority = priority;
+            player.ageVerificationStatus = user.getAgeVerificationStatus();
             this.connectedPlayers.put(id, player);
             if (initialPreamble)
             {
@@ -403,6 +406,7 @@ public class ScarletUI implements AutoCloseable
         };
         Color text_color;
         int priority;
+        AgeVerificationStatus ageVerificationStatus;
     }
     static final Comparator<ConnectedPlayer> COMPARE = Comparator
         .<ConnectedPlayer>comparingInt($ -> 0) // dummy
@@ -435,6 +439,7 @@ public class ScarletUI implements AutoCloseable
             this.propstable.addProperty("Joined", false, true, LocalDateTime.class, $ -> $.joined);
             this.propstable.addProperty("Left", false, true, LocalDateTime.class, $ -> $.left);
             this.propstable.addProperty("Advisory", false, true, String.class, $ -> $.advisory);
+            this.propstable.addProperty("AgeVer", false, true, AgeVerificationStatus.class, $ -> $.ageVerificationStatus);
             this.propstable.addProperty("Profile", true, true, Action.class, $ -> $.profile);
             this.propstable.addProperty("Ban", true, true, Action.class, $ -> $.ban);
             this.propstable.addProperty("Unban", true, false, Action.class, $ -> $.unban);

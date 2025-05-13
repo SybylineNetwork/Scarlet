@@ -19,11 +19,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import io.github.vrchatapi.model.LimitedUserGroups;
+import io.github.vrchatapi.model.ModelFile;
+import io.github.vrchatapi.model.Print;
 import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.TTSService;
+import net.sybyline.scarlet.util.VersionedFile;
 
 public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSService.Listener
 {
@@ -358,6 +361,60 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 this.scarlet.discord.emitExtendedUserSpawnSticker(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, stickerId);
                 OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
                 this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_STICKER, odt, userId, userDisplayName, stickerId, null);
+            }
+        }
+    }
+
+    @Override
+    public void log_apiRequest(boolean preamble, LocalDateTime timestamp, int index, String method, String url)
+    {
+        int pathIdx = url.indexOf("/api/1/");
+        pathIdx = pathIdx < 0 ? 0 : (pathIdx + 7);
+        if (!preamble)
+        {
+            if (this.isInGroupInstance)
+            {
+                switch (method.toLowerCase())
+                {
+                case "get": {
+                    if (url.startsWith("prints/prnt_", pathIdx))
+                    {
+                        String printId = url.substring(pathIdx + 7);
+                        Print print = this.scarlet.vrc.getPrint(printId, Long.MAX_VALUE);
+                        if (print != null)
+                        {
+                            User user = this.scarlet.vrc.getUser(print.getOwnerId());
+                            String ownerDisplayName = user == null ? print.getOwnerId() : user.getDisplayName();
+                            this.scarlet.discord.emitExtendedUserSpawnPrint(this.scarlet, timestamp, this.clientLocation, print.getOwnerId(), ownerDisplayName, printId, print);
+                            OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+                            this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_PRINT, odt, print.getOwnerId(), ownerDisplayName, printId, null);
+                        }
+                    }
+                } break;
+                }
+            }
+        }
+        // always
+        if (this.isInGroupInstance)
+        {
+            switch (method.toLowerCase())
+            {
+            case "get": {
+                if (url.startsWith("analysis/file_", pathIdx))
+                {
+                    VersionedFile versionedFile = VersionedFile.parse(url.substring(pathIdx + 9));
+                    if (versionedFile != null)
+                    {
+                        ModelFile file = this.scarlet.vrc.getModelFile(versionedFile.id);
+                        int cidx;
+                        if (file.getName().startsWith("Avatar - ") && (cidx = file.getName().lastIndexOf(" - Asset bundle - ")) != -1)
+                        {
+                            String name = file.getName().substring(9, cidx);
+                            this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, versionedFile);
+                        }
+                    }
+                }
+            } break;
             }
         }
     }
