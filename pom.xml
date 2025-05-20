@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.11</version><!--scarlet-version-->
+  <version>0.4.12-rc1</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -32,6 +32,7 @@
     <selenium.version>4.31.0</selenium.version>
     <jcef.version>132.3.1</jcef.version>
     <nanohttpd.version>2.3.2-SNAPSHOT</nanohttpd.version>
+    <jna.version>4.4.0</jna.version>
   </properties>
   <dependencies>
     <dependency>
@@ -68,6 +69,16 @@
       <groupId>com.formdev</groupId>
       <artifactId>flatlaf</artifactId>
       <version>3.5.4</version>
+    </dependency>
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna</artifactId>
+      <version>${jna.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>net.java.dev.jna</groupId>
+      <artifactId>jna-platform</artifactId>
+      <version>${jna.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.api-client</groupId>

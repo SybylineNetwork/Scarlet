@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -147,6 +148,12 @@ public class ScarletDiscordCommands
             return;
         }
         event.replyChoices(lworlds.stream().map($ -> new Command.Choice($.getId()+": "+$.getName()+" by "+$.getAuthorName(), $.getId())).limit(25L).toArray(Command.Choice[]::new)).queue();
+    }
+    public final SlashOption<io.github.vrchatapi.model.GroupRole> _vrchatRoleOpt = SlashOption.ofString("vrchat-role", "The VRChat role id (grol_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", false, null, this::_vrchatRole, true, this::_vrchatRole);
+    public final SlashOption<io.github.vrchatapi.model.GroupRole> _vrchatRole = SlashOption.ofString("vrchat-role", "The VRChat role id (grol_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, this::_vrchatRole, true, this::_vrchatRole);
+    io.github.vrchatapi.model.GroupRole _vrchatRole(String id) { return this.discord.scarlet.vrc.group.getRoles().stream().filter($ -> Objects.equals(id, $.getId())).findFirst().orElse(null); }
+    void _vrchatRole(CommandAutoCompleteInteractionEvent event) {
+        DInteractions.SlashOptionsChoicesUnsanitized.autocomplete(event, ScarletDiscordCommands.this.discord.scarlet.vrc.group.getRoles().stream().map($ -> new Command.Choice($.getName(), $.getId())).toArray(Command.Choice[]::new), false);
     }
     public final SlashOption<GroupAuditType> _auditEventType = SlashOption.ofEnum("audit-event-type", "The VRChat Group Audit Log event type", true, GroupAuditType.class);
     public final SlashOption<GroupAuditTypeEx> _auditExEventType = SlashOption.ofEnum("audit-ex-event-type", "The extended audit event type", true, GroupAuditTypeEx.class);
@@ -780,15 +787,15 @@ public class ScarletDiscordCommands
         }
         @SlashCmd("add")
         @Desc("Adds a user to the staff list")
-        public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("discord-user") Member discordUser)
+        public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("discord-user") Member discordUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
-            this._add(event, hook, vrchatUser, discordUser);
+            this._add(event, hook, vrchatUser, discordUser, vrchatRoleOpt);
         }
         @SlashCmd("delete")
         @Desc("Removes a user from the staff list")
-        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser)
+        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
-            this._remove(event, hook, vrchatUser);
+            this._remove(event, hook, vrchatUser, vrchatRoleOpt);
         }
     }
 
@@ -848,7 +855,7 @@ public class ScarletDiscordCommands
             ;
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
         }
-        protected void _add(SlashCommandInteractionEvent event, InteractionHook hook, io.github.vrchatapi.model.User vrchatUser, Member discordUser)
+        protected void _add(SlashCommandInteractionEvent event, InteractionHook hook, io.github.vrchatapi.model.User vrchatUser, Member discordUser, io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
             String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
             if (vrchatUser == null)
@@ -867,13 +874,30 @@ public class ScarletDiscordCommands
             if (!this._addId(vrcId))
             {
                 hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already on the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
-                return;
+            }
+            else
+            {
+                LOG.info(String.format("Adding VRChat user %s (%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId));
+                hook.sendMessageFormat("Adding VRChat user [%s](https://vrchat.com/home/user/%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
             }
             
-            LOG.info(String.format("Adding VRChat user %s (%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId));
-            hook.sendMessageFormat("Adding VRChat user [%s](https://vrchat.com/home/user/%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+            if (vrchatRoleOpt == null)
+                return;
+            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId);
+            if (glm != null)
+            {
+                List<String> roleIds = glm.getRoleIds();
+                if (roleIds != null && roleIds.contains(vrchatRoleOpt.getId()))
+                {
+                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already has the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrcId, vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId()).setEphemeral(true).queue();
+                    return;
+                }
+            }
+            
+            ScarletDiscordCommands.this.discord.scarlet.vrc.addGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId, vrchatRoleOpt.getId());
+            hook.sendMessageFormat("Adding the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) to [%s](https://vrchat.com/home/user/%s)", vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId(), vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
         }
-        protected void _remove(SlashCommandInteractionEvent event, InteractionHook hook, io.github.vrchatapi.model.User vrchatUser)
+        protected void _remove(SlashCommandInteractionEvent event, InteractionHook hook, io.github.vrchatapi.model.User vrchatUser, io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
             String vrcId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
             String prefix = vrchatUser != null ? "" : ("No VRChat user found with id %s"+vrcId+"\n");
@@ -882,11 +906,28 @@ public class ScarletDiscordCommands
             if (!this._removeId(vrcId))
             {
                 hook.sendMessageFormat("%sVRChat user [%s](https://vrchat.com/home/user/%s) is not on the "+this._infoName()+" list", prefix, displayName, vrcId).setEphemeral(true).queue();
+            }
+            else
+            {
+                LOG.info(String.format("Removing VRChat user %s (%s) from the "+this._infoName()+" list", displayName, vrcId));
+                hook.sendMessageFormat("Removing VRChat user [%s](https://vrchat.com/home/user/%s) from the "+this._infoName()+" list", displayName, vrcId).setEphemeral(true).queue();
+            }
+
+            if (vrchatRoleOpt == null)
                 return;
+            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId);
+            if (glm != null)
+            {
+                List<String> roleIds = glm.getRoleIds();
+                if (roleIds != null && !roleIds.contains(vrchatRoleOpt.getId()))
+                {
+                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already lacks the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrcId, vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId()).setEphemeral(true).queue();
+                    return;
+                }
             }
             
-            LOG.info(String.format("Removing VRChat user %s (%s) from the "+this._infoName()+" list", displayName, vrcId));
-            hook.sendMessageFormat("Removing VRChat user [%s](https://vrchat.com/home/user/%s) from the "+this._infoName()+" list", displayName, vrcId).setEphemeral(true).queue();
+            ScarletDiscordCommands.this.discord.scarlet.vrc.removeGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId, vrchatRoleOpt.getId());
+            hook.sendMessageFormat("Removing the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) from [%s](https://vrchat.com/home/user/%s)", vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId(), vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
         }
     }
 
@@ -925,15 +966,15 @@ public class ScarletDiscordCommands
         }
         @SlashCmd("add")
         @Desc("Adds a user to the secret staff list")
-        public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("discord-user") Member discordUser)
+        public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("discord-user") Member discordUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
-            this._add(event, hook, vrchatUser, discordUser);
+            this._add(event, hook, vrchatUser, discordUser, vrchatRoleOpt);
         }
         @SlashCmd("delete")
         @Desc("Removes a user from the secret staff list")
-        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser)
+        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
-            this._remove(event, hook, vrchatUser);
+            this._remove(event, hook, vrchatUser, vrchatRoleOpt);
         }
     }
 
@@ -1228,6 +1269,42 @@ public class ScarletDiscordCommands
             LOG.info(String.format("%s (%s) closed an instance: %s", vrcActor.getDisplayName(), vrcActor.getId(), instance.getId()));
             hook.sendMessageFormat("Closed instance `%s`", instance.getId()).setEphemeral(true).queue();
         }
+        @SlashCmd("add-role")
+        @Desc("Adds a VRChat Group Role")
+        public void addRole(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("vrchat-role") io.github.vrchatapi.model.GroupRole vrchatRole) throws Exception
+        {
+            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId());
+            if (glm != null)
+            {
+                List<String> roleIds = glm.getRoleIds();
+                if (roleIds != null && roleIds.contains(vrchatRole.getId()))
+                {
+                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already has the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrchatUser.getId(), vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId()).setEphemeral(true).queue();
+                    return;
+                }
+            }
+            
+            ScarletDiscordCommands.this.discord.scarlet.vrc.addGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId(), vrchatRole.getId());
+            hook.sendMessageFormat("Adding the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) to [%s](https://vrchat.com/home/user/%s)", vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId(), vrchatUser.getDisplayName(), vrchatUser.getId()).setEphemeral(true).queue();
+        }
+        @SlashCmd("remove-role")
+        @Desc("Removes a VRChat Group Role")
+        public void removeRole(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("vrchat-role") io.github.vrchatapi.model.GroupRole vrchatRole) throws Exception
+        {
+            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId());
+            if (glm != null)
+            {
+                List<String> roleIds = glm.getRoleIds();
+                if (roleIds != null && !roleIds.contains(vrchatRole.getId()))
+                {
+                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already lacks the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrchatUser.getId(), vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId()).setEphemeral(true).queue();
+                    return;
+                }
+            }
+            
+            ScarletDiscordCommands.this.discord.scarlet.vrc.removeGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId(), vrchatRole.getId());
+            hook.sendMessageFormat("Removing the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) from [%s](https://vrchat.com/home/user/%s)", vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId(), vrchatUser.getDisplayName(), vrchatUser.getId()).setEphemeral(true).queue();
+        }
     }
 
     // discord-user-info
@@ -1323,7 +1400,20 @@ public class ScarletDiscordCommands
         {
             sb.append("\n`").append(entry.getId()).append("`").append(" <t:").append(Long.toUnsignedString(entry.getCreatedAt().toEpochSecond())).append(":f>: ");
             ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata(entry.getId());
-            if (auditEntryMeta != null && auditEntryMeta.hasMessage())
+            if (this.discord.shouldRedact(entry.getActorId(), event.getMember().getId()))
+            {
+                String entryDescription = entry.getDescription();
+                if (entryDescription.contains(entry.getActorDisplayName()))
+                {
+                    entryDescription = entryDescription.replace(entry.getActorDisplayName(), this.discord.scarlet.vrc.currentUser.getDisplayName());
+                }
+                else
+                {
+                    entryDescription = String.format("User %s was banned by %s.", vrchatUser.getDisplayName(), this.discord.scarlet.vrc.currentUser.getDisplayName());
+                }
+                sb.append(entryDescription);
+            }
+            else if (auditEntryMeta != null && auditEntryMeta.hasMessage())
                 sb.append("[").append(entry.getDescription()).append("](").append(auditEntryMeta.getMessageUrl()).append(")");
             else
                 sb.append(entry.getDescription());
@@ -1384,6 +1474,37 @@ public class ScarletDiscordCommands
         this.discord.interactions.new Pagination(event.getId(), sb).queue(hook);
     }
 
+    // actor-moderation-summary
+
+    @SlashCmd("actor-moderation-summary")
+    @Desc("Generates a summary of certain moderation actions by a specific user")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public void actorModerationSummary(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser)
+    {
+        String vrcId = vrchatUser.getId();
+        OffsetDateTime to = OffsetDateTime.now(),
+                       from = to.minusYears(10L);
+        
+        Integer kicks = this.discord.scarlet.vrc.auditQueryCount(from, to, vrcId, "group.instance.kick", null),
+                warns = this.discord.scarlet.vrc.auditQueryCount(from, to, vrcId, "group.instance.warn", null),
+                bans = this.discord.scarlet.vrc.auditQueryCount(from, to, vrcId, "group.user.ban", null);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("VRChat audit actor summary for [").append(vrchatUser.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
+        
+        ScarletData.UserMetadata userMeta = this.discord.scarlet.data.userMetadata(vrcId);
+        if (userMeta != null && userMeta.userSnowflake != null)
+        {
+            sb.append("\n### Linked Discord id:\n`").append(userMeta.userSnowflake).append("`");
+        }
+        
+        sb.append("\nKicks: ").append(kicks == null ? "??? (query failed)" : kicks.toString())
+            .append("\nWarns: ").append(warns == null ? "??? (query failed)" : warns.toString())
+            .append("\nBans: ").append(bans == null ? "??? (query failed)" : bans.toString());
+        
+        event.reply(sb.toString()).setEphemeral(true).queue();
+    }
+
     // moderation-summary
 
     @SlashCmd("moderation-summary")
@@ -1408,6 +1529,50 @@ public class ScarletDiscordCommands
                 Button.primary("import-watched-groups:"+message.getId(), "Import watched groups"))
             .setEphemeral(true)
             .queue();
+    }
+
+    // fix-audit-thread
+
+    @MsgCmd("fix-audit-thread")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public void fixAuditThread(MessageContextInteractionEvent event)
+    {
+        Message message = event.getTarget();
+        String auditEntryId = message
+            .getEmbeds()
+            .stream()
+            .map(MessageEmbed::getFooter)
+            .filter(Objects::nonNull)
+            .map(MessageEmbed.Footer::getText)
+            .map(VrcIds.id_groupaudit::matcher)
+            .filter(Matcher::find)
+            .map(Matcher::group)
+            .findFirst()
+            .orElse(null)
+            ;
+        if (auditEntryId == null)
+        {
+            event.reply("Message does not appear to be an audit entry")
+                .setEphemeral(true)
+                .queue($ -> $.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+            return;
+        }
+        
+        ScarletData.AuditEntryMetadata entryMeta = this.discord.scarlet.data.auditEntryMetadata(auditEntryId);
+        if (entryMeta == null)
+        {
+            event.replyFormat("Failed to find data for entry `%s`", auditEntryId)
+                .setEphemeral(true)
+                .queue($ -> $.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+            return;
+        }
+        
+        String actorId = entryMeta.hasAuxActor() ? entryMeta.auxActorId : entryMeta.entry.getActorId();
+        
+        event.replyFormat("Attempting to fix entry `%s`", auditEntryId)
+            .setEphemeral(true)
+            .queue($ -> $.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+        this.discord.scarlet.exec.execute(() -> this.discord.emitUserModeration_thread(this.discord.scarlet, entryMeta, actorId, message));
     }
 
     // config-info

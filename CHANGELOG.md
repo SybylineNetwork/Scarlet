@@ -7,6 +7,14 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12-rc1
+  - Added setting to launch a new VRChat Client instance into newly created group instances
+  - Added option to assign/remove a VRChat Group Role when adding/removing staff from lists
+  - Added Discord subcommands `add-role` and `remove-role` to `vrchat-group`
+  - Added Discord message command `fix-audit-thread` to be used when moderation event messages fail to populate
+  - Changed Discord command `query-target-history` to redact secret staff names in event description
+  - Fixed typo in event log messages description header
+
 ## 0.4.11
   - Added User Spawn Print extended event
   - Added Bundle ID to User Switch Avatar extended event (when available)

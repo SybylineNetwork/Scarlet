@@ -47,6 +47,7 @@ import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
+import io.github.vrchatapi.model.CurrentUser;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
@@ -152,6 +153,7 @@ public class ScarletVRChat implements Closeable
         this.groupOwnerId = null;
         this.group = null;
         this.groupLimitedMember = null;
+        this.currentUser = null;
         this.currentUserId = null;
         scarlet.settings.setNamespace(this.groupId);
         this.cachedUsers = new ScarletJsonCache<>("usr", User.class);
@@ -170,6 +172,7 @@ public class ScarletVRChat implements Closeable
     String groupOwnerId;
     Group group;
     GroupLimitedMember groupLimitedMember;
+    CurrentUser currentUser;
     String currentUserId;
     final ScarletJsonCache<User> cachedUsers;
     final ScarletJsonCache<World> cachedWorlds;
@@ -234,7 +237,7 @@ public class ScarletVRChat implements Closeable
                     LOG.info("Logged in (cached-verified)");
                     try
                     {
-                        this.currentUserId = auth.getCurrentUser().getId();
+                        this.currentUserId = (this.currentUser = auth.getCurrentUser()).getId();
                     }
                     catch (ApiException apiex)
                     {
@@ -258,7 +261,7 @@ public class ScarletVRChat implements Closeable
                 if (data.has("id"))
                 {
                     LOG.info("Logged in (cached)");
-                    this.currentUserId = data.get("id").getAsString();
+                    this.currentUserId = (this.currentUser = JSON.getGson().fromJson(data, CurrentUser.class)).getId();
                     return;
                 }
             }
@@ -273,7 +276,7 @@ public class ScarletVRChat implements Closeable
                     if (data.has("id"))
                     {
                         LOG.info("Logged in (credentials)");
-                        this.currentUserId = data.get("id").getAsString();
+                        this.currentUserId = (this.currentUser = JSON.getGson().fromJson(data, CurrentUser.class)).getId();
                         return;
                     }
                 }
@@ -358,7 +361,7 @@ public class ScarletVRChat implements Closeable
 
             try
             {
-                this.currentUserId = auth.getCurrentUser().getId();
+                this.currentUserId = (this.currentUser = auth.getCurrentUser()).getId();
             }
             catch (ApiException apiex)
             {
@@ -448,6 +451,20 @@ public class ScarletVRChat implements Closeable
             audits.addAll(pgalel.getResults());
             audits.sort(OLDEST_TO_NEWEST);
             return audits;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during audit query: "+apiex.getMessage());
+            return null;
+        }
+    }
+    public Integer auditQueryCount(OffsetDateTime from, OffsetDateTime to, String actorIds, String eventTypes, String targetIds)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            return groups.getGroupAuditLogs(this.groupId, 0, 0, from, to, actorIds, eventTypes, targetIds).getTotalCount();
         }
         catch (ApiException apiex)
         {
@@ -652,6 +669,34 @@ public class ScarletVRChat implements Closeable
         try
         {
             return groups.updateGroupMember(groupId, targetUserId, new UpdateGroupMemberRequest().managerNotes(managerNotes));
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error updating group member notes: "+apiex.getMessage());
+            return null;
+        }
+    }
+    public List<String> addGroupRole(String groupId, String targetUserId, String groupRoleId)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            return groups.addGroupMemberRole(groupId, targetUserId, groupRoleId);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error updating group member notes: "+apiex.getMessage());
+            return null;
+        }
+    }
+    public List<String> removeGroupRole(String groupId, String targetUserId, String groupRoleId)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            return groups.removeGroupMemberRole(groupId, targetUserId, groupRoleId);
         }
         catch (ApiException apiex)
         {

@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
@@ -813,6 +815,8 @@ public class ScarletData
         
         public String parentEventId;
         
+        public JsonObject auxData = null;
+        
         public JsonObject snapshotTargetUser = null;
         public JsonArray snapshotTargetUserGroups = null;
         public JsonObject snapshotTargetUserRepresentedGroup = null;
@@ -868,6 +872,23 @@ public class ScarletData
         { Gson gson = JSON.getGson(); return gson.fromJson(gson.toJsonTree(this.entry.getData()), type); }
         public <T> T getData(TypeToken<T> type)
         { Gson gson = JSON.getGson(); return gson.fromJson(gson.toJsonTree(this.entry.getData()), type); }
+        
+        public JsonElement getAuxData(String name)
+        { JsonObject auxData = this.auxData; return auxData == null ? null : auxData.get(name); }
+        public <T> T getAuxData(String name, Function<JsonElement, T> func)
+        { JsonElement auxDataElement = this.getAuxData(name); return auxDataElement == null ? null : func.apply(auxDataElement); }
+        JsonObject setAuxData()
+        { JsonObject auxData = this.auxData; if (auxData == null) this.auxData = auxData = new JsonObject(); return auxData; }
+        public void setAuxData(String name, Boolean value)
+        { this.setAuxData().addProperty(name, value); }
+        public void setAuxData(String name, Character value)
+        { this.setAuxData().addProperty(name, value); }
+        public void setAuxData(String name, Number value)
+        { this.setAuxData().addProperty(name, value); }
+        public void setAuxData(String name, String value)
+        { this.setAuxData().addProperty(name, value); }
+        public void setAuxData(String name, JsonElement value)
+        { this.setAuxData().add(name, value); }
     }
     public void linkIdToSnowflake(String userId, String userSnowflake)
     {

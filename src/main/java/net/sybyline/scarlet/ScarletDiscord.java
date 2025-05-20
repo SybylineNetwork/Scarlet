@@ -140,7 +140,7 @@ public interface ScarletDiscord extends Closeable
         }
     }
 
-    public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent, ScarletData.AuditEntryMetadata parentEntryMeta, boolean reactiveKickFromBan);
+    public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User actor, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent, ScarletData.AuditEntryMetadata parentEntryMeta, boolean reactiveKickFromBan);
     public default void processUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta)
     {
         boolean isSecretStaff = scarlet.secretStaffList.isSecretStaffId(entryMeta.entry.getActorId())
@@ -160,7 +160,8 @@ public interface ScarletDiscord extends Closeable
         
         ScarletData.UserMetadata actorMeta = scarlet.data.userMetadata(actorId),
                                  targetMeta = scarlet.data.userMetadata(targetId);
-        User target = scarlet.vrc.getUser(targetId);
+        User actor = scarlet.vrc.getUser(actorId),
+             target = scarlet.vrc.getUser(targetId);
         
         if (targetMeta == null)
             targetMeta = new ScarletData.UserMetadata();
@@ -291,7 +292,7 @@ public interface ScarletDiscord extends Closeable
                 reactiveKickFromBan = true;
             }
         }
-        this.emitUserModeration(scarlet, entryMeta, target, actorMeta, targetMeta, history, recent, parentEntryMeta, reactiveKickFromBan);
+        this.emitUserModeration(scarlet, entryMeta, actor, target, actorMeta, targetMeta, history, recent, parentEntryMeta, reactiveKickFromBan);
     }
 
     public void emitInstanceCreate(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, String location);

@@ -328,7 +328,7 @@ public class ScarletDiscordUI
             }
             if (auditEntryMeta.entryDescription != null && !auditEntryMeta.entryDescription.trim().isEmpty())
             {
-                content = content + "\n### Descripton:\n" + auditEntryMeta.entryDescription;
+                content = content + "\n### Description:\n" + auditEntryMeta.entryDescription;
             }
             channel.editMessageById(auditEntryMeta.auxMessageSnowflake, content).queue();
         }
@@ -682,6 +682,7 @@ public class ScarletDiscordUI
         }
         
         String reportSubject = targetDisplayName;
+        Long targetJoined = parts.length < 3 ? auditEntryMeta.getAuxData("targetJoined", JsonElement::getAsLong) : Long.parseUnsignedLong(parts[2]);
         
         String location = auditEntryMeta == null ? null : auditEntryMeta.getData("location");
         
@@ -691,7 +692,7 @@ public class ScarletDiscordUI
             .actor(this.discord.scarlet.vrc, actorUserId, actorDisplayName)
             .target(this.discord.scarlet.vrc, targetUserId, targetDisplayName)
             .targetEx(
-                parts.length < 3 ? null : OffsetDateTime.ofInstant(Instant.ofEpochSecond(Long.parseUnsignedLong(parts[2])), ZoneOffset.UTC).format(ScarletVRChatReportTemplate.DTF),
+                targetJoined == null ? null : OffsetDateTime.ofInstant(Instant.ofEpochSecond(targetJoined.longValue()), ZoneOffset.UTC).format(ScarletVRChatReportTemplate.DTF),
                 auditEntryMeta == null ? null : auditEntryMeta.entry.getCreatedAt().format(ScarletVRChatReportTemplate.DTF)
             )
             .audit(

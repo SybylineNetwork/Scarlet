@@ -299,6 +299,9 @@ General settings for Scarlet:
     // Whether to issue a ping to the Discord user whose associated VRChat user issues a User Unban
     "discord_ping_user_unban": false,
     
+    // Whether to launch a new VRChat Client instance on an Instance Create
+    "vrchat_client_launch_on_instance_create": false,
+    
     // Whether evidence submission is enabled
     "evidence_enabled": false
 }

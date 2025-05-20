@@ -103,6 +103,7 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.dv8tion.jda.api.utils.messages.MessageCreateRequest;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
+import net.sybyline.scarlet.ext.VrcLaunch;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
 import net.sybyline.scarlet.util.LRUMap;
@@ -132,6 +133,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.pingOnModeration_memberRemove = scarlet.ui.settingBool("discord_ping_member_remove", "Discord: Ping on Member Remove", true);
         this.pingOnModeration_userBan = scarlet.ui.settingBool("discord_ping_user_ban", "Discord: Ping on User Ban", true);
         this.pingOnModeration_userUnban = scarlet.ui.settingBool("discord_ping_user_unban", "Discord: Ping on User Unban", false);
+        this.vrchatClient_launchOnInstanceCreate = scarlet.ui.settingBool("vrchat_client_launch_on_instance_create", "VRChat Client: Launch on Instance Create", false);
         this.evidenceEnabled = scarlet.ui.settingBool("evidence_enabled", "Evidence submission", false);
         this.selectEvidenceRoot = scarlet.ui.settingVoid("Evidence root folder", "Select", this::selectEvidenceRoot);
         this.evidenceFilePathFormat = scarlet.ui.settingString("evidence_file_path_format", "Evidence file path format", "");
@@ -195,6 +197,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      pingOnModeration_memberRemove,
                                      pingOnModeration_userBan,
                                      pingOnModeration_userUnban,
+                                     vrchatClient_launchOnInstanceCreate,
                                      evidenceEnabled;
     final ScarletUI.Setting<Void> selectEvidenceRoot;
     final DInteractions interactions;
@@ -1116,16 +1119,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     final Pacer userModerationLimiter = new Pacer(3_000L);
     @Override
-    public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent, ScarletData.AuditEntryMetadata parentEntryMeta, boolean reactiveKickFromBan)
+    public void emitUserModeration(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, User actor, User target, ScarletData.UserMetadata actorMeta, ScarletData.UserMetadata targetMeta, String history, String recent, ScarletData.AuditEntryMetadata parentEntryMeta, boolean reactiveKickFromBan)
     {
         this.condEmit(entryMeta, (channelSf, guild, channel) ->
         {
-            String timeext = "";
             {
                 OffsetDateTime targetJoined = this.scarlet.eventListener.getJoinedOrNull(target.getId());
                 if (targetJoined != null)
                 {
-                    timeext = ":" + Long.toUnsignedString(targetJoined.toEpochSecond());
+                    entryMeta.setAuxData("targetJoined", targetJoined.toEpochSecond());
                 }
             }
             this.userModerationLimiter.await();
@@ -1189,45 +1191,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .sendMessageEmbeds(embed.build())
                 .complete();
             
-            ThreadChannel threadChannel = ((TextChannel)channel)
-                .createThreadChannel(entryMeta.entry.getDescription(), message.getId())
-                .setAutoArchiveDuration(ThreadChannel.AutoArchiveDuration.TIME_1_HOUR)
-                .completeAfter(1000L, TimeUnit.MILLISECONDS);
-            
-            entryMeta.threadSnowflake = threadChannel.getId();
-            
-            boolean mention;
-            switch (GroupAuditType.of(entryMeta.entry.getEventType()))
-            {
-            case INSTANCE_WARN: mention = ScarletDiscordJDA.this.pingOnModeration_instanceWarn.get(); break;
-            case INSTANCE_KICK: mention = ScarletDiscordJDA.this.pingOnModeration_instanceKick.get(); break;
-            case MEMBER_REMOVE: mention = ScarletDiscordJDA.this.pingOnModeration_memberRemove.get(); break;
-            case USER_BAN:      mention = ScarletDiscordJDA.this.pingOnModeration_userBan     .get(); break;
-            case USER_UNBAN:    mention = ScarletDiscordJDA.this.pingOnModeration_userUnban   .get(); break;
-            default:            mention = false;                                                      break;
-            }
-            
-            String content = actorMeta == null || actorMeta.userSnowflake == null
-                    ? ScarletDiscordJDA.this.linkedIdsInfo(entryMeta)
-                    : (mention
-                        ? ("<@"+actorMeta.userSnowflake+">")
-                        : (entryMeta.hasAuxActor() ? entryMeta.auxActorDisplayName : entryMeta.entry.getActorDisplayName()));
-            Message auxMessage = threadChannel.sendMessage(content)
-                .addContent("\nUnclaimed")
-                .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
-                              Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
-                              Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link"))
-                .addActionRow(Button.secondary("view-snapshot-user:"+entryMeta.entry.getId(), "Snapshot: user"),
-                              Button.secondary("view-snapshot-user-groups:"+entryMeta.entry.getId(), "Snapshot: user groups"),
-                              Button.secondary("view-snapshot-user-represented-group:"+entryMeta.entry.getId(), "Snapshot: user represented group"))
-                .addActionRow(Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
-                              Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"),
-//                              Button.secondary("vrchat-user-edit-manager-notes:"+entryMeta.entry.getTargetId(), "Edit manager notes"),
-                              Button.primary("event-redact:"+entryMeta.entry.getId(), "Redact event"),
-                              Button.secondary("event-unredact:"+entryMeta.entry.getId(), "Unredact event"))
-                .completeAfter(1000L, TimeUnit.MILLISECONDS);
-            
-            entryMeta.auxMessageSnowflake = auxMessage.getId();
+            this.scarlet.exec.execute(() -> this.emitUserModeration_thread(scarlet, entryMeta, actor.getId(), message));
             
             return message;
         });
@@ -1235,6 +1199,84 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             this.tryEmitExtendedSuggestedModeration(scarlet, target);
         }
+    }
+    ThreadChannel emitUserModeration_thread(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, String actorId, Message message)
+    {
+        ThreadChannel threadChannel = message.getStartedThread();
+        if (threadChannel == null)
+        {
+            if (entryMeta.threadSnowflake != null)
+            {
+                threadChannel = message
+                    .getGuild()
+                    .getThreadChannelById(entryMeta.threadSnowflake);
+            }
+            if (threadChannel == null)
+            {
+                threadChannel = message
+                    .getChannel()
+                    .asTextChannel()
+                    .createThreadChannel(entryMeta.entry.getDescription(), message.getId())
+                    .setAutoArchiveDuration(ThreadChannel.AutoArchiveDuration.TIME_1_HOUR)
+                    .completeAfter(1500L, TimeUnit.MILLISECONDS);
+            }
+        }
+        
+        entryMeta.threadSnowflake = threadChannel.getId();
+        scarlet.data.auditEntryMetadata(entryMeta.entry.getId(), entryMeta);
+        
+        ThreadChannel threadChannel0 = threadChannel;
+        this.scarlet.exec.execute(() -> this.emitUserModeration_auxMessage(scarlet, entryMeta, actorId, threadChannel0));
+        
+        return threadChannel;
+    }
+    Message emitUserModeration_auxMessage(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, String actorId, ThreadChannel threadChannel)
+    {
+        if (entryMeta.auxMessageSnowflake != null)
+        {
+            Message auxMessage = threadChannel.retrieveMessageById(entryMeta.auxMessageSnowflake).complete();
+            if (auxMessage != null)
+                return auxMessage;
+        }
+        
+        boolean mention;
+        switch (GroupAuditType.of(entryMeta.entry.getEventType()))
+        {
+        case INSTANCE_WARN: mention = ScarletDiscordJDA.this.pingOnModeration_instanceWarn.get(); break;
+        case INSTANCE_KICK: mention = ScarletDiscordJDA.this.pingOnModeration_instanceKick.get(); break;
+        case MEMBER_REMOVE: mention = ScarletDiscordJDA.this.pingOnModeration_memberRemove.get(); break;
+        case USER_BAN:      mention = ScarletDiscordJDA.this.pingOnModeration_userBan     .get(); break;
+        case USER_UNBAN:    mention = ScarletDiscordJDA.this.pingOnModeration_userUnban   .get(); break;
+        default:            mention = false;                                                      break;
+        }
+        
+        String timeext = entryMeta.getAuxData("targetJoined", $->':'+Long.toUnsignedString($.getAsLong()));
+        
+        ScarletData.UserMetadata actorMeta = scarlet.data.userMetadata(actorId);
+        String content = actorMeta == null || actorMeta.userSnowflake == null
+                ? ScarletDiscordJDA.this.linkedIdsInfo(entryMeta)
+                : (mention
+                    ? ("<@"+actorMeta.userSnowflake+">")
+                    : (entryMeta.hasAuxActor() ? entryMeta.auxActorDisplayName : entryMeta.entry.getActorDisplayName()));
+        Message auxMessage = threadChannel.sendMessage(content)
+            .addContent("\nUnclaimed")
+            .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
+                          Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
+                          Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link"))
+            .addActionRow(Button.secondary("view-snapshot-user:"+entryMeta.entry.getId(), "Snapshot: user"),
+                          Button.secondary("view-snapshot-user-groups:"+entryMeta.entry.getId(), "Snapshot: user groups"),
+                          Button.secondary("view-snapshot-user-represented-group:"+entryMeta.entry.getId(), "Snapshot: user represented group"))
+            .addActionRow(Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
+                          Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"),
+//                          Button.secondary("vrchat-user-edit-manager-notes:"+entryMeta.entry.getTargetId(), "Edit manager notes"),
+                          Button.primary("event-redact:"+entryMeta.entry.getId(), "Redact event"),
+                          Button.secondary("event-unredact:"+entryMeta.entry.getId(), "Unredact event"))
+            .completeAfter(1500L, TimeUnit.MILLISECONDS);
+        
+        entryMeta.auxMessageSnowflake = auxMessage.getId();
+        scarlet.data.auditEntryMetadata(entryMeta.entry.getId(), entryMeta);
+        
+        return auxMessage;
     }
 
     String getLocationImage(String location)
@@ -1303,6 +1345,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             this.emitAuxWh(entryMeta, embed.setImage(worldImageUrl)::build, IncomingWebhookClient::sendMessageEmbeds);
         });
+        if (this.vrchatClient_launchOnInstanceCreate.get())
+        {
+            try
+            {
+                VrcLaunch.launch(this.scarlet.vrc.currentUserId, location);
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception auto-launching VRChat", ex);
+            }
+        }
     }
 
     @Override

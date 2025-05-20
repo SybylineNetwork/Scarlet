@@ -132,6 +132,8 @@ Discord message commands:
     Submits files attached to this message to Scarlet, such as moderation evidence
   - `vrchat-animated-emoji`<br>
     Generates a VRChat animated emoji spritesheet from a gif
+  - `fix-audit-thread`<br>
+    Fixes moderation event messages that fail to populate
 
 Attachments submitted to moderation events are stored in a subdirectory of the path specified by `evidenceRoot` in the `discord_bot.json` settings file.
 If a submitted attachment has the same name as a file already submitted on the same target user, the submitting user is notified and the new attachment is not saved.
