@@ -453,9 +453,21 @@ public interface AvatarSearch
     }
     static VrcxAvatar[] vrcxSearchCached(String urlRoot, int n, String search)
     {
-        return VrcxAvatar.searchCacheByUrlRoot
-            .computeIfAbsent(urlRoot, urlRoot0 -> LRUMap.ofSynchronized())
-            .computeIfAbsent(search, search0 -> AvatarSearch.vrcxSearch(urlRoot, n, search0));
+        Map<String, VrcxAvatar[]> urlCache;
+        synchronized (VrcxAvatar.searchCacheByUrlRoot) {
+            urlCache = VrcxAvatar.searchCacheByUrlRoot.computeIfAbsent(urlRoot, urlRoot0 -> LRUMap.ofSynchronized());
+        }
+        
+        synchronized (urlCache) {
+            VrcxAvatar[] cached = urlCache.get(search);
+            if (cached == null) {
+                cached = AvatarSearch.vrcxSearch(urlRoot, n, search);
+                if (cached != null) {
+                    urlCache.put(search, cached);
+                }
+            }
+            return cached;
+        }
     }
     static VrcxAvatar[] vrcxSearch(String urlRoot, String search)
     {
