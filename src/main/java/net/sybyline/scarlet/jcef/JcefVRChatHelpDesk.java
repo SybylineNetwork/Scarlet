@@ -120,13 +120,30 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
         {
             return this.setElementByIdValue(FORM_FIELD_MODERATION_CATEGORY, moderationCategory);
         }
-        public CompletableFuture<Void> setRequester(String requester)
+        @Override
+        public CompletableFuture<Void> setModerationReportTarget(String moderationReportTarget)
         {
-            return this.setElementByIdValue(FORM_FIELD_REQUESTER, requester);
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_TARGET, moderationReportTarget);
         }
-        public CompletableFuture<Void> setTarget(String target)
+        @Override
+        public CompletableFuture<Void> setModerationReportContentType(String moderationReportContentType)
         {
-            return this.setElementByIdValue(FORM_FIELD_TARGET, target);
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_CONTENT, moderationReportContentType);
+        }
+        @Override
+        public CompletableFuture<Void> setTargetContentId(String target)
+        {
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_CONTENT_ID, target);
+        }
+        @Override
+        public CompletableFuture<Void> setModerationReportAccountContentType(String moderationReportAccountContentType)
+        {
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_ACCOUNT_CONTENT, moderationReportAccountContentType);
+        }
+        @Override
+        public CompletableFuture<Void> setTargetUserId(String target)
+        {
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_ACCOUNT_ID, target);
         }
     }
 
@@ -191,6 +208,29 @@ public class JcefVRChatHelpDesk extends JcefInstance implements VRChatHelpDeskRe
         public CompletableFuture<Void> setAccountRecoveryToken(String accountRecoveryToken)
         {
             return this.setElementByIdValue(FORM_FIELD_ACCOUNT_RECOVERY_TOKEN, accountRecoveryToken);
+        }
+    }
+
+    public static class AvatarMarketplace extends JcefVRChatHelpDesk implements VRChatHelpDeskRequest.AvatarMarketplaceRequest
+    {
+        public AvatarMarketplace(JcefService jcef)
+        {
+            super(jcef, FORM_TICKET_ID_AVATAR_MARKETPLACE);
+        }
+        @Override
+        public CompletableFuture<Void> setAvatarMarketplaceCategory(String avatarMarketplaceCategory)
+        {
+            return this.setElementByIdValue(FORM_FIELD_AVATAR_MARKETPLACE_CATEGORY, avatarMarketplaceCategory);
+        }
+        @Override
+        public CompletableFuture<Void> setRequester(String requester)
+        {
+            return this.setElementByIdValue(FORM_FIELD_REQUESTER, requester);
+        }
+        @Override
+        public CompletableFuture<Void> setProductsRequiringAssistance(String productsRequiringAssistance)
+        {
+            return this.setElementByIdValue(FORM_FIELD_PRODUCTS_REQUIRING_ASSISTANCE, productsRequiringAssistance);
         }
     }
 

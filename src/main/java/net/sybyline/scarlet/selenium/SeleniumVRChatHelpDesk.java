@@ -59,17 +59,34 @@ public abstract class SeleniumVRChatHelpDesk<S extends SeleniumVRChatHelpDesk<S>
         {
             super(FORM_TICKET_ID_MODERATION, options, driver);
         }
-        public CompletableFuture<Void> setModerationCategory(String type)
+        public CompletableFuture<Void> setModerationCategory(String moderationCategory)
         {
-            return this.setElementByIdValue(FORM_FIELD_MODERATION_CATEGORY, type);
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_CATEGORY, moderationCategory);
         }
-        public CompletableFuture<Void> setRequester(String requester)
+        @Override
+        public CompletableFuture<Void> setModerationReportTarget(String moderationReportTarget)
         {
-            return this.setElementByIdValue(FORM_FIELD_REQUESTER, requester);
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_TARGET, moderationReportTarget);
         }
-        public CompletableFuture<Void> setTarget(String target)
+        @Override
+        public CompletableFuture<Void> setModerationReportContentType(String moderationReportContentType)
         {
-            return this.setElementByIdValue(FORM_FIELD_TARGET, target);
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_CONTENT, moderationReportContentType);
+        }
+        @Override
+        public CompletableFuture<Void> setTargetContentId(String target)
+        {
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_CONTENT_ID, target);
+        }
+        @Override
+        public CompletableFuture<Void> setModerationReportAccountContentType(String moderationReportAccountContentType)
+        {
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_ACCOUNT_CONTENT, moderationReportAccountContentType);
+        }
+        @Override
+        public CompletableFuture<Void> setTargetUserId(String target)
+        {
+            return this.setElementByIdValue(FORM_FIELD_MODERATION_ACCOUNT_ID, target);
         }
     }
 
@@ -134,6 +151,29 @@ public abstract class SeleniumVRChatHelpDesk<S extends SeleniumVRChatHelpDesk<S>
         public CompletableFuture<Void> setAccountRecoveryToken(String accountRecoveryToken)
         {
             return this.setElementByIdValue(FORM_FIELD_ACCOUNT_RECOVERY_TOKEN, accountRecoveryToken);
+        }
+    }
+
+    public static class AvatarMarketplace extends SeleniumVRChatHelpDesk<AvatarMarketplace> implements VRChatHelpDeskRequest.AvatarMarketplaceRequest
+    {
+        public <C extends MutableCapabilities, D extends RemoteWebDriver> AvatarMarketplace(C options, Function<C, D> driver)
+        {
+            super(FORM_TICKET_ID_AVATAR_MARKETPLACE, options, driver);
+        }
+        @Override
+        public CompletableFuture<Void> setAvatarMarketplaceCategory(String avatarMarketplaceCategory)
+        {
+            return this.setElementByIdValue(FORM_FIELD_AVATAR_MARKETPLACE_CATEGORY, avatarMarketplaceCategory);
+        }
+        @Override
+        public CompletableFuture<Void> setRequester(String requester)
+        {
+            return this.setElementByIdValue(FORM_FIELD_REQUESTER, requester);
+        }
+        @Override
+        public CompletableFuture<Void> setProductsRequiringAssistance(String productsRequiringAssistance)
+        {
+            return this.setElementByIdValue(FORM_FIELD_PRODUCTS_REQUIRING_ASSISTANCE, productsRequiringAssistance);
         }
     }
 

@@ -8,6 +8,11 @@
   - Pending: Distinct Server and Client modes
 
 ## 0.4.12-rc1
+  - Added avatar thumbnail to User Switch Avatar extended event (not foolproof, can be default/previous avatar image)
+  - Updated VRChat Help Desk autofill links to account for recent changes
+  - Fixed bugs with bundled bans/kicks
+
+## 0.4.12-rc1
   - Added setting to launch a new VRChat Client instance into newly created group instances
   - Added option to assign/remove a VRChat Group Role when adding/removing staff from lists
   - Added Discord subcommands `add-role` and `remove-role` to `vrchat-group`

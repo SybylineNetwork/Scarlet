@@ -27,6 +27,7 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
         FORM_TICKET_ID_SUPPORT = "360006750513",
         FORM_TICKET_ID_SECURITY = "1500001130621",
         FORM_TICKET_ID_RECOVERY = "1900000725685",
+        FORM_TICKET_ID_AVATAR_MARKETPLACE = "41321603799059",
         FORM = "new_request",
         
         // Common fields
@@ -37,12 +38,15 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
         
         // Moderation fields
         FORM_FIELD_MODERATION_CATEGORY = "request_custom_fields_360056455174",
-        FORM_FIELD_REQUESTER = "request_custom_fields_360057451993",
-        FORM_FIELD_TARGET = "request_custom_fields_1500001445142",
+        FORM_FIELD_MODERATION_TARGET = "request_custom_fields_41535925078291",
+        FORM_FIELD_MODERATION_CONTENT = "request_custom_fields_41535943048211",
+        FORM_FIELD_MODERATION_CONTENT_ID = "request_custom_fields_41536179133203",
+        FORM_FIELD_MODERATION_ACCOUNT_CONTENT = "request_custom_fields_41536076540179",
+        FORM_FIELD_MODERATION_ACCOUNT_ID = "request_custom_fields_41537175838995",
         
         // Support fields
         FORM_FIELD_SUPPORT_CATEGORY = "request_custom_fields_1500001394041",
-//        FORM_FIELD_REQUESTER = "request_custom_fields_360057451993",
+        FORM_FIELD_REQUESTER = "request_custom_fields_360057451993",
         FORM_FIELD_TARGET_PLATFORM = "request_custom_fields_1500001394021",
         
         // Security fields
@@ -54,7 +58,12 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
         // Recovery fields
         FORM_FIELD_LOCKED_ACCOUNT_CONFIRMATION = "request_custom_fields_1900003404965",
 //        FORM_FIELD_REQUESTER = "request_custom_fields_360057451993",
-        FORM_FIELD_ACCOUNT_RECOVERY_TOKEN = "request_custom_fields_1900004384185"
+        FORM_FIELD_ACCOUNT_RECOVERY_TOKEN = "request_custom_fields_1900004384185",
+        
+        // Avatar Marketplace fields
+        FORM_FIELD_AVATAR_MARKETPLACE_CATEGORY = "request_custom_fields_41321210685203",
+//        FORM_FIELD_REQUESTER = "request_custom_fields_360057451993",
+        FORM_FIELD_PRODUCTS_REQUIRING_ASSISTANCE = "request_custom_fields_41321304248723"
         ;
 
     public static interface Jcef
@@ -75,6 +84,10 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
         {
             return new JcefVRChatHelpDesk.Recovery(jcef);
         }
+        public static VRChatHelpDeskRequest.AvatarMarketplaceRequest avatarMarketplace(JcefService jcef)
+        {
+            return new JcefVRChatHelpDesk.AvatarMarketplace(jcef);
+        }
     }
     public static interface Selenium
     {
@@ -93,6 +106,10 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
         public static <C extends MutableCapabilities, D extends RemoteWebDriver> VRChatHelpDeskRequest.RecoveryRequest recovery(C options, Function<C, D> driver)
         {
             return new SeleniumVRChatHelpDesk.Recovery(options, driver);
+        }
+        public static <C extends MutableCapabilities, D extends RemoteWebDriver> VRChatHelpDeskRequest.AvatarMarketplaceRequest avatarMarketplace(C options, Function<C, D> driver)
+        {
+            return new SeleniumVRChatHelpDesk.AvatarMarketplace(options, driver);
         }
     }
 
@@ -192,9 +209,27 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
             return this.setModerationCategory(moderationCategory == null ? null : moderationCategory.value);
         }
 
-        public CompletableFuture<Void> setRequester(String requester);
+        public CompletableFuture<Void> setModerationReportTarget(String moderationReportTarget);
+        public default CompletableFuture<Void> setModerationReportTarget(VRChatHelpDeskURLs.ModerationReportTarget moderationReportTarget)
+        {
+            return this.setModerationReportTarget(moderationReportTarget == null ? null : moderationReportTarget.value);
+        }
 
-        public CompletableFuture<Void> setTarget(String target);
+        public CompletableFuture<Void> setModerationReportContentType(String moderationReportContentType);
+        public default CompletableFuture<Void> setModerationReportContentType(VRChatHelpDeskURLs.ModerationReportContentType moderationReportContentType)
+        {
+            return this.setModerationReportContentType(moderationReportContentType == null ? null : moderationReportContentType.value);
+        }
+
+        public CompletableFuture<Void> setTargetContentId(String target);
+
+        public CompletableFuture<Void> setModerationReportAccountContentType(String moderationReportAccountContentType);
+        public default CompletableFuture<Void> setModerationReportAccountContentType(VRChatHelpDeskURLs.ModerationReportAccountContentType moderationReportAccountContentType)
+        {
+            return this.setModerationReportAccountContentType(moderationReportAccountContentType == null ? null : moderationReportAccountContentType.value);
+        }
+
+        public CompletableFuture<Void> setTargetUserId(String target);
 
     }
 
@@ -238,6 +273,21 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
         public CompletableFuture<Void> setRequester(String requester);
 
         public CompletableFuture<Void> setAccountRecoveryToken(String accountRecoveryToken);
+
+    }
+
+    public static interface AvatarMarketplaceRequest extends VRChatHelpDeskRequest
+    {
+
+        public CompletableFuture<Void> setAvatarMarketplaceCategory(String avatarMarketplaceCategory);
+        public default CompletableFuture<Void> setAvatarMarketplaceCategory(VRChatHelpDeskURLs.AvatarMarketplaceCategory avatarMarketplaceCategory)
+        {
+            return this.setAvatarMarketplaceCategory(avatarMarketplaceCategory == null ? null : avatarMarketplaceCategory.value);
+        }
+
+        public CompletableFuture<Void> setRequester(String requester);
+
+        public CompletableFuture<Void> setProductsRequiringAssistance(String productsRequiringAssistance);
 
     }
 

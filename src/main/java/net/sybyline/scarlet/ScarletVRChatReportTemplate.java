@@ -190,10 +190,8 @@ public class ScarletVRChatReportTemplate
         }
         public String url(String requestingEmail, String requestingUserId, String reportSubject, boolean appendFooter)
         {
-            return VRChatHelpDeskURLs.newModerationRequest(
+            return VRChatHelpDeskURLs.newModerationRequest_account_other(
                 requestingEmail,
-                VRChatHelpDeskURLs.ModerationCategory.USER_REPORT,
-                requestingUserId != null ? requestingUserId : this.actorId,
                 this.targetId,
                 reportSubject != null ? reportSubject : this.targetName,
                 this.format(appendFooter)

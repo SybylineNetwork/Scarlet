@@ -1132,7 +1132,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             this.userModerationLimiter.await();
             
-            if (reactiveKickFromBan && this.bundleModerations_instanceKick2userBan.get())
+            if (reactiveKickFromBan && this.bundleModerations_instanceKick2userBan.get() && parentEntryMeta.threadSnowflake != null)
             {
                 ThreadChannel threadChannel = guild.getThreadChannelById(parentEntryMeta.threadSnowflake);
                 if (threadChannel != null)
@@ -1646,6 +1646,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
             ;
+            User user = this.scarlet.vrc.getUser(userId, Long.MAX_VALUE);
+            String aviThumbnail = user == null ? null : user.getCurrentAvatarThumbnailImageUrl();
+            if (aviThumbnail != null && !aviThumbnail.isEmpty())
+                builder.setThumbnail(aviThumbnail);
             VersionedFile versionedFile = this.avatarName2Bundle.get(avatarDisplayName);
             if (versionedFile != null)
                 return channel.sendMessageEmbeds(builder.addField("Bundle ID", "`"+versionedFile.id+"`", false).build()).complete();

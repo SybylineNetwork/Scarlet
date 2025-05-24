@@ -682,7 +682,7 @@ public class ScarletDiscordUI
         }
         
         String reportSubject = targetDisplayName;
-        Long targetJoined = parts.length < 3 ? auditEntryMeta.getAuxData("targetJoined", JsonElement::getAsLong) : Long.parseUnsignedLong(parts[2]);
+        Long targetJoined = parts.length < 3 ? (auditEntryMeta != null ? auditEntryMeta.getAuxData("targetJoined", JsonElement::getAsLong) : null) : Long.parseUnsignedLong(parts[2]);
         
         String location = auditEntryMeta == null ? null : auditEntryMeta.getData("location");
         
@@ -745,10 +745,8 @@ public class ScarletDiscordUI
         
         String requestingEmail = this.discord.requestingEmail.get();
         
-        String link = VRChatHelpDeskURLs.newModerationRequest(
+        String link = VRChatHelpDeskURLs.newModerationRequest_account_other(
             requestingEmail,
-            VRChatHelpDeskURLs.ModerationCategory.USER_REPORT,
-            requestingUserId,
             targetUserId,
             reportSubject,
             reportDesc.length() == 0 ? null : reportDesc.toString()

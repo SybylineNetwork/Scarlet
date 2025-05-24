@@ -118,24 +118,63 @@ public interface VRChatHelpDeskURLs
             sb.append((sb.length() == 46 ? '?' : '&')).append("A=").append(shortId(auditId));
         return sb.toString();
     }
-    static String newModerationRequest(String requesterEmail, ModerationCategory moderationCategory, String requesterUserId, String targetUserId, String subject, String description)
+    static String newModerationRequest(String requesterEmail, ModerationCategory moderationCategory, ModerationReportTarget moderationReportTarget, ModerationReportContentType moderationReportContentType, String targetContentId, ModerationReportAccountContentType moderationReportAccountContentType, String targetUserId, String subject, String description)
     {
         StringBuilder sb = new StringBuilder();
-        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=1500000182242");
+        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=41536165070483");
         if (requesterEmail != null)
             sb.append("&tf_anonymous_requester_email=").append(escape(requesterEmail, false));
         if (moderationCategory != null)
             sb.append("&tf_360056455174=").append(escape(moderationCategory.value, false));
-        if (requesterUserId != null)
-            sb.append("&tf_360057451993=").append(escape(requesterUserId, false));
+        if (moderationReportTarget != null)
+            sb.append("&tf_41535925078291=").append(escape(moderationReportTarget.value, false));
+        if (moderationReportContentType != null)
+            sb.append("&tf_41535943048211=").append(escape(moderationReportContentType.value, false));
+        if (targetContentId != null)
+            sb.append("&tf_41536179133203=").append(escape(targetContentId, false));
+        if (moderationReportAccountContentType != null)
+            sb.append("&tf_41536076540179=").append(escape(moderationReportAccountContentType.value, false));
         if (targetUserId != null)
-            sb.append("&tf_1500001445142=").append(escape(targetUserId, false));
+            sb.append("&tf_41537175838995=").append(escape(targetUserId, false));
         if (subject != null)
             sb.append("&tf_subject=").append(escape(subject, false));
         if (description != null)
             sb.append("&tf_description=").append(escape(description, true));
         return sb.toString();
     }
+    static String newModerationRequest_content(String requesterEmail, ModerationReportContentType moderationReportContentType, String targetContentId, String subject, String description)
+    {
+        return newModerationRequest(requesterEmail, ModerationCategory.USER_REPORT, ModerationReportTarget.CONTENT_REPORT, moderationReportContentType, targetContentId, null, null, subject, description);
+    }
+    static String newModerationRequest_content_avatar(String requesterEmail, String avatarId, String subject, String description)
+    { return newModerationRequest_content(requesterEmail, ModerationReportContentType.AVATAR, avatarId, subject, description); }
+    static String newModerationRequest_content_world(String requesterEmail, String worldId, String subject, String description)
+    { return newModerationRequest_content(requesterEmail, ModerationReportContentType.WORLD, worldId, subject, description); }
+    static String newModerationRequest_content_group(String requesterEmail, String groupId, String subject, String description)
+    { return newModerationRequest_content(requesterEmail, ModerationReportContentType.GROUP, groupId, subject, description); }
+    static String newModerationRequest_content_other(String requesterEmail, String targetContentId, String subject, String description)
+    { return newModerationRequest_content(requesterEmail, ModerationReportContentType.OTHER, targetContentId, subject, description); }
+    static String newModerationRequest_account(String requesterEmail, ModerationReportAccountContentType moderationReportAccountContentType, String targetUserId, String subject, String description)
+    {
+        return newModerationRequest(requesterEmail, ModerationCategory.USER_REPORT, ModerationReportTarget.ACCOUNT_REPORT, null, null, moderationReportAccountContentType, targetUserId, subject, description);
+    }
+    static String newModerationRequest_account_prints(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.PRINTS, targetUserId, subject, description); }
+    static String newModerationRequest_account_emoji(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.EMOJI, targetUserId, subject, description); }
+    static String newModerationRequest_account_stickers(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.STICKERS, targetUserId, subject, description); }
+    static String newModerationRequest_account_gallery(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.GALLERY, targetUserId, subject, description); }
+    static String newModerationRequest_account_profile(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.PROFILE, targetUserId, subject, description); }
+    static String newModerationRequest_account_user_icon(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.USER_ICON, targetUserId, subject, description); }
+    static String newModerationRequest_account_take_it_down_act(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.TAKE_IT_DOWN_ACT, targetUserId, subject, description); }
+    static String newModerationRequest_account_other(String requesterEmail, String targetUserId, String subject, String description)
+    { return newModerationRequest_account(requesterEmail, ModerationReportAccountContentType.OTHER, targetUserId, subject, description); }
+    
     public enum ModerationCategory
     {
         USER_REPORT("user_report", "User Report"),
@@ -148,6 +187,52 @@ public interface VRChatHelpDeskURLs
         }
         public final String value, label;
     }
+    public enum ModerationReportTarget // request_custom_fields_41535925078291
+    {
+        CONTENT_REPORT("content_report", "Content Report"),
+        ACCOUNT_REPORT("account_report", "Account Report"),
+        ;
+        ModerationReportTarget(String value, String label)
+        {
+            this.value = value;
+            this.label = label;
+        }
+        public final String value, label;
+    }
+    public enum ModerationReportContentType // request_custom_fields_41535943048211
+    {
+        AVATAR("content_report_avatar", "Avatar"),
+        WORLD("content_report_world", "World"),
+        GROUP("content_report_group", "Group"),
+        OTHER("contentreport_issue_not_described", "My issue is not described above"),
+        ;
+        ModerationReportContentType(String value, String label)
+        {
+            this.value = value;
+            this.label = label;
+        }
+        public final String value, label;
+    }
+    // content id : request_custom_fields_41536179133203
+    public enum ModerationReportAccountContentType // request_custom_fields_41536076540179
+    {
+        PRINTS("account_report_prints", "Prints"),
+        EMOJI("account_report_emoji", "Emoji"),
+        STICKERS("account_report_stickers", "Stickers"),
+        GALLERY("account_report_gallery", "Gallery"),
+        PROFILE("account_report_profile", "Profile"),
+        USER_ICON("account_report_user_icon", "User Icon"),
+        TAKE_IT_DOWN_ACT("take_it_down_act", "TAKE IT DOWN Act (Compliance)"),
+        OTHER("accountreport_issue_not_described", "My issue is not described above"),
+        ;
+        ModerationReportAccountContentType(String value, String label)
+        {
+            this.value = value;
+            this.label = label;
+        }
+        public final String value, label;
+    }
+    // user id : request_custom_fields_41537175838995
 
     static String newSecurityRequest(String requesterEmail, String subject, String vulnerability, String reproduce, String impact, String description, Boolean confirmation)
     {
@@ -188,6 +273,37 @@ public interface VRChatHelpDeskURLs
             sb.append("&tf_1900004384185=").append(escape(recoveryToken, false));
         return sb.toString();
     }
+
+    static String newAvatarMarketplaceRequest(String requesterEmail, String requesterUserId, AvatarMarketplaceCategory avatarMarketplaceCategory, String productsRequiringAssistance, String subject, String description)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.append("https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=41321603799059");
+        if (requesterEmail != null)
+            sb.append("&tf_anonymous_requester_email=").append(escape(requesterEmail, false));
+        if (requesterUserId != null)
+            sb.append("&tf_360057451993=").append(escape(requesterUserId, false));
+        if (avatarMarketplaceCategory.value != null)
+            sb.append("&tf_41321210685203=").append(escape(avatarMarketplaceCategory.value, false));
+        if (productsRequiringAssistance != null)
+            sb.append("&tf_41321304248723=").append(escape(productsRequiringAssistance, false));
+        if (subject != null)
+            sb.append("&tf_subject=").append(escape(subject, false));
+        if (description != null)
+            sb.append("&tf_description=").append(escape(description, true));
+        return sb.toString();
+    }
+    public enum AvatarMarketplaceCategory // request_custom_fields_41321210685203
+    {
+        USER_PURCHASE("i_m_a_user_that_needs_help_with_a_marketplace_purchase", "I'm a user that needs help with a Marketplace purchase"),
+        ;
+        AvatarMarketplaceCategory(String value, String label)
+        {
+            this.value = value;
+            this.label = label;
+        }
+        public final String value, label;
+    }
+    // products requiring assistance : request_custom_fields_41321304248723
 
     static String escape(String string, boolean html)
     {
