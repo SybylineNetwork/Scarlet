@@ -7,7 +7,7 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
-## 0.4.12-rc1
+## 0.4.12-rc2
   - Added avatar thumbnail to User Switch Avatar extended event (not foolproof, can be default/previous avatar image)
   - Updated VRChat Help Desk autofill links to account for recent changes
   - Fixed bugs with bundled bans/kicks
