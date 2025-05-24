@@ -23,7 +23,7 @@ public interface VRChatHelpDeskRequest extends AutoCloseable
 
     public static final String
         FORM_URL_PREFIX = "https://help.vrchat.com/hc/en-us/requests/new?ticket_form_id=",
-        FORM_TICKET_ID_MODERATION = "1500000182242",
+        FORM_TICKET_ID_MODERATION = "41536165070483",
         FORM_TICKET_ID_SUPPORT = "360006750513",
         FORM_TICKET_ID_SECURITY = "1500001130621",
         FORM_TICKET_ID_RECOVERY = "1900000725685",
