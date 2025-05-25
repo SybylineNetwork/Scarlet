@@ -8,6 +8,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -404,6 +405,14 @@ public class ScarletUI implements AutoCloseable
                 });
             }
         };
+        Action copy = new AbstractAction("Copy") {
+            private static final long serialVersionUID = 1L;
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(ConnectedPlayer.this.id), null);
+            }
+        };
         Color text_color;
         int priority;
         AgeVerificationStatus ageVerificationStatus;
@@ -435,12 +444,13 @@ public class ScarletUI implements AutoCloseable
         {
             this.propstable.addProperty("Name", false, true, String.class, $ -> $.name);
             this.propstable.addProperty("Id", false, true, String.class, $ -> $.id);
-            this.propstable.addProperty("AcctAge", false, true, Period.class, $ -> $.acctdays);
+            this.propstable.addProperty("Acc-Age", false, true, Period.class, $ -> $.acctdays);
             this.propstable.addProperty("Joined", false, true, LocalDateTime.class, $ -> $.joined);
             this.propstable.addProperty("Left", false, true, LocalDateTime.class, $ -> $.left);
             this.propstable.addProperty("Advisory", false, true, String.class, $ -> $.advisory);
-            this.propstable.addProperty("AgeVer", false, true, AgeVerificationStatus.class, $ -> $.ageVerificationStatus);
+            this.propstable.addProperty("18+", false, true, AgeVerificationStatus.class, $ -> $.ageVerificationStatus);
             this.propstable.addProperty("Profile", true, true, Action.class, $ -> $.profile);
+            this.propstable.addProperty("Copy ID", true, true, Action.class, $ -> $.copy);
             this.propstable.addProperty("Ban", true, true, Action.class, $ -> $.ban);
             this.propstable.addProperty("Unban", true, false, Action.class, $ -> $.unban);
             
