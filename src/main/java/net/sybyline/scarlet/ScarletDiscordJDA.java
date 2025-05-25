@@ -111,6 +111,7 @@ import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.UniqueStrings;
+import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VersionedFile;
 
 public class ScarletDiscordJDA implements ScarletDiscord
@@ -1652,8 +1653,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 builder.setThumbnail(aviThumbnail);
             VersionedFile versionedFile = this.avatarName2Bundle.get(avatarDisplayName);
             if (versionedFile != null)
-                return channel.sendMessageEmbeds(builder.addField("Bundle ID", "`"+versionedFile.id+"`", false).build()).complete();
-            Message message = channel.sendMessageEmbeds(builder.build()).complete();
+                builder.addField("Bundle ID", "`"+versionedFile.id+"`", false);
+            Message message = channel
+                .sendMessageEmbeds(builder.build())
+                .addActionRow(Button.secondary("view-potential-avatar-matches", "View avatars"))
+                .complete();
+            if (versionedFile != null)
+                return message;
             List<AviSwitch> list = this.avatarName2Switches.get(avatarDisplayName);
             if (list == null)
                 this.avatarName2Switches.put(avatarDisplayName, list = new ArrayList<>());
@@ -1694,11 +1700,21 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.condEmitEx(GroupAuditTypeEx.SPAWN_PEDESTAL, false, false, location, (channelSf, guild, channel) ->
         {
+            VRChatHelpDeskURLs.ModerationReportAccountContentType act = null;
+            String contentTypeLowerCase = contentType.toLowerCase();
+            switch (contentTypeLowerCase)
+            {
+            case "image": act = VRChatHelpDeskURLs.ModerationReportAccountContentType.GALLERY;
+            case "emoji": act = VRChatHelpDeskURLs.ModerationReportAccountContentType.EMOJI;
+            case "sticker": act = VRChatHelpDeskURLs.ModerationReportAccountContentType.STICKERS;
+            case "palette": act = VRChatHelpDeskURLs.ModerationReportAccountContentType.OTHER;
+            }
             return channel.sendMessageEmbeds(new EmbedBuilder()
-                .setTitle(MarkdownSanitizer.escape(displayName)+("aeiou".indexOf(Character.toLowerCase(contentType.charAt(0)))<0?" spawned a ":" spawned an ")+contentType.toLowerCase()+" pedestal", "https://vrchat.com/home/user/"+userId)
+                .setTitle(MarkdownSanitizer.escape(displayName)+("aeiou".indexOf(Character.toLowerCase(contentType.charAt(0)))<0?" spawned a ":" spawned an ")+contentTypeLowerCase+" pedestal", "https://vrchat.com/home/user/"+userId)
                 .addField("User ID", "`"+userId+"`", false)
                 .addField("Location", "`"+location+"`", false)
                 .addField(contentType+" ID", "`"+contentId+"`", false)
+                .addField("Report "+contentTypeLowerCase, MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account(this.requestingEmail.get(), act, userId, contentType, contentId)), false)
                 .setImage(!contentId.startsWith("file_") ? null : ("https://api.vrchat.cloud/api/1/file/"+contentId+"/1/file"))
                 .setColor(GroupAuditTypeEx.SPAWN_PEDESTAL.color)
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
@@ -1718,6 +1734,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .addField("User ID", "`"+userId+"`", false)
                 .addField("Location", "`"+location+"`", false)
                 .addField("Sticker ID", "`"+stickerId+"`", false)
+                .addField("Report sticker", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_stickers(this.requestingEmail.get(), userId, "Sticker", stickerId)), false)
                 .setImage(!stickerId.startsWith("file_") ? null : ("https://api.vrchat.cloud/api/1/file/"+stickerId+"/1/file"))
                 .setColor(GroupAuditTypeEx.SPAWN_STICKER.color)
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
@@ -1732,6 +1749,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.condEmitEx(GroupAuditTypeEx.SPAWN_PRINT, false, false, location, (channelSf, guild, channel) ->
         {
+            
             String fileId = print.getFiles().getFileId(),
                    image = print.getFiles().getImage();
             return channel.sendMessageEmbeds(new EmbedBuilder()
@@ -1740,6 +1758,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .addField("Location", "`"+location+"`", false)
                 .addField("Print ID", "`"+printId+"`", false)
                 .addField("File ID", "`"+fileId+"`", false)
+                .addField("Report print", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_prints(this.requestingEmail.get(), userId, "Print", printId)), false)
                 .setImage(image != null ? image : ("https://api.vrchat.cloud/api/1/file/"+fileId+"/1/file"))
                 .setColor(GroupAuditTypeEx.SPAWN_PRINT.color)
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")

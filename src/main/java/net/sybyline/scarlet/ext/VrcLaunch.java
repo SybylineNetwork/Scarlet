@@ -1,6 +1,7 @@
 package net.sybyline.scarlet.ext;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
 import com.sun.jna.platform.win32.Advapi32;
@@ -9,6 +10,8 @@ import com.sun.jna.platform.win32.WinReg;
 import com.sun.jna.ptr.IntByReference;
 
 import net.sybyline.scarlet.util.Location;
+import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.Platform;
 
 public interface VrcLaunch
 {
@@ -18,6 +21,12 @@ public interface VrcLaunch
         launch(userId, location.world+':'+location.instance);
     }
     static void launch(String userId, String location) throws Exception
+    {
+        if (Platform.CURRENT.isNT())
+            launch_win(userId, location);
+        MiscUtils.AWTDesktop.browse(URI.create("vrchat://launch?ref=SybylineNetworkScarlet&id="+location));
+    }
+    static void launch_win(String userId, String location) throws Exception
     {
         String path;
         {

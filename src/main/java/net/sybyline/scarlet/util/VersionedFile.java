@@ -1,8 +1,12 @@
 package net.sybyline.scarlet.util;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import io.github.vrchatapi.model.MIMEType;
+import io.github.vrchatapi.model.ModelFile;
 
 public class VersionedFile
 {
@@ -136,6 +140,83 @@ public class VersionedFile
         if (!Objects.equals(this.qualifier, other.qualifier))
             return false;
         return true;
+    }
+
+    public enum Kind
+    {
+        WORLD(),
+        AVATAR(),
+        
+        WORLD_IMAGE(),
+        AVATAR_IMAGE(),
+        
+        GALLERY(),
+        ICON(),
+        INVITE_PHOTO(),
+        EMOJI(),
+        EMOJI_ANIMATED(),
+        STICKER(),
+        PRINT(),
+        
+        OTHER(),
+        ;
+        static final Pattern filename = Pattern.compile("(?<topic>\\S+(?:\\s+\\S+))\\Q - \\E(?<name>\\S+(?:\\s+\\S+))\\Q - \\E(?<type>\\S+(?:\\s+\\S+))\\Q - \\E(?<unity>(?<version>\\d+\\Q.\\E\\d\\\\Q.\\E\\d+\\Qf)\\E\\d\\Q_\\E\\d\\Q_\\E(?<platform>\\w+)\\Q_\\E(?<build>\\w+))");
+        public static Kind of(ModelFile file)
+        {
+            String ext = file.getExtension(),
+                   name = file.getName();
+            MIMEType mime = file.getMimeType();
+            List<String> tags = file.getTags();
+            switch (ext)
+            {
+            case ".vrcw": return WORLD;
+            case ".vrca": return AVATAR;
+            default: break; // fall through
+            }
+            switch (mime)
+            {
+            case APPLICATION_X_WORLD: return WORLD;
+            case APPLICATION_X_AVATAR: return AVATAR;
+            default: break; // fall through
+            }
+            {
+                Matcher m = filename.matcher(name);
+                if (m.matches())
+                {
+                    String topic = m.group("topic"),
+                           type = m.group("type");
+                    switch (topic)
+                    {
+                    case "World":
+                        switch (type)
+                        {
+                        case "Asset bundle": return WORLD;
+                        case "Image": return WORLD_IMAGE;
+                        default: break; // fall through
+                        }
+                    break;
+                    case "Avatar":
+                        switch (type)
+                        {
+                        case "Asset bundle": return AVATAR;
+                        case "Image": return AVATAR_IMAGE;
+                        default: break; // fall through
+                        }
+                    break;
+                    default:
+                        // fall through
+                    break;
+                    }
+                }
+            }
+            if (tags.contains("gallery"))     return GALLERY;
+            if (tags.contains("icon"))        return ICON;
+            if (tags.contains("invitePhoto")) return INVITE_PHOTO;
+            if (tags.contains("emoji"))       return tags.contains("animated") ? EMOJI_ANIMATED : EMOJI;
+            if (tags.contains("sticker"))     return STICKER;
+            if (tags.contains("print"))       return PRINT;
+            return OTHER;
+        }
     }
 
 }

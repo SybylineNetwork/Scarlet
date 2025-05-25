@@ -90,13 +90,14 @@ public class PropsTable<E> extends JTable
 
     public class PropsInfo<P>
     {
-        protected PropsInfo(String name, boolean editable, boolean enabled, Class<P> type, Function<E, P> getFrom)
+        protected PropsInfo(String id, String name, boolean editable, boolean enabled, Class<P> type, Function<E, P> getFrom)
         {
             if (type.isEnum())
             {
                 @SuppressWarnings({"unchecked", "rawtypes", "unused"})
                 boolean editorExisted = PropsTable.this.createDefaultEnumEditor((Class)type, false);
             }
+            this.id = id;
             this.name = name;
             this.editable = editable;
             this.type = Primitives.wrap(type);
@@ -131,7 +132,7 @@ public class PropsTable<E> extends JTable
                 this.setSortable(false);
             }
         }
-        final String name;
+        final String id, name;
         final boolean editable;
         final Class<P> type;
         final Function<E, P> getFrom;
@@ -147,6 +148,10 @@ public class PropsTable<E> extends JTable
         public void setComparator(Comparator<P> comparator)
         {
             this.comparator = comparator;
+        }
+        public String getId()
+        {
+            return this.id;
         }
         public String getName()
         {
@@ -201,7 +206,11 @@ public class PropsTable<E> extends JTable
 
     public <P> PropsInfo<P> addProperty(String name, boolean editable, boolean enabled, Class<P> type, Function<E, P> getFrom)
     { 
-        return new PropsInfo<>(name, editable, enabled, type, getFrom);
+        return this.addProperty(name, name, editable, enabled, type, getFrom);
+    }
+    public <P> PropsInfo<P> addProperty(String id, String name, boolean editable, boolean enabled, Class<P> type, Function<E, P> getFrom)
+    { 
+        return new PropsInfo<>(id, name, editable, enabled, type, getFrom);
     }
 
     public synchronized void addEntry(E entry)

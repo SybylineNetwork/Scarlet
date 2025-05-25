@@ -7,6 +7,11 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12-rc3
+  - Add report links to various events and search results
+  - Added button to view potential avatar matches for easier manual correlation
+  - Changed VRChat Client launching to use URI on non-Windows platforms
+
 ## 0.4.12-rc2
   - Added avatar thumbnail to User Switch Avatar extended event (not foolproof, can be default/previous avatar image)
   - Updated VRChat Help Desk autofill links to account for recent changes

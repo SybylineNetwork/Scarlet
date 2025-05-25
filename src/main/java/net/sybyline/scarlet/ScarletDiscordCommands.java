@@ -64,6 +64,7 @@ import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
 import net.dv8tion.jda.api.utils.FileUpload;
+import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.server.discord.DInteractions;
@@ -80,6 +81,7 @@ import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
+import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VrcIds;
 
 public class ScarletDiscordCommands
@@ -185,6 +187,7 @@ public class ScarletDiscordCommands
                     .setAuthor($.getAuthorName(), "https://vrchat.com/home/user/"+$.getAuthorId(), null)
                     .setTitle($.getName(), "https://vrchat.com/home/world/"+$.getId())
                     .setThumbnail($.getThumbnailImageUrl() == null || $.getThumbnailImageUrl().isEmpty() ? null : $.getThumbnailImageUrl())
+                    .addField("Report world", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_world(ScarletDiscordCommands.this.discord.requestingEmail.get(), $.getId(), "World", null)), false)
                     .build())
                 .toArray(MessageEmbed[]::new);
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
@@ -200,6 +203,7 @@ public class ScarletDiscordCommands
 //                    .setAuthor($.getAuthorName(), "https://vrchat.com/home/user/"+$.getAuthorId(), null)
                     .setTitle($.getDisplayName(), "https://vrchat.com/home/user/"+$.getId())
                     .setThumbnail($.getProfilePicOverride() == null || $.getProfilePicOverride().isEmpty() ? ($.getCurrentAvatarImageUrl() == null || $.getCurrentAvatarImageUrl().isEmpty() ? null : $.getCurrentAvatarImageUrl()) : $.getProfilePicOverride())
+                    .addField("Report account", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account(ScarletDiscordCommands.this.discord.requestingEmail.get(), null, $.getId(), "Account", null)), false)
                     .build())
                 .toArray(MessageEmbed[]::new);
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
@@ -216,6 +220,7 @@ public class ScarletDiscordCommands
                     .setTitle($.getName(), "https://vrchat.com/home/group/"+$.getId())
                     .setThumbnail($.getBannerUrl() == null || $.getBannerUrl().isEmpty() ? null : $.getBannerUrl())
                     .setDescription($.getDescription() == null || $.getDescription().isEmpty() ? null : $.getDescription())
+                    .addField("Report group", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_group(ScarletDiscordCommands.this.discord.requestingEmail.get(), $.getId(), "Group", null)), false)
                     .build())
                 .toArray(MessageEmbed[]::new);
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
@@ -230,6 +235,7 @@ public class ScarletDiscordCommands
                     .setTitle($.name, "https://vrchat.com/home/avatar/"+$.id)
                     .setThumbnail($.imageUrl == null || $.imageUrl.isEmpty() ? null : $.imageUrl)
                     .setDescription($.description == null || $.description.isEmpty() ? null : $.description)
+                    .addField("Report avatar", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_avatar(ScarletDiscordCommands.this.discord.requestingEmail.get(), $.id, "Avatar", null)), false)
                     .build())
                 .toArray(MessageEmbed[]::new);
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);

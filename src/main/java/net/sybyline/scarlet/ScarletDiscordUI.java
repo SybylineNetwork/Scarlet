@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
+import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.sybyline.scarlet.ScarletDiscordJDA.InstanceCreation;
 import net.sybyline.scarlet.server.discord.DInteractions.ButtonClk;
 import net.sybyline.scarlet.server.discord.DInteractions.Ephemeral;
@@ -767,6 +769,34 @@ public class ScarletDiscordUI
             .setContent(eventUserId != null ? null : "## WARNING\nThis link autofills the requesting user id of the **audit actor, not necessarily you**\nAssociate your Discord and VRChat ids with `/associate-ids`.\n\n")
             .setEphemeral(true)
             .queue();
+    }
+
+    @ButtonClk("view-potential-avatar-matches")
+    @Ephemeral
+    public void viewPotentialAvatarMatches(ButtonInteractionEvent event, InteractionHook hook)
+    {
+        MessageEmbed[] embeds = event
+            .getMessage()
+            .getEmbeds()
+            .stream()
+            .map(MessageEmbed::getDescription)
+            .filter(Objects::nonNull)
+            .map($ -> $.split("\\R"))
+            .flatMap(Stream::of)
+            .map(this.discord.scarlet.vrc::getAvatar)
+            .filter(Objects::nonNull)
+            .map($ -> 
+                new EmbedBuilder()
+                .setAuthor($.getAuthorName(), "https://vrchat.com/home/user/"+$.getAuthorId(), null)
+                .setTitle($.getName(), "https://vrchat.com/home/avatar/"+$.getId())
+                .setThumbnail($.getImageUrl() == null || $.getImageUrl().isEmpty() ? null : $.getImageUrl())
+                .setDescription($.getDescription() == null || $.getDescription().isEmpty() ? null : $.getDescription())
+                .addField("Report avatar", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_avatar(this.discord.requestingEmail.get(), $.getId(), null, null)), false)
+                .build()
+            )
+            .toArray(MessageEmbed[]::new)
+            ;
+        this.discord.interactions.new Pagination(event.getId(), embeds, 4).queue(hook);
     }
 
     @ButtonClk("view-snapshot-user")
