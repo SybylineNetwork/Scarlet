@@ -147,6 +147,28 @@ Since there is no automatic synchronization of data between groups running Scarl
 - **`importgroupsjson <file|url...>`**  
   Imports a JSON list of watched groups from a file or url.
 
+Scarlet supports sending cli commands via named pipes.
+Windows: `\\.\pipe\ScarletIPC-grp_00000000-0000-0000-0000-000000000000`
+Everything else (Unix-like): `/tmp/ScarletIPC-grp_00000000-0000-0000-0000-000000000000.sock`
+
+```ps1
+function Send-ScarletIPC
+{
+    param
+    (
+    [String]$GroupID,
+    [String]$Message
+    )
+    $request = [System.Text.Encoding]::UTF8.GetBytes($Message);
+    $stream = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList '.',"ScarletIPC-$GroupID",([System.IO.Pipes.PipeDirection]::Out),([System.IO.Pipes.PipeOptions]::WriteThrough),([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
+    $stream.Connect($1000);
+    $stream.Write($request, 0, $request.Length);
+    $stream.Dispose();
+}
+
+Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'stop'
+```
+
 ---
 
 ### Interoperability

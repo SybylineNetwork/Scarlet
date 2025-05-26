@@ -4,9 +4,12 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -25,6 +28,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.JOptionPane;
 
+import org.scalasbt.ipcsocket.UnixDomainServerSocket;
+import org.scalasbt.ipcsocket.Win32NamedPipeServerSocket;
+import org.scalasbt.ipcsocket.Win32SecurityLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +50,7 @@ import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
 import net.sybyline.scarlet.util.MavenDepsLoader;
 import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.Platform;
 import net.sybyline.scarlet.util.ProcLock;
 import net.sybyline.scarlet.util.TTSService;
 import net.sybyline.scarlet.util.VrcIds;
@@ -66,7 +73,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.12-rc2",
+        VERSION = "0.4.12-rc3",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -200,8 +207,10 @@ public class Scarlet implements Closeable
     public void close() throws IOException
     {
         this.stop();
+        MiscUtils.close(this.ipcServer);
         this.exec.shutdown();
         this.execModal.shutdown();
+        this.execIPC.shutdown();
         try
         {
             if (!this.exec.awaitTermination(3_000L, TimeUnit.MILLISECONDS))
@@ -218,6 +227,17 @@ public class Scarlet implements Closeable
             if (!this.execModal.awaitTermination(3_000L, TimeUnit.MILLISECONDS))
             {
                 int unstarted = this.execModal.shutdownNow().size();
+                LOG.error("Forcibly terminated modal executor service, "+unstarted+" unstarted task(s)");
+            }
+        }
+        catch (InterruptedException iex)
+        {
+        }
+        try
+        {
+            if (!this.execIPC.awaitTermination(3_000L, TimeUnit.MILLISECONDS))
+            {
+                int unstarted = this.execIPC.shutdownNow().size();
                 LOG.error("Forcibly terminated modal executor service, "+unstarted+" unstarted task(s)");
             }
         }
@@ -242,6 +262,7 @@ public class Scarlet implements Closeable
     final AtomicInteger threadidx = new AtomicInteger();
     final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
     final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
+    final ScheduledExecutorService execIPC = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet IPC Thread "+this.threadidx.incrementAndGet()));
     
     final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
     {
@@ -273,6 +294,9 @@ public class Scarlet implements Closeable
                                      showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
     final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
     final ScarletUI.Setting<Void> uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
+    final ServerSocket ipcServer = Platform.CURRENT.isNT()
+            ? new Win32NamedPipeServerSocket(1, "\\\\.\\pipe\\ScarletIPC-"+this.vrc.groupId, false, true, Win32SecurityLevel.LOGON_DACL)
+            : new UnixDomainServerSocket("/tmp/ScarletIPC-"+this.vrc.groupId+".sock", false);
 
     public void run()
     {
@@ -297,6 +321,7 @@ public class Scarlet implements Closeable
         this.splash.splashSubtext("Checking for updates");
         this.checkUpdate();
         this.logs.start();
+        this.execIPC.execute(this::runIPC);
         try
         {
             long filecheck = 3;
@@ -401,98 +426,143 @@ public class Scarlet implements Closeable
                 @SuppressWarnings("resource")
                 Scanner s = new Scanner(System.in);
                 String line = s.nextLine().trim();
-                if (line.isEmpty())
-                    continue;
-                Scanner ls = new Scanner(new StringReader(line));
-                {
-                    String op = ls.next();
-                    switch (op)
-                    {
-                    case "logout": {
-                        LOG.info("Logout success: "+this.vrc.logout());
-                    } // fallthrough
-                    case "exit":
-                    case "halt":
-                    case "quit":
-                    case "stop": {
-                        this.running = false;
-                        LOG.info("Stopping");
-                    } break;
-                    case "explore": {
-                        MiscUtils.AWTDesktop.browse(dir.toURI());
-                    } break;
-                    case "tts": {
-                        String text = ls.nextLine().trim();
-                        if (!text.isEmpty())
-                        {
-                            this.ttsService.setOutputToDefaultAudioDevice(this.eventListener.ttsUseDefaultAudioDevice.get());
-                            LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit("cli-"+Long.toUnsignedString(System.nanoTime()), text));
-                        }
-                    } break;
-                    case "link": {
-                        String userId = ls.next();
-                        String userSnowflake = ls.next();
-                        
-                        User user = this.vrc.getUser(userId);
-                        if (user == null)
-                        {
-                            LOG.warn("Unknown VRChat user: "+userId);
-                        }
-                        else
-                        {
-                            this.data.linkIdToSnowflake(userId, userSnowflake);
-                            LOG.info("Linking VRChat user "+user.getDisplayName()+" ("+userId+") to Discord user <@"+userSnowflake+">");
-                        }
-                    } break;
-                    case "importgroups": {
-                        String from = ls.nextLine().trim();
-                        boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
-                        
-                        LOG.info("Importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from);
-                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from), StandardCharsets.UTF_8) : MiscUtils.reader(new File(from)))
-                        {
-                            if (this.watchedGroups.importLegacyCSV(reader, true))
-                            {
-                                LOG.info("Successfully imported watched groups legacy CSV");
-                            }
-                            else
-                            {
-                                LOG.warn("Failed to import watched groups legacy CSV with unknown reason");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            LOG.error("Exception importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from, ex);
-                        }
-                    } break;
-                    case "importgroupsjson": {
-                        String from = ls.nextLine().trim();
-                        boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
-                        
-                        LOG.info("Importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from);
-                        try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from), StandardCharsets.UTF_8) : MiscUtils.reader(new File(from)))
-                        {
-                            if (this.watchedGroups.importJson(reader, true))
-                            {
-                                LOG.info("Successfully imported watched groups JSON");
-                            }
-                            else
-                            {
-                                LOG.warn("Failed to import watched groups JSON with unknown reason");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            LOG.error("Exception importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from, ex);
-                        }
-                    } break;
-                    }
-                }
+                this.rawCommand(line);
             }
         }
         catch (Exception ex)
         {
             LOG.error("Exception in spin", ex);
+        }
+    }
+
+/*
+function Send-ScarletIPC
+{
+    param
+    (
+    [String]$GroupID,
+    [String]$Message
+    )
+    $request = [System.Text.Encoding]::UTF8.GetBytes($Message);
+    $stream = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList '.',"ScarletIPC-$GroupID",([System.IO.Pipes.PipeDirection]::Out),([System.IO.Pipes.PipeOptions]::WriteThrough),([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
+    $stream.Connect($1000);
+    $stream.Write($request, 0, $request.Length);
+    $stream.Dispose();
+}
+Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'stop'
+*/
+    void runIPC()
+    {
+        try
+        {
+            while (this.running)
+            try (Socket socket =  this.ipcServer.accept())
+            {
+                InputStream ipcin = socket.getInputStream();
+                do
+                {
+                    @SuppressWarnings("resource")
+                    Scanner s = new Scanner(ipcin);
+                    String line = s.nextLine().trim();
+                    this.rawCommand(line);
+                }
+                while (ipcin.available() > 0);
+            }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception in ipc", ex);
+        }
+    }
+
+    void rawCommand(String line)
+    {
+        if (line == null || line.isEmpty())
+            return;
+        Scanner ls = new Scanner(new StringReader(line));
+        {
+            String op = ls.next();
+            switch (op)
+            {
+            case "logout": {
+                LOG.info("Logout success: "+this.vrc.logout());
+            } // fallthrough
+            case "exit":
+            case "halt":
+            case "quit":
+            case "stop": {
+                this.running = false;
+                LOG.info("Stopping");
+            } break;
+            case "explore": {
+                MiscUtils.AWTDesktop.browse(dir.toURI());
+            } break;
+            case "tts": {
+                String text = ls.nextLine().trim();
+                if (!text.isEmpty())
+                {
+                    this.ttsService.setOutputToDefaultAudioDevice(this.eventListener.ttsUseDefaultAudioDevice.get());
+                    LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit("cli-"+Long.toUnsignedString(System.nanoTime()), text));
+                }
+            } break;
+            case "link": {
+                String userId = ls.next();
+                String userSnowflake = ls.next();
+                
+                User user = this.vrc.getUser(userId);
+                if (user == null)
+                {
+                    LOG.warn("Unknown VRChat user: "+userId);
+                }
+                else
+                {
+                    this.data.linkIdToSnowflake(userId, userSnowflake);
+                    LOG.info("Linking VRChat user "+user.getDisplayName()+" ("+userId+") to Discord user <@"+userSnowflake+">");
+                }
+            } break;
+            case "importgroups": {
+                String from = ls.nextLine().trim();
+                boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
+                
+                LOG.info("Importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from);
+                try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from), StandardCharsets.UTF_8) : MiscUtils.reader(new File(from)))
+                {
+                    if (this.watchedGroups.importLegacyCSV(reader, true))
+                    {
+                        LOG.info("Successfully imported watched groups legacy CSV");
+                    }
+                    else
+                    {
+                        LOG.warn("Failed to import watched groups legacy CSV with unknown reason");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception importing watched groups legacy CSV from "+(isUrl ? "URL: " : "file: ")+from, ex);
+                }
+            } break;
+            case "importgroupsjson": {
+                String from = ls.nextLine().trim();
+                boolean isUrl = from.startsWith("http://") || from.startsWith("https://");
+                
+                LOG.info("Importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from);
+                try (Reader reader = isUrl ? new InputStreamReader(HttpURLInputStream.get(from), StandardCharsets.UTF_8) : MiscUtils.reader(new File(from)))
+                {
+                    if (this.watchedGroups.importJson(reader, true))
+                    {
+                        LOG.info("Successfully imported watched groups JSON");
+                    }
+                    else
+                    {
+                        LOG.warn("Failed to import watched groups JSON with unknown reason");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from, ex);
+                }
+            } break;
+            }
         }
     }
 
