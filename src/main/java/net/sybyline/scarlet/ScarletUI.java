@@ -1222,7 +1222,7 @@ public class ScarletUI implements AutoCloseable
     {
         StringArrSetting(String id, String name, String[] defaultValue, Predicate<String> validator)
         {
-            super(id, name, defaultValue, new JTextArea(32, 32));
+            super(id, name, defaultValue, new JTextArea(8, 32));
             this.validator = validator == null ? $ -> true : validator;
             this.background = this.render.getBackground();
             JPopupMenu cpm = new JPopupMenu();
@@ -1298,12 +1298,13 @@ public class ScarletUI implements AutoCloseable
         }
         boolean testValid(String value)
         {
-            for (String line : value.split("\\R"))
-                if (!this.validator.test(line))
-                {
-                    this.render.setBackground(MiscUtils.lerp(this.background, Color.PINK, 0.5F));
-                    return false;
-                }
+            if (this.validator != null)
+                for (String line : value.split("\\R"))
+                    if (!this.validator.test(line))
+                    {
+                        this.render.setBackground(MiscUtils.lerp(this.background, Color.PINK, 0.5F));
+                        return false;
+                    }
             this.render.setBackground(this.background);
             return true;
         }
