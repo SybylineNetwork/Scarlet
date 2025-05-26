@@ -103,6 +103,7 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.dv8tion.jda.api.utils.messages.MessageCreateRequest;
 import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
+import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.ext.VrcLaunch;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
@@ -138,6 +139,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.evidenceEnabled = scarlet.ui.settingBool("evidence_enabled", "Evidence submission", false);
         this.selectEvidenceRoot = scarlet.ui.settingVoid("Evidence root folder", "Select", this::selectEvidenceRoot);
         this.evidenceFilePathFormat = scarlet.ui.settingString("evidence_file_path_format", "Evidence file path format", "");
+        this.avatarSearchProvidersEnabled = scarlet.ui.settingBool("custom_avatar_search_providers_enabled", "Use custom avatar search providers", false);
+        this.avatarSearchProviders = scarlet.ui.settingStringArr("custom_avatar_search_providers", "VRCX-compatible avatar search providers", AvatarSearch.URL_ROOTS.clone());
+        this.resetAvatarSearchProviders = scarlet.ui.settingVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
         this.load();
         JDA jda = null;
         if (this.token != null && !this.token.trim().isEmpty()) try
@@ -199,8 +203,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      pingOnModeration_userBan,
                                      pingOnModeration_userUnban,
                                      vrchatClient_launchOnInstanceCreate,
-                                     evidenceEnabled;
-    final ScarletUI.Setting<Void> selectEvidenceRoot;
+                                     evidenceEnabled,
+                                     avatarSearchProvidersEnabled;
+    final ScarletUI.Setting<Void> selectEvidenceRoot,
+                                  resetAvatarSearchProviders;
+    final ScarletUI.Setting<String[]> avatarSearchProviders;
     final DInteractions interactions;
     final DPerms perms;
     final Map<String, InstanceCreation> instanceCreation = new ConcurrentHashMap<>();
@@ -339,6 +346,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
         LOG.warn("No Discord bot token: entering staff mode");
         this.scarlet.staffMode = true;
         this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
+    }
+
+    void resetAvatarSearchProviders()
+    {
+        this.avatarSearchProviders.set(this.avatarSearchProviders.getDefault());
+    }
+
+    String[] getAvatarSearchProviders()
+    {
+        return this.avatarSearchProvidersEnabled.get()
+            ? this.avatarSearchProviders.get()
+            : AvatarSearch.URL_ROOTS;
     }
 
     void selectEvidenceRoot()

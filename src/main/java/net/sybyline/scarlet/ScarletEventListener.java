@@ -237,7 +237,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     void switchPlayerAvatar(OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
     {
         String[] potentialIds = AvatarSearch
-            .vrcxSearchAllCached(avatarDisplayName)
+            .vrcxSearchAllCached(((ScarletDiscordJDA)this.scarlet.discord).getAvatarSearchProviders(), avatarDisplayName)
             .filter(Objects::nonNull)
             .filter($$ -> avatarDisplayName.equals($$.name))
             .map(AvatarSearch.VrcxAvatar::id)

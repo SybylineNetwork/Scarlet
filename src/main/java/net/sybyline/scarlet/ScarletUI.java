@@ -58,6 +58,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.DocumentEvent;
@@ -70,6 +71,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
@@ -315,6 +317,30 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
+    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue)
+    {
+        return this.settingStringArr(id, name, defaultValue, (Predicate<String>)null);
+    }
+    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue, String regex)
+    {
+        return this.settingStringArr(id, name, defaultValue, regex == null ? null : Pattern.compile(regex));
+    }
+    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue, Pattern pattern)
+    {
+        return this.settingStringArr(id, name, defaultValue, pattern == null ? null : pattern.asPredicate());
+    }
+    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue, Predicate<String> validator)
+    {
+        try
+        {
+            return new StringArrSetting(id, name, defaultValue, validator);
+        }
+        finally
+        {
+            this.readdSettingUI();
+        }
+    }
+
     public synchronized Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max)
     {
         try
@@ -444,11 +470,11 @@ public class ScarletUI implements AutoCloseable
         {
             this.propstable.addProperty("Name", false, true, String.class, $ -> $.name);
             this.propstable.addProperty("Id", false, true, String.class, $ -> $.id);
-            this.propstable.addProperty("Acc-Age", false, true, Period.class, $ -> $.acctdays);
+            this.propstable.addProperty("AcctAge", "Acc-Age", false, true, Period.class, $ -> $.acctdays);
             this.propstable.addProperty("Joined", false, true, LocalDateTime.class, $ -> $.joined);
             this.propstable.addProperty("Left", false, true, LocalDateTime.class, $ -> $.left);
             this.propstable.addProperty("Advisory", false, true, String.class, $ -> $.advisory);
-            this.propstable.addProperty("18+", false, true, AgeVerificationStatus.class, $ -> $.ageVerificationStatus);
+            this.propstable.addProperty("AgeVer", "18+", false, true, AgeVerificationStatus.class, $ -> $.ageVerificationStatus);
             this.propstable.addProperty("Profile", true, true, Action.class, $ -> $.profile);
             this.propstable.addProperty("Copy ID", true, true, Action.class, $ -> $.copy);
             this.propstable.addProperty("Ban", true, true, Action.class, $ -> $.ban);
@@ -617,7 +643,7 @@ public class ScarletUI implements AutoCloseable
     void saveInstanceColumns()
     {
         Map<String, UIPropsInfo> map = new HashMap<>();
-        this.propstable.iterProps(info -> map.put(info.getName(), new UIPropsInfo(info.getDisplayIndex(), info.getWidth())));
+        this.propstable.iterProps(info -> map.put(info.getId(), new UIPropsInfo(info.getDisplayIndex(), info.getWidth())));
         this.scarlet.settings.setObject("ui_instance_columns", UIPropsInfo.MAPOF, map);
     }
 
@@ -1115,7 +1141,7 @@ public class ScarletUI implements AutoCloseable
                 String cbc = MiscUtils.AWTToolkit.get();
                 if (cbc != null)
                 {
-                    this.render.setText(cbc);
+                    this.render.replaceSelection(cbc);
                     this.accept();
                     this.markDirty();
                 }
@@ -1189,6 +1215,97 @@ public class ScarletUI implements AutoCloseable
             boolean ret = this.validator.test(value);
             this.render.setBackground(ret ? this.background : MiscUtils.lerp(this.background, Color.PINK, 0.5F));
             return ret;
+        }
+    }
+
+    class StringArrSetting extends ASetting<String[], JTextArea>
+    {
+        StringArrSetting(String id, String name, String[] defaultValue, Predicate<String> validator)
+        {
+            super(id, name, defaultValue, new JTextArea(32, 32));
+            this.validator = validator == null ? $ -> true : validator;
+            this.background = this.render.getBackground();
+            JPopupMenu cpm = new JPopupMenu();
+            cpm.add("Paste").addActionListener($ -> {
+                String cbc = MiscUtils.AWTToolkit.get();
+                if (cbc != null)
+                {
+                    this.render.replaceSelection(cbc);
+                    this.accept();
+                    this.markDirty();
+                }
+            });
+            this.render.setComponentPopupMenu(cpm);
+            this.render.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusLost(FocusEvent e)
+                {
+                    StringArrSetting.this.accept();
+                    StringArrSetting.this.markDirty();
+                }
+            });
+            this.render.getDocument().addDocumentListener(new DocumentListener() {
+                @Override
+                public void removeUpdate(DocumentEvent e)
+                {
+                    StringArrSetting.this.accept();
+                }
+                @Override
+                public void insertUpdate(DocumentEvent e)
+                {
+                    StringArrSetting.this.accept();
+                }
+                @Override
+                public void changedUpdate(DocumentEvent e)
+                {
+                    StringArrSetting.this.accept();
+                }
+            });
+        }
+        final Predicate<String> validator;
+        final Color background;
+        @Override
+        public JsonElement serialize()
+        {
+            JsonArray array = new JsonArray();
+            for (String line : this.value)
+                array.add(line);
+            return array;
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
+            if (!element.isJsonArray())
+                return;
+            this.set(element.getAsJsonArray().asList().stream().map(JsonElement::getAsString).toArray(String[]::new));
+        }
+        @Override
+        protected void update()
+        {
+            String value = String.join("\n", this.value);
+            if (Objects.equals(value, this.render.getText()))
+                return;
+            this.render.setText(value);
+            this.testValid(value);
+        }
+        void accept()
+        {
+            String value = this.render.getText();
+            if (this.testValid(value))
+            {
+                this.value = value.split("\\R");
+            }
+        }
+        boolean testValid(String value)
+        {
+            for (String line : value.split("\\R"))
+                if (!this.validator.test(line))
+                {
+                    this.render.setBackground(MiscUtils.lerp(this.background, Color.PINK, 0.5F));
+                    return false;
+                }
+            this.render.setBackground(this.background);
+            return true;
         }
     }
 

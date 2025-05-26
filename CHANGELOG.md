@@ -8,7 +8,8 @@
   - Pending: Distinct Server and Client modes
 
 ## 0.4.12-rc3
-  - Add report links to various events and search results
+  - Added setting to configure which VRCX-compatible avatar search providers to use
+  - Added report links to various events and search results
   - Added button to view potential avatar matches for easier manual correlation
   - Changed VRChat Client launching to use URI on non-Windows platforms
 

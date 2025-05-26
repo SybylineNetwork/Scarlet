@@ -229,7 +229,7 @@ public class ScarletDiscordCommands
         @Desc("Searches for avatars")
         public void avatar(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("search-query") String searchQuery, @SlashOpt("entries-per-page") int entriesPerPage) throws Exception
         {
-            MessageEmbed[] embeds = AvatarSearch.vrcxSearchAllCached(searchQuery)
+            MessageEmbed[] embeds = AvatarSearch.vrcxSearchAllCached(ScarletDiscordCommands.this.discord.getAvatarSearchProviders(), searchQuery)
                 .map($ -> new EmbedBuilder()
                     .setAuthor($.authorName, "https://vrchat.com/home/user/"+$.authorId, null)
                     .setTitle($.name, "https://vrchat.com/home/avatar/"+$.id)

@@ -303,7 +303,15 @@ General settings for Scarlet:
     "vrchat_client_launch_on_instance_create": false,
     
     // Whether evidence submission is enabled
-    "evidence_enabled": false
+    "evidence_enabled": false,
+    
+    // Whether to use custom VRCX-compatible avatar search providers
+    "custom_avatar_search_providers_enabled": false,
+    
+    // Array of VRCX-compatible avatar search providers
+    "custom_avatar_search_providers": [
+        "https://website/vrcx_search.php"
+    ]
 }
 ```
 

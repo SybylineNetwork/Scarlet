@@ -265,7 +265,11 @@ public class PropsTable<E> extends JTable
 
     public PropsInfo<?> getProp(String name)
     {
-        for (PropsInfo<?> info : this.getPropsDataModel().props)
+        List<PropsInfo<?>> props = this.getPropsDataModel().props;
+        for (PropsInfo<?> info : props)
+            if (info.id.equals(name))
+                return info;
+        for (PropsInfo<?> info : props)
             if (info.name.equals(name))
                 return info;
         return null;
