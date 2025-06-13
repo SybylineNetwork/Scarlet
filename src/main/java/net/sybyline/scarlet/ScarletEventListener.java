@@ -16,8 +16,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.Print;
@@ -27,6 +30,7 @@ import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.TTSService;
 import net.sybyline.scarlet.util.VersionedFile;
+import net.sybyline.scarlet.util.VrcIds;
 
 public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSService.Listener
 {
@@ -56,6 +60,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.announceNewPlayers = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce new players", true);
         this.announceVotesToKick = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce Votes-to-Kick", true);
         this.announcePlayersNewerThan = scarlet.ui.settingInt("tts_announce_players_newer_than_days", "TTS: Announce players newer than (days)", 30, 1, 365);
+
+        this.attemptAvatarImageMatch = scarlet.ui.settingBool("attempt_avatar_image_match", "Attempt avatar image match", false);
     }
 
     final Scarlet scarlet;
@@ -78,7 +84,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     final ScarletUI.Setting<Boolean> ttsUseDefaultAudioDevice,
                                      announceWatchedGroups,
                                      announceNewPlayers,
-                                     announceVotesToKick;
+                                     announceVotesToKick,
+                                     attemptAvatarImageMatch;
     final ScarletUI.Setting<Integer> announcePlayersNewerThan;
 
     void settingsLoaded()
@@ -244,6 +251,31 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             .filter(Objects::nonNull)
             .distinct()
             .toArray(String[]::new);
+        
+        if (this.attemptAvatarImageMatch.get())
+        {
+            User user = this.scarlet.vrc.getUser(userId);
+            if (user != null && user.getProfilePicOverride().isEmpty() && !user.getCurrentAvatarImageUrl().contains("file_0e8c4e32-7444-44ea-ade4-313c010d4bae"))
+            {
+                Matcher m = VrcIds.id_file.matcher(user.getCurrentAvatarImageUrl());
+                if (m.find())
+                {
+                    String uafid = m.group();
+                    long withinOneHour = System.currentTimeMillis() - 3600_000L;
+                    String[] altPotentialIds = Stream
+                        .of(potentialIds)
+                        .map($ -> this.scarlet.vrc.getAvatar($, withinOneHour))
+                        .filter(Objects::nonNull)
+                        .filter($ -> $.getImageUrl().contains(uafid))
+                        .map(Avatar::getId)
+                        .toArray(String[]::new)
+                    ;
+                    if (altPotentialIds.length > 0)
+                        potentialIds = altPotentialIds;
+                }
+            }
+        }
+        
         this.scarlet.discord.emitExtendedUserAvatar(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, avatarDisplayName, potentialIds);
         this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_AVATAR, odt, userId, userDisplayName, potentialIds.length == 1 ? potentialIds[0] : null, avatarDisplayName);
     }
@@ -251,9 +283,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     Color checkPlayer(List<String> advisories, int[] priority, boolean preamble, String userDisplayName, String userId)
     {
         ScarletWatchedGroups.WatchedGroup.Type overall_type = null;
-        long minEpoch = preamble ? Long.MIN_VALUE : System.currentTimeMillis() - 86400_000L; // pull if not preamble and cache more than 1 day old
-        User user = this.scarlet.vrc.getUser(userId, minEpoch);
-        List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId, minEpoch);
+        User user = this.scarlet.vrc.getUser(userId);
+        List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId);
         // check groups
         if (lugs != null)
         {
@@ -380,7 +411,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                     if (url.startsWith("prints/prnt_", pathIdx))
                     {
                         String printId = url.substring(pathIdx + 7);
-                        Print print = this.scarlet.vrc.getPrint(printId, Long.MAX_VALUE);
+                        Print print = this.scarlet.vrc.getPrint(printId);
                         if (print != null)
                         {
                             User user = this.scarlet.vrc.getUser(print.getOwnerId());

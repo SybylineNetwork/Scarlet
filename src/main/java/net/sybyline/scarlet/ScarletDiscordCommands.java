@@ -10,6 +10,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -62,6 +63,9 @@ import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.interactions.components.text.TextInput;
+import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
+import net.dv8tion.jda.api.interactions.modals.Modal;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
@@ -110,7 +114,7 @@ public class ScarletDiscordCommands
         }
         if (VrcIds.id_user.matcher(value).matches())
         {
-            User user = this.discord.scarlet.vrc.getUser(value);
+            User user = this.discord.scarlet.vrc.getUser(value, Long.MIN_VALUE);
             if (user != null)
             {
                 event.replyChoice(user.getId()+": "+user.getDisplayName(), user.getId()).queue();
@@ -136,7 +140,7 @@ public class ScarletDiscordCommands
         }
         if (VrcIds.id_world.matcher(value).matches())
         {
-            World world = this.discord.scarlet.vrc.getWorld(value);
+            World world = this.discord.scarlet.vrc.getWorld(value, Long.MIN_VALUE);
             if (world != null)
             {
                 event.replyChoice(world.getId()+": "+world.getName()+" by "+world.getAuthorName(), world.getId()).queue();
@@ -163,8 +167,8 @@ public class ScarletDiscordCommands
     public final SlashOption<Role> _discordRole = SlashOption.ofRole("discord-role", "The Discord role", true);
     public final SlashOption<Channel> _textChannel = SlashOption.ofChannel("discord-text-channel", "The Discord text channel to use, or omit to remove entry", false, ChannelType.TEXT);
     public final SlashOption<Channel> _voiceChannel = SlashOption.ofChannel("discord-voice-channel", "The Discord voice channel to use, or omit to remove entry", false, ChannelType.VOICE);
-    public final SlashOption<Integer> _daysBack = SlashOption.ofInt("days-back", "The number of days into the past to search for events", false, 4).with($->$.setRequiredRange(1L, 10L));
-    public final SlashOption<Integer> _hoursBack = SlashOption.ofInt("hours-back", "The number of hours into the past to search for events", false, 24);
+    public final SlashOption<Integer> _daysBack = SlashOption.ofInt("days-back", "The number of days into the past to search for events", false, 4).with($->$.setRequiredRange(1L, 1000L));
+    public final SlashOption<Integer> _hoursBack = SlashOption.ofInt("hours-back", "The number of hours into the past to search for events", false, 24).with($->$.setRequiredRange(1L, 24_000L));
     public final SlashOption<Integer> _pagination = SlashOption.ofInt("entries-per-page", "The number of entries to show per page", false, 4).with($->$.setRequiredRange(1L, 10L));
 
 
@@ -339,13 +343,12 @@ public class ScarletDiscordCommands
         @Desc("Lists all watched groups")
         public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
         {
-            long within1day = System.currentTimeMillis() - 86400_000L;
             MessageEmbed[] embeds = ScarletDiscordCommands.this.discord.scarlet
                 .watchedGroups
                 .watchedGroups
                 .values()
                 .stream()
-                .map($ -> $.embed(ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup($.id, within1day)).build())
+                .map($ -> $.embed(ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup($.id)).build())
                 .toArray(MessageEmbed[]::new)
             ;
             
@@ -504,8 +507,7 @@ public class ScarletDiscordCommands
                 return;
             }
             this.vrchatGroup(event, groupId);
-            long within1hour = System.currentTimeMillis() - 360_000L;
-            Group group = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup(groupId, within1hour);
+            Group group = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup(groupId);
             hook.sendMessageEmbeds(watchedGroup.embed(group).build()).setEphemeral(true).queue();
         }
         public final SlashOption<String> _groupTags_R = SlashOption.ofString("group-tags", "A list of tags, separated by one of ',', ';', '/'", true, null);
@@ -1104,6 +1106,7 @@ public class ScarletDiscordCommands
         }
         else if (!this.discord.scarlet.vrc.banFromGroup(vrcTargetId))
         {
+            this.discord.scarlet.pendingModActions.pollPending(GroupAuditType.USER_BAN, vrcTargetId);
             hook.sendMessageFormat("Failed to ban %s", vrchatUser.getDisplayName()).setEphemeral(true).queue();
         }
         else
@@ -1111,6 +1114,38 @@ public class ScarletDiscordCommands
             hook.sendMessageFormat("Banned %s", vrchatUser.getDisplayName()).setEphemeral(false).queue();
         }
         
+    }
+
+    // vrchat-user-ban-multi
+
+    @SlashCmd("vrchat-user-ban-multi")
+    @Desc("Ban several VRChat users")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public void vrchatUserBanMulti(SlashCommandInteractionEvent event) throws Exception
+    {
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        if (vrcActorId == null)
+        {
+            event.reply(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
+            return;
+        }
+        
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        {
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                event.reply("You do not have permission to ban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
+        }
+        
+        event.replyModal(Modal.create("vrchat-user-ban-multi", "Ban Multiple VRChat Users")
+            .addActionRow(TextInput.create("target-ids", "Target VRChat User IDs", TextInputStyle.PARAGRAPH)
+                .setPlaceholder("User IDs separated by something that isn't 0-9, a-z, A-Z, '-', or '_' (e.g., newline, space, comma)")
+                .setRequiredRange(10, -1)
+                .build())
+            .build())
+        .queue();
     }
 
     // vrchat-user-unban
@@ -1154,6 +1189,7 @@ public class ScarletDiscordCommands
         }
         else if (!this.discord.scarlet.vrc.unbanFromGroup(vrcTargetId))
         {
+            this.discord.scarlet.pendingModActions.pollPending(GroupAuditType.USER_UNBAN, vrcTargetId);
             hook.sendMessageFormat("Failed to unban %s", vrchatUser.getDisplayName()).setEphemeral(true).queue();
         }
         else
@@ -1161,6 +1197,38 @@ public class ScarletDiscordCommands
             hook.sendMessageFormat("Unbanned %s", vrchatUser.getDisplayName()).setEphemeral(false).queue();
         }
         
+    }
+
+    // vrchat-user-unban-multi
+
+    @SlashCmd("vrchat-user-unban-multi")
+    @Desc("Unban several VRChat users")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public void vrchatUserUnbanMulti(SlashCommandInteractionEvent event) throws Exception
+    {
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        if (vrcActorId == null)
+        {
+            event.reply(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
+            return;
+        }
+        
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        {
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                event.reply("You do not have permission to unban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
+        }
+        
+        event.replyModal(Modal.create("vrchat-user-unban-multi", "Unban Multiple VRChat Users")
+            .addActionRow(TextInput.create("target-ids", "Target VRChat User IDs", TextInputStyle.PARAGRAPH)
+                .setPlaceholder("User IDs separated by something that isn't 0-9, a-z, A-Z, '-', or '_' (e.g., newline, space, comma)")
+                .setRequiredRange(10, -1)
+                .build())
+            .build())
+        .queue();
     }
 
     // vrchat-group
@@ -1521,6 +1589,18 @@ public class ScarletDiscordCommands
         this.discord.emitModSummary(this.discord.scarlet, OffsetDateTime.now(ZoneOffset.UTC), hoursBack, hook::sendMessageEmbeds);
     }
 
+    // outstanding-moderation
+
+    @SlashCmd("outstanding-moderation")
+    @Desc("Generates a list of outstanding moderation actions")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public void outstandingModeration(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("hours-back") int hoursBack)
+    {
+        Message message = this.discord.emitOutstandingMod(this.discord.scarlet, OffsetDateTime.now(ZoneOffset.UTC), hoursBack, hook::sendMessageEmbeds);
+        if (message == null)
+            hook.sendMessage("No moderation events watched").queue();
+    }
+
     // submit-attachments
 
     @MsgCmd("submit-attachments")
@@ -1535,6 +1615,32 @@ public class ScarletDiscordCommands
                 Button.primary("import-watched-groups:"+message.getId(), "Import watched groups"))
             .setEphemeral(true)
             .queue();
+    }
+
+    public final SlashOption<Message.Attachment>
+        _evidenceSubmission = SlashOption.ofAttachment("evidence-submission", "The submitted file", true),
+        _evidenceSubmission2 = SlashOption.ofAttachment("evidence-submission-2", "Another submitted file", false),
+        _evidenceSubmission3 = SlashOption.ofAttachment("evidence-submission-3", "Another submitted file", false),
+        _evidenceSubmission4 = SlashOption.ofAttachment("evidence-submission-4", "Another submitted file", false),
+        _evidenceSubmission5 = SlashOption.ofAttachment("evidence-submission-5", "Another submitted file", false);
+    @SlashCmd("submit-evidence")
+    @Desc("Submit attachments for evidence")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public void submitEvidence(SlashCommandInteractionEvent event, InteractionHook hook,
+        @SlashOpt("evidence-submission") Message.Attachment evidenceSubmission,
+        @SlashOpt("evidence-submission-2") Message.Attachment evidenceSubmission2,
+        @SlashOpt("evidence-submission-3") Message.Attachment evidenceSubmission3,
+        @SlashOpt("evidence-submission-4") Message.Attachment evidenceSubmission4,
+        @SlashOpt("evidence-submission-5") Message.Attachment evidenceSubmission5
+    )
+    {
+        List<Message.Attachment> submissions = new ArrayList<>();
+                                         submissions.add(evidenceSubmission);
+        if (evidenceSubmission2 != null) submissions.add(evidenceSubmission2);
+        if (evidenceSubmission3 != null) submissions.add(evidenceSubmission3);
+        if (evidenceSubmission4 != null) submissions.add(evidenceSubmission4);
+        if (evidenceSubmission5 != null) submissions.add(evidenceSubmission5);
+        this.discord.discordUI.submitEvidence(event, hook, () -> submissions, "You must run this command in the relevant thread of an audit event message.");
     }
 
     // fix-audit-thread
@@ -1676,16 +1782,15 @@ public class ScarletDiscordCommands
             }
             event.replyChoiceStrings().queue();
         }
-        @SlashCmd("mod-summary-time-of-day")
-        @Desc("Set what time of day to generate a summary of the previous 24 hours of moderation activity")
-        public void modSummaryTimeOfDay(SlashCommandInteractionEvent event, @SlashOpt("time-zone-id") ZoneId timeZoneId, @SlashOpt("time-of-day") String timeOfDay) throws Exception
+        OffsetDateTime nextTimeOfDay(SlashCommandInteractionEvent event, @SlashOpt("time-zone-id") ZoneId timeZoneId, @SlashOpt("time-of-day") String timeOfDay)
         {
+
             if (timeZoneId == null)
                 timeZoneId = ZoneOffset.of(event.getOption("time-zone-id", OptionMapping::getAsString));
             if (timeZoneId == null)
             {
                 event.replyFormat("Invalid time zone/offset `%s`", event.getOption("time-zone-id", OptionMapping::getAsString)).queue();
-                return;
+                return null;
             }
             LocalTime time;
             try
@@ -1695,16 +1800,28 @@ public class ScarletDiscordCommands
             catch (DateTimeParseException dtpex)
             {
                 event.replyFormat("Invalid time of day `%s`", timeOfDay).queue();
-                return;
+                return null;
             }
             long es = ZonedDateTime.now(timeZoneId).withHour(0).withMinute(0).withSecond(0).withNano(0).plusSeconds(time.toSecondOfDay()).toEpochSecond();
             OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC),
                            offset = OffsetDateTime.ofInstant(Instant.ofEpochSecond(es), ZoneOffset.UTC);
             while (offset.isBefore(now))
                 offset = offset.plusHours(24L);
-            ScarletDiscordCommands.this.discord.scarlet.settings.nextModSummary.set(offset);
-            String epochNext = Long.toUnsignedString(offset.plusHours(24L).toEpochSecond());
-            event.replyFormat("Set mod summary generation time: next summary at <t:%s:f>", epochNext).setEphemeral(true).queue();
+            return offset;
+        }
+        @SlashCmd("moderation-summary")
+        @Desc("Moderation summary settings")
+        public class ModSummary
+        {
+            @SlashCmd("time-of-day")
+            @Desc("Set what time of day to generate a summary of moderation activity")
+            public void modSummaryTimeOfDay(SlashCommandInteractionEvent event, @SlashOpt("time-zone-id") ZoneId timeZoneId, @SlashOpt("time-of-day") String timeOfDay) throws Exception
+            {
+                OffsetDateTime offset = nextTimeOfDay(event, timeZoneId, timeOfDay);
+                ScarletDiscordCommands.this.discord.scarlet.settings.nextModSummary.set(offset);
+                String epochNext = Long.toUnsignedString(offset.plusHours(24L).toEpochSecond());
+                event.replyFormat("Set mod summary generation time: next summary at <t:%s:f>", epochNext).setEphemeral(true).queue();
+            }
         }
         @SlashCmd("suggested-moderation")
         @Desc("Suggested moderation settings")
@@ -1725,6 +1842,28 @@ public class ScarletDiscordCommands
             {
                 ScarletDiscordCommands.this.discord.scarlet.settings.heuristicPeriodDays.set(periodDays);
                 event.replyFormat("Set suggested moderation period: %d day%s", periodDays, periodDays==1?"":"s").setEphemeral(true).queue();
+            }
+        }
+        @SlashCmd("outstanding-moderation")
+        @Desc("Outstanding moderation settings")
+        public class OutstandingMod
+        {
+            public final SlashOption<Integer> _periodDays = SlashOption.ofInt("period-days", "The number of days of history for which to consider moderation events", true, 3).with($->$.setRequiredRange(1L, 1000L));
+            @SlashCmd("period-days")
+            @Desc("The period")
+            public void periodDays(SlashCommandInteractionEvent event, @SlashOpt("period-days") int periodDays) throws Exception
+            {
+                ScarletDiscordCommands.this.discord.scarlet.settings.outstandingPeriodDays.set(periodDays);
+                event.replyFormat("Set outstanding moderation period: %d day%s", periodDays, periodDays==1?"":"s").setEphemeral(true).queue();
+            }
+            @SlashCmd("time-of-day")
+            @Desc("Set what time of day to generate a summary of outstanding moderation activity")
+            public void modSummaryTimeOfDay(SlashCommandInteractionEvent event, @SlashOpt("time-zone-id") ZoneId timeZoneId, @SlashOpt("time-of-day") String timeOfDay) throws Exception
+            {
+                OffsetDateTime offset = nextTimeOfDay(event, timeZoneId, timeOfDay);
+                ScarletDiscordCommands.this.discord.scarlet.settings.nextOutstandingMod.set(offset);
+                String epochNext = Long.toUnsignedString(offset.plusHours(24L).toEpochSecond());
+                event.replyFormat("Set outstanding mod summary generation time: next summary at <t:%s:f>", epochNext).setEphemeral(true).queue();
             }
         }
     }

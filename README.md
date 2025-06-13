@@ -46,9 +46,17 @@ Since there is no automatic synchronization of data between groups running Scarl
   Ban a specific VRChat user.  
   Example: `/vrchat-user-ban "usr_00000000-0000-0000-0000-000000000000"`
 
+- **`vrchat-user-ban-milti`**  
+  Ban several VRChat users.  
+  Example: `/vrchat-user-ban-multi`
+
 - **`vrchat-user-unban <vrchat-user:string>`**  
   Unban a specific VRChat user.  
   Example: `/vrchat-user-unban "usr_00000000-0000-0000-0000-000000000000"`
+
+- **`vrchat-user-unban-milti`**  
+  Unban several VRChat users.  
+  Example: `/vrchat-user-unban-multi`
 
 - **`vrchat-user-info <vrchat-user:string>`**  
   Lists internal and audit information for a specific VRChat user.  
@@ -57,6 +65,10 @@ Since there is no automatic synchronization of data between groups running Scarl
 - **`discord-user-info <discord-user:user>`**  
   Lists internal information for a specific Discord user.  
   Example: `/discord-user-info <@123456789123456789>`
+
+- **`submit-evidence <evidence-submission:attachment> <evidence-submission-2:attachment?> ...`**  
+  Submit attachments for evidence.  
+  Example: `/submit-evidence <(attached file)>`
 
 #### Audit and Logging Commands
 
@@ -87,6 +99,14 @@ Since there is no automatic synchronization of data between groups running Scarl
 - **`set-audit-ex-secret-channel <audit-ex-event-type:string> <discord-channel:channel?>`**  
   Sets a given text channel as the secret channel certain extended event types use.  
   Example: `/set-audit-ex-secret-channel "groupex.instance.vtk" <#log-instance-kicks>`
+
+- **`moderation-summary <hours-back:int?>`**  
+  Generates a summary of moderation actions.  
+  Example: `/moderation-summary "48"`
+
+- **`outstanding-moderation <hours-back:int?>`**  
+  Generates a list of outstanding moderation actions.  
+  Example: `/outstanding-moderation "48"`
 
 #### Configuration Commands
 
@@ -160,8 +180,8 @@ function Send-ScarletIPC
     [String]$Message
     )
     $request = [System.Text.Encoding]::UTF8.GetBytes($Message);
-    $stream = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList '.',"ScarletIPC-$GroupID",([System.IO.Pipes.PipeDirection]::Out),([System.IO.Pipes.PipeOptions]::WriteThrough),([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
-    $stream.Connect($1000);
+    $stream = New-Object -TypeName System.IO.Pipes.NamedPipeClientStream -ArgumentList '.',"ScarletIPC-$GroupID",([System.IO.Pipes.PipeDirection]::Out),([System.IO.Pipes.PipeOptions]::None),([System.Security.Principal.TokenImpersonationLevel]::Impersonation)
+    $stream.Connect(1000);
     $stream.Write($request, 0, $request.Length);
     $stream.Dispose();
 }

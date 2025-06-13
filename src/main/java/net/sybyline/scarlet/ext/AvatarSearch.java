@@ -43,6 +43,7 @@ public interface AvatarSearch
 
     class VrcxAvatar
     {
+        static final VrcxAvatar[] NONE = new VrcxAvatar[0];
         static final Map<String, Map<String, VrcxAvatar[]>> searchCacheByUrlRoot = new ConcurrentHashMap<>();
         
         @SerializedName(value = "id", alternate = { "avatarId", "avatar_id", "vrcId", "vrc_id" })
@@ -428,6 +429,8 @@ public interface AvatarSearch
 
     static VrcxAvatar[] vrcxSearch0(String urlRoot, int n, String search)
     {
+        if (!urlRoot.startsWith("http://") && !urlRoot.startsWith("https://"))
+            return VrcxAvatar.NONE;
         try (HttpURLInputStream in = HttpURLInputStream.get(urlRoot + "?n=" + Integer.toUnsignedString(n) + "&search=" + URLs.encode(search)))
         {
             return in.readAsJson(null, null, VrcxAvatar[].class);

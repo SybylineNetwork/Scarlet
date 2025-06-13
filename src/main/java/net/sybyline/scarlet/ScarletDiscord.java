@@ -28,6 +28,8 @@ public interface ScarletDiscord extends Closeable
 
     public void updateCommandList();
 
+    public long pollQueuedAction();
+
     public boolean submitAudio(File file);
 
     public default void process(Scarlet scarlet, GroupAuditLogEntry entry)
@@ -422,5 +424,24 @@ public interface ScarletDiscord extends Closeable
     public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
     public void tryEmitExtendedSuggestedModeration(Scarlet scarlet, User target);
     public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay);
+    public void emitOutstandingMod(Scarlet scarlet, OffsetDateTime endOfDay);
+    public void emitActionFailure(Scarlet scarlet, Action action, String format, Object... args);
+    public static class Action
+    {
+        public Action()
+        {
+        }
+        public Action(String action, String actorId, String targetId, String location)
+        {
+            this.action = action;
+            this.actorId = actorId;
+            this.targetId = targetId;
+            this.location = location;
+        }
+        public String action;
+        public String actorId;
+        public String targetId;
+        public String location;
+    }
 
 }

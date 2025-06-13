@@ -11,6 +11,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -35,6 +38,8 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
+import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
+import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
@@ -54,6 +59,7 @@ import net.sybyline.scarlet.server.discord.DInteractions.StringSel;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
+import net.sybyline.scarlet.util.VrcIds;
 
 public class ScarletDiscordUI
 {
@@ -226,11 +232,48 @@ public class ScarletDiscordUI
         
         if (!this.discord.scarlet.vrc.banFromGroup(vrcTargetId))
         {
+            this.discord.scarlet.pendingModActions.pollPending(GroupAuditType.USER_BAN, vrcTargetId);
             hook.sendMessageFormat("Failed to ban %s", sc.getDisplayName()).setEphemeral(true).queue();
             return;
         }
         
         hook.sendMessageFormat("Banned %s", sc.getDisplayName()).setEphemeral(false).queue();
+    }
+
+    static final Pattern FIND_USER_IDS = Pattern.compile("\\W*(?<id>"+VrcIds.P_ID_USER+")\\W*");
+    @ModalSub("vrchat-user-ban-multi")
+    public void vrchatUserBanMulti(ModalInteractionEvent event)
+    {
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        if (vrcActorId == null)
+        {
+            event.reply(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
+            return;
+        }
+        
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        {
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                event.reply("You do not have permission to unban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
+        }
+        
+        List<ScarletDiscordJDA.Action> banActions = new ArrayList<>();
+        
+        for (Matcher m = FIND_USER_IDS.matcher(event.getValue("target-ids").getAsString()); m.find();)
+            banActions.add(new ScarletDiscordJDA.Action("ban", vrcActorId, m.group("id"), null));
+        
+        if (banActions.isEmpty())
+        {
+            event.reply("No user ids found!").setEphemeral(true).queue();
+            return;
+        }
+        
+        this.discord.queuedActions.addAll(banActions);
+        
+        event.replyFormat("Queuing %s user ban(s)").setEphemeral(true).queue();
     }
 
     @ButtonClk("vrchat-user-unban")
@@ -281,11 +324,47 @@ public class ScarletDiscordUI
         
         if (!this.discord.scarlet.vrc.unbanFromGroup(vrcTargetId))
         {
+            this.discord.scarlet.pendingModActions.pollPending(GroupAuditType.USER_UNBAN, vrcTargetId);
             hook.sendMessageFormat("Failed to unban %s", sc.getDisplayName()).setEphemeral(true).queue();
             return;
         }
         
         hook.sendMessageFormat("Unbanned %s", sc.getDisplayName()).setEphemeral(false).queue();
+    }
+
+    @ModalSub("vrchat-user-unban-multi")
+    public void vrchatUserUnbanMulti(ModalInteractionEvent event)
+    {
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        if (vrcActorId == null)
+        {
+            event.reply(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
+            return;
+        }
+        
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        {
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            {
+                event.reply("You do not have permission to unban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
+                return;
+            }
+        }
+        
+        List<ScarletDiscordJDA.Action> unbanActions = new ArrayList<>();
+        
+        for (Matcher m = FIND_USER_IDS.matcher(event.getValue("target-ids").getAsString()); m.find();)
+            unbanActions.add(new ScarletDiscordJDA.Action("unban", vrcActorId, m.group("id"), null));
+        
+        if (unbanActions.isEmpty())
+        {
+            event.reply("No user ids found!").setEphemeral(true).queue();
+            return;
+        }
+        
+        this.discord.queuedActions.addAll(unbanActions);
+        
+        event.replyFormat("Queuing %s user unban(s)").setEphemeral(true).queue();
     }
 
     @ButtonClk("event-redact")
@@ -775,15 +854,23 @@ public class ScarletDiscordUI
     @Ephemeral
     public void viewPotentialAvatarMatches(ButtonInteractionEvent event, InteractionHook hook)
     {
+        long withinOneHour = System.currentTimeMillis() - 3600_000L;
         MessageEmbed[] embeds = event
             .getMessage()
             .getEmbeds()
             .stream()
             .map(MessageEmbed::getDescription)
             .filter(Objects::nonNull)
-            .map($ -> $.split("\\R"))
-            .flatMap(Stream::of)
-            .map(this.discord.scarlet.vrc::getAvatar)
+            .flatMap($ -> {
+                Matcher m = VrcIds.id_avatar.matcher($);
+                if (!m.find())
+                    return Stream.empty();
+                List<String> ids = new ArrayList<>();
+                do ids.add(m.group());
+                while (m.find());
+                return ids.stream();
+            })
+            .map($ -> this.discord.scarlet.vrc.getAvatar($, withinOneHour))
             .filter(Objects::nonNull)
             .map($ -> 
                 new EmbedBuilder()
@@ -911,6 +998,12 @@ public class ScarletDiscordUI
     {
         String[] parts = event.getButton().getId().split(":");
         String messageSnowflake = parts[1];
+        Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
+        this.submitEvidence(event, hook, message::getAttachments, "You must reply to an audit event message in the relevant thread.");
+    }
+    public void submitEvidence(GenericInteractionCreateEvent event, InteractionHook hook, Supplier<List<Message.Attachment>> getAttachments, String notThreadFeedback)
+    {
+        MessageChannel channel = event.getMessageChannel();
         
         if (!this.discord.evidenceEnabled.get())
         {
@@ -926,15 +1019,13 @@ public class ScarletDiscordUI
             return;
         }
         
-        if (!event.getChannelType().isThread())
+        if (!channel.getType().isThread())
         {
-            hook.sendMessage("You must reply to an audit event message in the relevant thread.").setEphemeral(true).queue();
+            hook.sendMessage(notThreadFeedback).setEphemeral(true).queue();
             return;
         }
-        Message message = event.getChannel().retrieveMessageById(messageSnowflake).complete();
         
-        String[] partsRef = event.getChannel()
-            .asThreadChannel()
+        String[] partsRef = channel
             .getHistoryFromBeginning(2)
             .complete()
             .getRetrievedHistory()
@@ -953,7 +1044,7 @@ public class ScarletDiscordUI
             return;
         }
         
-        List<Message.Attachment> attachments = message.getAttachments();
+        List<Message.Attachment> attachments = getAttachments.get();//message.getAttachments();
         
         if (attachments.isEmpty())
         {

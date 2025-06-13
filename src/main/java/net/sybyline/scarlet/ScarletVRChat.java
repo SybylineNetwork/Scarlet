@@ -42,7 +42,7 @@ import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.FilesApi;
 import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.PrintsApi;
-import io.github.vrchatapi.api.SystemApi;
+import io.github.vrchatapi.api.MiscellaneousApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
@@ -213,7 +213,7 @@ public class ScarletVRChat implements Closeable
         try
         {
             long timePre = System.currentTimeMillis(),
-                 timeServer = new SystemApi(this.client).getSystemTime().toInstant().toEpochMilli(),
+                 timeServer = new MiscellaneousApi(this.client).getSystemTime().toInstant().toEpochMilli(),
                  timePost = System.currentTimeMillis(),
                  drift = (timePre + timePost) / 2 - timeServer,
                  driftAbs = Math.abs(drift);
@@ -312,7 +312,7 @@ public class ScarletVRChat implements Closeable
                     for (int tries = 2; !authed && tries --> 0; MiscUtils.sleep(3_000L)) try
                     {
                         // use VRChatAPI time to work around potential local system time drift
-                        long now = new SystemApi(this.client).getSystemTime().toInstant().toEpochMilli();
+                        long now = new MiscellaneousApi(this.client).getSystemTime().toInstant().toEpochMilli();
                         String code = TimeBasedOneTimePasswordUtil.generateNumberString(secret, now, TimeBasedOneTimePasswordUtil.DEFAULT_TIME_STEP_SECONDS, TimeBasedOneTimePasswordUtil.DEFAULT_OTP_LENGTH);
                         authed = auth.verify2FA(new TwoFactorAuthCode().code(code)).getVerified().booleanValue();
                     }
@@ -489,7 +489,7 @@ public class ScarletVRChat implements Closeable
 
     public User getUser(String userId)
     {
-        return this.getUser(userId, Long.MIN_VALUE);
+        return this.getUser(userId, Long.MAX_VALUE);
     }
     public User getUser(String userId, long minEpoch)
     {
@@ -531,7 +531,7 @@ public class ScarletVRChat implements Closeable
     }
     public World getWorld(String worldId)
     {
-        return this.getWorld(worldId, Long.MIN_VALUE);
+        return this.getWorld(worldId, Long.MAX_VALUE);
     }
     public World getWorld(String worldId, long minEpoch)
     {
@@ -560,7 +560,7 @@ public class ScarletVRChat implements Closeable
 
     public Group getGroup(String groupId)
     {
-        return this.getGroup(groupId, null, Long.MIN_VALUE);
+        return this.getGroup(groupId, null, Long.MAX_VALUE);
     }
     public Group getGroup(String groupId, long minEpoch)
     {
@@ -568,7 +568,7 @@ public class ScarletVRChat implements Closeable
     }
     public Group getGroup(String groupId, Boolean includeRoles)
     {
-        return this.getGroup(groupId, includeRoles, Long.MIN_VALUE);
+        return this.getGroup(groupId, includeRoles, Long.MAX_VALUE);
     }
     public Group getGroup(String groupId, Boolean includeRoles, long minEpoch)
     {
@@ -617,7 +617,7 @@ public class ScarletVRChat implements Closeable
 
     public List<LimitedUserGroups> getUserGroups(String userId)
     {
-        return this.getUserGroups(userId, Long.MIN_VALUE);
+        return this.getUserGroups(userId, Long.MAX_VALUE);
     }
     public List<LimitedUserGroups> getUserGroups(String userId, long minEpoch)
     {
@@ -774,7 +774,7 @@ public class ScarletVRChat implements Closeable
 
     public Avatar getAvatar(String avatarId)
     {
-        return this.getAvatar(avatarId, Long.MIN_VALUE);
+        return this.getAvatar(avatarId, Long.MAX_VALUE);
     }
     public Avatar getAvatar(String avatarId, long minEpoch)
     {
@@ -796,14 +796,14 @@ public class ScarletVRChat implements Closeable
             if (apiex.getMessage().contains("HTTP response code: 404"))
                 this.cachedAvatars.add404(avatarId);
             else
-                LOG.error("Error during get avatar: "+apiex.getMessage());
+                LOG.error("Error during get avatar: ", apiex);//LOG.error("Error during get avatar: "+apiex.getMessage());
             return null;
         }
     }
 
     public Print getPrint(String printId)
     {
-        return this.getPrint(printId, Long.MIN_VALUE);
+        return this.getPrint(printId, Long.MAX_VALUE);
     }
     public Print getPrint(String printId, long minEpoch)
     {
@@ -832,7 +832,7 @@ public class ScarletVRChat implements Closeable
 
     public ModelFile getModelFile(String fileId)
     {
-        return this.getModelFile(fileId, Long.MIN_VALUE);
+        return this.getModelFile(fileId, Long.MAX_VALUE);
     }
     public ModelFile getModelFile(String fileId, long minEpoch)
     {

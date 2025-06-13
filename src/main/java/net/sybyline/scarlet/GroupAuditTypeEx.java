@@ -22,6 +22,8 @@ public enum GroupAuditTypeEx implements DEnum.DEnumString<GroupAuditTypeEx>
     INSTANCE_MONITOR            ("groupex.instance.monitor"            , "Instance Monitor"              , 0x00_007F7F),
     MOD_SUMMARY                 ("groupex.periodic.mod_summary"        , "Moderation Summary"            , 0x00_7F7FFF),
     SUGGESTED_MODERATION        ("groupex.heuristic.mod"               , "Suggested Moderation"          , 0x00_FF007F),
+    OUTSTANDING_MODERATION      ("groupex.outstanding.mod"             , "Outstanding Moderation"        , 0x00_FF7F00),
+    ACTION_FAIL                 ("groupex.action.fail"                 , "Action Failure"                , 0x00_FF0000),
     ;
 
     GroupAuditTypeEx(String id, String title, int color)

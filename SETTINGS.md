@@ -91,12 +91,37 @@ Settings for the Discord bot account
         "group.user.ban": "FF0000",
         "group.instance.create": "00FF00"
     }
+    
+    // Array of queued actions
+    "queuedActions": [
+        {
+            // The kind of action being taken
+            "action": "ban",
+            // The user who queued the action
+            "actorId": "usr_00000000-0000-0000-0000-000000000000",
+            // The target of the queued action
+            "targetId": "usr_11111111-1111-1111-1111-111111111111",
+            // The location of the queued action
+            "location": "wrld_00000000-0000-0000-0000-000000000000:00000~group(grp_00000000-0000-0000-0000-000000000000)~groupAccessType(plus)~region(us)"
+        }
+    ]
 }
 ```
 
 ## file `discord_perms.json`
 
-Permissions for Discord users and roles
+Permissions for Discord users and roles, where`"<PermissionType>"` is one of
+- `"SLASH_COMMAND"`
+- `"USER_COMMAND"`
+- `"BUTTON_PRESS"`
+- `"STRING_SELECT"`
+- `"ENTITY_SELECT"`
+- `"MODAL_SUBMIT"`
+- `"OTHER"`
+and where `"<PermissionName>"` depends on the type of the permission.
+For all commands, it is the command name, e.g., `vrchat-search`.
+For slash subcommand groups and subcommands, it is the full command name, with a space ` ` between each name component, e.g., `vrchat-search world`
+For slash command arguments, it is the full command name of its parent, as above, a space ` `, and the argument name, e.g., `vrchat-search world search-query`
 ```json
 {
     // Map of permission type to permission set

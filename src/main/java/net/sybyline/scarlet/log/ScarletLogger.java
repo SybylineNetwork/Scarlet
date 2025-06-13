@@ -30,6 +30,23 @@ public class ScarletLogger extends LegacyAbstractLogger
     public static final String linesep = String.format("%n");
     public static final Pattern lfpattern = Pattern.compile("\\Ascarlet_log_\\d\\d\\d\\d-\\d\\d-\\d\\d_\\d\\d-\\d\\d-\\d\\d\\.txt\\z"),
                                 errpkg = Pattern.compile("^(?<ws>\\s*at\\s+)(?<pkg>net\\.sybyline\\.scarlet(\\.[\\w$]+)*)\\.(?<cls>[\\w$]+)\\.(?<mth>[\\w$<>]+)\\((?<file>[\\w$]+\\.java)\\:(?<line>\\d+)\\)$");
+    public static final Level level = level0();
+    private static final boolean is_error = level.compareTo(Level.ERROR) >= 0,
+                                 is_warn = level.compareTo(Level.WARN) >= 0,
+                                 is_info = level.compareTo(Level.INFO) >= 0,
+                                 is_debug = level.compareTo(Level.DEBUG) >= 0,
+                                 is_trace = level.compareTo(Level.TRACE) >= 0;
+    private static Level level0()
+    {
+        try
+        {
+            return Level.valueOf(System.getProperty("net.sybyline.scarlet.log.level", "DEBUG"));
+        }
+        catch (Exception ex)
+        {
+            return Level.DEBUG;
+        }
+    }
 
     public ScarletLogger()
     {
@@ -44,31 +61,31 @@ public class ScarletLogger extends LegacyAbstractLogger
     @Override
     public boolean isTraceEnabled()
     {
-        return false;
+        return is_trace;
     }
 
     @Override
     public boolean isDebugEnabled()
     {
-        return true;
+        return is_debug;
     }
 
     @Override
     public boolean isInfoEnabled()
     {
-        return true;
+        return is_info;
     }
 
     @Override
     public boolean isWarnEnabled()
     {
-        return true;
+        return is_warn;
     }
 
     @Override
     public boolean isErrorEnabled()
     {
-        return true;
+        return is_error;
     }
 
     @Override

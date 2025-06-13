@@ -58,22 +58,30 @@ import net.sybyline.scarlet.util.VrcIds;
 public class Scarlet implements Closeable
 {
 
+    public static final int JVM_DATA_MODEL;
     public static final int JAVA_SPEC;
 
     static
     {
+        String dataModel = System.getProperty("sun.arch.data.model");
+        if (dataModel == null)
+            System.err.println("System property 'sun.arch.data.model' is missing?!?!?!");
+        else if (!"64".equals(dataModel))
+            System.err.println("This application prefers a 64-bit JVM, but this is JVM is "+dataModel+"-bit");
+        JVM_DATA_MODEL = Integer.getInteger("sun.arch.data.model", -1).intValue();
+        
         String javaVersion = System.getProperty("java.specification.version");
         if (javaVersion == null)
             System.err.println("System property 'java.specification.version' is missing?!?!?!");
         else if (!"1.8".equals(javaVersion))
-            System.err.println("This application was compiled to run on Java 8");
+            System.err.println("Compiled on Java 8, running on Java "+javaVersion);
         JAVA_SPEC = javaVersion == null ? 0 : Integer.parseInt(javaVersion.startsWith("1.") ? javaVersion.substring(2) : javaVersion);
     }
 
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.12-rc3",
+        VERSION = "0.4.12-rc4",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -149,7 +157,7 @@ public class Scarlet implements Closeable
         GSON_PRETTY = gb.setPrettyPrinting().create();
         LOG.info(String.format("App: %s %s", NAME, VERSION));
         LOG.info(String.format("OS: %s (%s)", System.getProperty("os.name"), System.getProperty("os.arch")));
-        LOG.info(String.format("VM: %s %s (%s)", System.getProperty("java.version"), System.getProperty("java.vendor"), System.getProperty("java.vm.name")));
+        LOG.info(String.format("VM: %s %s (%s) %s-bit", System.getProperty("java.version"), System.getProperty("java.vendor"), System.getProperty("java.vm.name"), System.getProperty("sun.arch.data.model")));
     }
 
     public Scarlet() throws IOException
@@ -207,7 +215,6 @@ public class Scarlet implements Closeable
     public void close() throws IOException
     {
         this.stop();
-        MiscUtils.close(this.ipcServer);
         this.exec.shutdown();
         this.execModal.shutdown();
         this.execIPC.shutdown();
@@ -294,9 +301,6 @@ public class Scarlet implements Closeable
                                      showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
     final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
     final ScarletUI.Setting<Void> uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
-    final ServerSocket ipcServer = Platform.CURRENT.isNT()
-            ? new Win32NamedPipeServerSocket(1, "\\\\.\\pipe\\ScarletIPC-"+this.vrc.groupId, false, true, Win32SecurityLevel.LOGON_DACL)
-            : new UnixDomainServerSocket("/tmp/ScarletIPC-"+this.vrc.groupId+".sock", false);
 
     public void run()
     {
@@ -389,6 +393,15 @@ public class Scarlet implements Closeable
                 {
                     LOG.error("Exception maybe mod summary", ex);
                 }
+                // maybe poll action
+                try
+                {
+                    this.maybePollAction();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception maybe saving data", ex);
+                }
                 // maybe check update
                 try
                 {
@@ -453,20 +466,46 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
 */
     void runIPC()
     {
-        try
+        try (ServerSocket ipcServer = Platform.CURRENT.isNT()
+            ? new Win32NamedPipeServerSocket(255, "\\\\.\\pipe\\ScarletIPC-"+this.vrc.groupId, false, false, Win32SecurityLevel.NO_SECURITY)
+            : new UnixDomainServerSocket("/tmp/ScarletIPC-"+this.vrc.groupId+".sock", false))
         {
-            while (this.running)
-            try (Socket socket =  this.ipcServer.accept())
+            try
             {
-                InputStream ipcin = socket.getInputStream();
-                do
+                LOG.info("Listening ipc: "+ipcServer);
+                byte[] buf = new byte[65536];
+                String line;
+                while (this.running)
                 {
-                    @SuppressWarnings("resource")
-                    Scanner s = new Scanner(ipcin);
-                    String line = s.nextLine().trim();
+                    line = null;
+                    try (Socket socket =  ipcServer.accept())
+                    {
+                        InputStream in = socket.getInputStream();
+                        int i = 0;
+                        try
+                        {
+                            for (; i < 65536; i++) buf[i] = (byte) (0xFF & in.read());
+                        }
+                        catch (IOException ioex)
+                        {
+                            if (!"ReadFile() failed: 109".equals(ioex.getMessage()))
+                                LOG.error("Exception in ipc read: ", ioex);
+                        }
+                        line = new String(buf, 0, i, StandardCharsets.UTF_8);
+                        LOG.info("CLI from ipc ("+i+"): "+line);
+                    }
+                    catch (IOException ioex)
+                    {
+                        // Ignore exception caused by intentional shutdown
+                        if (this.running || !"GetOverlappedResult() failed for connect operation: 0".equals(ioex.getMessage()))
+                            LOG.error("Exception in ipc loop", ioex);
+                    }
                     this.rawCommand(line);
                 }
-                while (ipcin.available() > 0);
+            }
+            finally
+            {
+                LOG.info("Ignoring ipc: "+ipcServer);
             }
         }
         catch (Exception ex)
@@ -480,10 +519,14 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         if (line == null || line.isEmpty())
             return;
         Scanner ls = new Scanner(new StringReader(line));
+        try
         {
             String op = ls.next();
             switch (op)
             {
+            default: {
+                LOG.info("Unknown CLI command: "+op);
+            } break;
             case "logout": {
                 LOG.info("Logout success: "+this.vrc.logout());
             } // fallthrough
@@ -563,6 +606,21 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
                 }
             } break;
             }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception handling CLI command: "+line, ex);
+        }
+    }
+
+    void maybePollAction()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC),
+                       next = this.settings.nextPollAction.getOrNull();
+        if (next == null || now.isAfter(next))
+        {
+            long seconds = this.discord.pollQueuedAction();
+            this.settings.nextPollAction.set(now.plusSeconds(Math.max(60L, Math.min(seconds, 3600L))));
         }
     }
 
@@ -662,7 +720,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
         if (now.isAfter(next))
         {
-            this.settings.nextModSummary.set(next.plusHours(24L));
+            this.settings.nextModSummary.set(next.plusHours(this.settings.heuristicPeriodDays.getOrSupply() * 24L));
             this.modSummary(next);
         }
     }
@@ -670,6 +728,28 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
     void modSummary(OffsetDateTime endOfDay)
     {
         this.discord.emitModSummary(this, endOfDay);
+    }
+
+    void maybeOutstandingMod()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC),
+                       next = this.settings.nextOutstandingMod.getOrNull();
+        if (next == null)
+        {
+            next = now.withHour(0).withMinute(0).withSecond(0).withNano(0);
+            while (now.isBefore(next))
+                next.minusHours(24L);
+        }
+        if (now.isAfter(next))
+        {
+            this.settings.nextOutstandingMod.set(next.plusHours(this.settings.outstandingPeriodDays.getOrSupply() * 24L));
+            this.outstandingMod(next);
+        }
+    }
+
+    void outstandingMod(OffsetDateTime endOfDay)
+    {
+        this.discord.emitOutstandingMod(this, endOfDay);
     }
 
     void maybeSaveData()

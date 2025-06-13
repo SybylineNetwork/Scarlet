@@ -7,6 +7,15 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12-rc4
+  - Added Outstanding Moderation and Action Failure extended events
+  - Added `outstanding-moderation`, `submit-evidence`, `vrchat-user-ban-multi`, and `vrchat-user-unban-multi` Discord slash commands
+  - Added optional extra filter step to narrow down potential avatars from User Switch Avatar extended event
+  - Removed unloaded libraries from distribution
+  - Changed api cache default max age
+  - Fixed bugs with the intended ephemerality of Discord responses being ignored
+  - Fixed bugs with ipc-piped commands not executing
+
 ## 0.4.12-rc3
   - Added setting to configure which VRCX-compatible avatar search providers to use
   - Added cli commands via named pipe

@@ -198,7 +198,7 @@ public class DInteractions
         SlashCmd sc = cclass.getDeclaredAnnotation(SlashCmd.class);
         if (sc == null)
             return false;
-        LOG.debug(String.format("Registering slash command: %s", sc.value()));
+        LOG.trace(String.format("Registering slash command: %s", sc.value()));
         Slash slash = this.slash(sc.value(), description(cclass));
         Permission[] defaultPerms = defaultPerms(cclass);
         slash.data.setDefaultPermissions(defaultPerms.length == 0
@@ -217,7 +217,7 @@ public class DInteractions
         SlashCmd sc = gclass.getDeclaredAnnotation(SlashCmd.class);
         if (sc == null)
             return false;
-        LOG.debug(String.format("Registering slash command group: %s %s", slash.data.getName(), sc.value()));
+        LOG.trace(String.format("Registering slash command group: %s %s", slash.data.getName(), sc.value()));
         Object sub = this.ctxNew(cclass, receiver, gclass);
         Slash.Group group = slash.group(sc.value(), description(gclass));
         for (Field field : gclass.getFields())
@@ -231,7 +231,7 @@ public class DInteractions
         SlashCmd sc = method.getDeclaredAnnotation(SlashCmd.class);
         if (sc == null)
             return false;
-        LOG.debug(String.format("Registering slash command handler: %s%s%s", slash==null?"":(slash.data.getName()+" "), group==null?"":(group.data.getName()+" "), sc.value()));
+        LOG.trace(String.format("Registering slash command handler: %s%s%s", slash==null?"":(slash.data.getName()+" "), group==null?"":(group.data.getName()+" "), sc.value()));
         Permission[] defaultPerms = defaultPerms(method);
         String description = description(method);
         int params = method.getParameterCount() - 1;
@@ -324,10 +324,10 @@ public class DInteractions
         }
         if (so == null)
             return false;
-        LOG.debug(String.format("Registering slash command option: %s", so.data.getName()));
+        LOG.trace(String.format("Registering slash command option: %s", so.data.getName()));
         if (this.registerOption(slash, group, field.getName(), so))
             return true;
-        LOG.debug(String.format("Duplicate slash command option: %s (%s)", so.data.getName(), field));
+        LOG.debug(String.format("Duplicate/alternate slash command option: %s (%s)", so.data.getName(), field));
         return false;
     }
     public boolean registerMsgCmdHandler(Object receiver, Method method)
@@ -335,7 +335,7 @@ public class DInteractions
         MsgCmd mc = method.getDeclaredAnnotation(MsgCmd.class);
         if (mc == null)
             return false;
-        LOG.debug(String.format("Registering message command: %s", mc.value()));
+        LOG.trace(String.format("Registering message command: %s", mc.value()));
         Permission[] defaultPerms = defaultPerms(method);
         this.message(mc.value(), this.tryHandle(receiver, method, MessageContextInteractionEvent.class)::invoke).setDefaultPermissions(defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms));
         return true;
@@ -345,7 +345,7 @@ public class DInteractions
         UserCmd uc = method.getDeclaredAnnotation(UserCmd.class);
         if (uc == null)
             return false;
-        LOG.debug(String.format("Registering user command: %s", uc.value()));
+        LOG.trace(String.format("Registering user command: %s", uc.value()));
         Permission[] defaultPerms = defaultPerms(method);
         this.user(uc.value(), this.tryHandle(receiver, method, UserContextInteractionEvent.class)::invoke).setDefaultPermissions(defaultPerms.length == 0 ? DEFAULT_PERMISSIONS : DefaultMemberPermissions.enabledFor(defaultPerms));
         return true;
@@ -355,7 +355,7 @@ public class DInteractions
         ButtonClk bc = method.getDeclaredAnnotation(ButtonClk.class);
         if (bc == null)
             return false;
-        LOG.debug(String.format("Registering button click: %s", bc.value()));
+        LOG.trace(String.format("Registering button click: %s", bc.value()));
         return this.button(bc.value(), this.tryHandle(receiver, method, ButtonInteractionEvent.class)::invoke);
     }
     public boolean registerStringSelHandler(Object receiver, Method method)
@@ -363,7 +363,7 @@ public class DInteractions
         StringSel ss = method.getDeclaredAnnotation(StringSel.class);
         if (ss == null)
             return false;
-        LOG.debug(String.format("Registering string select: %s", ss.value()));
+        LOG.trace(String.format("Registering string select: %s", ss.value()));
         return this.string(ss.value(), this.tryHandle(receiver, method, StringSelectInteractionEvent.class)::invoke);
     }
     public boolean registerEntitySelHandler(Object receiver, Method method)
@@ -371,7 +371,7 @@ public class DInteractions
         EntitySel es = method.getDeclaredAnnotation(EntitySel.class);
         if (es == null)
             return false;
-        LOG.debug(String.format("Registering entity select: %s", es.value()));
+        LOG.trace(String.format("Registering entity select: %s", es.value()));
         return this.entity(es.value(), this.tryHandle(receiver, method, EntitySelectInteractionEvent.class)::invoke);
     }
     public boolean registerModalSubHandler(Object receiver, Method method)
@@ -379,7 +379,7 @@ public class DInteractions
         ModalSub ms = method.getDeclaredAnnotation(ModalSub.class);
         if (ms == null)
             return false;
-        LOG.debug(String.format("Registering modal submit: %s", ms.value()));
+        LOG.trace(String.format("Registering modal submit: %s", ms.value()));
         return this.modal(ms.value(), this.tryHandle(receiver, method, ModalInteractionEvent.class)::invoke);
     }
     public <E> Func.F1.NE<Object, E> tryHandle(Object receiver, Method method, Class<E> event)
@@ -1053,7 +1053,7 @@ public class DInteractions
 
     public Object handleAsync(IReplyCallback event, boolean ephemeral, DeferredHandler handler)
     {
-        event.deferReply().queue(hook -> this.exec.execute(() ->
+        event.deferReply(ephemeral).queue(hook -> this.exec.execute(() ->
         {
             try
             {

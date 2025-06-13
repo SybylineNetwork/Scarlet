@@ -15,6 +15,7 @@ public interface VrcIds
            P_ID = P_ID_LEGACY+"|"+P_ID_TYPED,
            P_ID_USER = P_ID_LEGACY+"|usr_"+P_UUID,
            P_ID_AVATAR = "avtr_"+P_UUID,
+           P_ID_FILE = "file_"+P_UUID,
            P_ID_GROUP = "grp_"+P_UUID,
            P_ID_GROUP_CODE_NAME = "[A-Z0-9]{3,6}",
            P_ID_GROUP_CODE_DISC = "[0-9]{4}",
@@ -27,6 +28,8 @@ public interface VrcIds
            P_ID_ANY = P_ID+"|"+P_ID_GROUP_CODE+"|"+P_ID_INSTANCE+"|"+P_ID_LOCATION+"|"+P_ID_LOCATION_SECURE;
     
     Pattern id_user = Pattern.compile(P_ID_USER),
+            id_avatar = Pattern.compile(P_ID_AVATAR),
+            id_file = Pattern.compile(P_ID_FILE),
             id_group = Pattern.compile(P_ID_GROUP),
             id_group_code = Pattern.compile(P_ID_GROUP_CODE),
             id_groupaudit = Pattern.compile(P_ID_GROUPAUDIT),

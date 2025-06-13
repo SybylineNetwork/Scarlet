@@ -821,6 +821,11 @@ public class ScarletData
         public JsonArray snapshotTargetUserGroups = null;
         public JsonObject snapshotTargetUserRepresentedGroup = null;
         
+        public boolean hasTags()
+        { return this.entryTags != null && !this.entryTags.isEmpty(); }
+        public boolean hasDescription()
+        { return this.entryDescription != null && !this.entryDescription.trim().isEmpty(); }
+        
         public boolean hasMessage()
         { return this.guildSnowflake != null && this.channelSnowflake != null && this.messageSnowflake != null; }
         public String getMessageDelineated()

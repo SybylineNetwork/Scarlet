@@ -50,10 +50,13 @@ public class ScarletSettings
         this.lastInstancesCheck = new RegistryOffsetDateTime("lastInstancesCheck");
         this.lastAuthRefresh = new RegistryOffsetDateTime("lastAuthRefresh");
         this.lastUpdateCheck = new RegistryOffsetDateTime("lastUpdateCheck");
+        this.nextPollAction = new RegistryOffsetDateTime("nextPollAction");
         this.nextModSummary = new RegistryOffsetDateTime("nextModSummary");
+        this.nextOutstandingMod = new RegistryOffsetDateTime("nextOutstandingMod");
         this.uiBounds = new RegistryRectangle("uiBounds");
         this.heuristicKickCount = new FileValued<>("heuristicKickCount", Integer.class, 3);
         this.heuristicPeriodDays = new FileValued<>("heuristicPeriodDays", Integer.class, 3);
+        this.outstandingPeriodDays = new FileValued<>("outstandingPeriodDays", Integer.class, 3);
     }
 
     public void setNamespace(String namespace)
@@ -68,9 +71,9 @@ public class ScarletSettings
     Preferences preferences;
     private JsonObject json;
     public final RegistryString lastRunVersion;
-    public final RegistryOffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck, nextModSummary;
+    public final RegistryOffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck, nextPollAction, nextModSummary, nextOutstandingMod;
     public final RegistryRectangle uiBounds;
-    public final FileValued<Integer> heuristicKickCount, heuristicPeriodDays;
+    public final FileValued<Integer> heuristicKickCount, heuristicPeriodDays, outstandingPeriodDays;
 
     public boolean checkHasVersionChangedSinceLastRun()
     {

@@ -22,8 +22,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.jar.Attributes;
@@ -44,6 +47,23 @@ public class ScarletBuild
 
     static final Path DIR = Paths.get(".").toAbsolutePath().getParent();
     static final FileTime FILE_TIME = FileTime.fromMillis(System.currentTimeMillis());
+    static final String[] IGNORED_DEPS =
+    {
+        "com/google/auto/service/auto-service-annotations/",
+        "com/google/guava/", // *
+        "com/google/j2objc/j2objc-annotations/",
+        "io/opentelemetry/", // *
+        "me/friwi/", // *
+        "net/bytebuddy/byte-buddy/",
+        "org/apache/commons/commons-compress/",
+        "org/apache/commons/commons-exec/",
+        "org/jspecify/jspecify/",
+        "org/nanohttpd/", // *
+        "org/ow2/asm/", // *
+        "org/parboiled/", // *
+        "org/pegdown/pegdown/",
+        "org/seleniumhq/selenium/", // *
+    };
 
     public static void main(String[] args) throws Throwable
     {
@@ -71,6 +91,7 @@ public class ScarletBuild
                mainClass = "net.sybyline.scarlet.Main",
                
                pom = "pom.xml",
+               pomReduced = "dependency-reduced-pom.xml",
                meta = "meta.json";
         
         System.out.println("Cleaning "+build);
@@ -136,7 +157,7 @@ public class ScarletBuild
             bat.append("set \"ATTEMPTED_VERSION=0.0.0\"").println();
             bat.append(":UPDATE").println();
             bat.append("if exist \"%CD%\\scarlet.version.target\" (").println();
-            bat.append("    set /p TARGET_VERSION=<%CD%\\scarlet.version.target").println();
+            bat.append("    set /p \"TARGET_VERSION=<%CD%\\scarlet.version.target\"").println();
             bat.append("    del \"%CD%\\scarlet.version.target\"").println();
             bat.append("    if exist \"%CD%\\scarlet-!TARGET_VERSION!.jar\" (").println();
             bat.append("        echo Targeting version !TARGET_VERSION!, jar present").println();
@@ -162,11 +183,11 @@ public class ScarletBuild
             bat.append(")").println();
             bat.append(":RUN").println();
             bat.append("if exist \"%CD%\\scarlet.home\" (").println();
-            bat.append("    set /p SCARLET_HOME=<%CD%\\scarlet.home").println();
+            bat.append("    set /p \"SCARLET_HOME=<%CD%\\scarlet.home\"").println();
             bat.append("    echo Scarlet home is !SCARLET_HOME!").println();
             bat.append(")").println();
             bat.append("if exist \"%CD%\\scarlet.home.java\" (").println();
-            bat.append("    set /p JAVA_HOME=<%CD%\\scarlet.home.java").println();
+            bat.append("    set /p \"JAVA_HOME=<%CD%\\scarlet.home.java\"").println();
             bat.append("    echo Using JAVA_HOME=!JAVA_HOME!").println();
             bat.append("    set \"PATH=!JAVA_HOME!\\bin;!JAVA_HOME!\\jre\\bin;!JAVA_HOME!\\jre\\bin\\server;!JAVA_HOME!\\bin\\server;!ORIGINAL_PATH!\"").println();
             bat.append(")").println();
@@ -204,17 +225,35 @@ public class ScarletBuild
         
         System.out.println("Copying libraries to "+buildPkgLibs);
         Path m2repo = Paths.get(System.getProperty("user.home"), ".m2", "repository");
+        long depended = 0L, ignored = 0L;
         for (String cp0 : mfClasspath0())
         {
-            copyOne(m2repo.resolve(cp0), buildPkgLibs+"/"+cp0);
+            Path cp0p = m2repo.resolve(cp0);
+            long size = Files.isRegularFile(cp0p) ? Files.size(cp0p) : -0L;
+            String op = "ignore";
+            if (!shouldIgnore(cp0))
+            {
+                copyOne(cp0p, buildPkgLibs+"/"+cp0);
+                op = "depend";
+                depended += size;
+            }
+            else
+            {
+                ignored += size;
+            }
+            System.out.println(String.format("  %8s %,9d: %s", op, size, cp0));
         }
+        System.out.println(String.format("  Depended/Ignored(Total): %,9d/%,9d(%,9d)", depended, ignored, depended+ignored));
         compressDir(buildPkgLibs, buildLibsZip, FILE_TIME, Deflater.DEFAULT_COMPRESSION);
         
         System.out.println("Zipping release with libraries "+buildAllZip);
         compressDir(buildPkg, buildAllZip, FILE_TIME, Deflater.DEFAULT_COMPRESSION);
         
         System.out.println("Updating pom "+pom);
-        updatePom(pom);
+        updatePom(pom, true);
+        
+        System.out.println("Updating reduced pom "+pom);
+        updatePom(pomReduced, false);
 
         System.out.println("Updating meta "+meta);
         updateMeta(meta);
@@ -222,10 +261,12 @@ public class ScarletBuild
         System.out.println("Done");
     }
 
-    static void updatePom(String pom) throws Exception
+    static final Map<String, String> depsVersions = new HashMap<>();
+    static void updatePom(String pom, boolean canonical) throws Exception
     {
         Path pom0 = DIR.resolve(pom);
         Pattern pattern = Pattern.compile("\\A(?<pre>\\s*\\Q<version>\\E\\s*)(?<ver>\\S+)(?<post>\\s*\\Q</version><!--scarlet-version-->\\E)\\z");
+        Pattern pattern2 = Pattern.compile("\\A(?<pre>\\s*\\Q<\\E\\w+\\Q.version>\\E\\s*)(?<ver>\\S+)(?<post>\\s*\\Q</\\E\\w+\\Q.version>\\E)\\z");
         List<String> lines = new ArrayList<>();
         boolean change = false;
         try (BufferedReader br = Files.newBufferedReader(pom0))
@@ -244,14 +285,43 @@ public class ScarletBuild
                     }
                     else
                     {
-                        System.out.println("  Changing version: "+ver+" -> "+Scarlet.VERSION);
+                        System.out.println("  Changing version: "+ver+" -> "+Scarlet.VERSION+" in "+pom);
                         lines.add(pre+Scarlet.VERSION+post);
                         change = true;
                     }
                 }
                 else
                 {
-                    lines.add(line);
+                    Matcher matcher2 = pattern2.matcher(line);
+                    if (matcher2.find())
+                    {
+                        String pre = matcher2.group("pre"),
+                               ver = matcher2.group("ver"),
+                               post = matcher2.group("post");
+                        if (canonical)
+                        {
+                            depsVersions.put(pre.trim(), ver);
+                            lines.add(line);
+                        }
+                        else
+                        {
+                            String canonicalVer = depsVersions.get(pre.trim());
+                            if (canonicalVer != null && !canonicalVer.equals(ver))
+                            {
+                                System.out.println("  Changing "+pre.trim()+": "+ver+" -> "+canonicalVer+" in "+pom);
+                                lines.add(pre+canonicalVer+post);
+                                change = true;
+                            }
+                            else
+                            {
+                                lines.add(line);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        lines.add(line);
+                    }
                 }
             }
         }
@@ -343,6 +413,13 @@ public class ScarletBuild
                 paths.add(url.getPath().substring(1));
         return paths.stream().collect(Collectors.joining(";"));
     }
+    static boolean shouldIgnore(String lib)
+    {
+        for (String ignored : IGNORED_DEPS)
+            if (lib.startsWith(ignored))
+                return true;
+        return false;
+    }
     static String mfClasspath() throws IOException
     {
         String m2 = "/.m2/repository/";
@@ -353,7 +430,11 @@ public class ScarletBuild
             int m2i = string.indexOf(m2);
             if (m2i > 9 && !string.endsWith("/"))
             {
-                mfcp.append(" libraries/").append(string.substring(m2i + m2.length()));
+                String lib = string.substring(m2i + m2.length());
+                if (!shouldIgnore(lib))
+                {
+                    mfcp.append(" libraries/").append(lib);
+                }
             }
         }
         return mfcp.toString();
@@ -368,9 +449,14 @@ public class ScarletBuild
             int m2i = string.indexOf(m2);
             if (m2i > 9 && !string.endsWith("/"))
             {
-                cp0.add(string.substring(m2i + m2.length()));
+                String lib = string.substring(m2i + m2.length());
+//                if (!shouldIgnore(lib))
+                {
+                    cp0.add(lib);
+                }
             }
         }
+        cp0.sort(Comparator.naturalOrder());
         return cp0;
     }
 

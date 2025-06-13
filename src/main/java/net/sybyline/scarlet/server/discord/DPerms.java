@@ -42,6 +42,7 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.sybyline.scarlet.Scarlet;
 import net.sybyline.scarlet.util.MiscUtils;
 
@@ -65,6 +66,8 @@ public class DPerms
             .addChoice("Allow", "true")
             .addChoice("Deny", "false");
     static final SubcommandData
+        SELECT_SUB = new SubcommandData("select", "Select the value of the permissions for a specific target")
+            .addOptions(TARGET_OPT_R),
         SET_SUB = new SubcommandData("set", "Sets the value of the permission for a specific target")
             .addOptions(TARGET_OPT_R, TYPE_OPT_R, NAME_OPT_R, VALUE_OPT_R),
         LIST_SUB = new SubcommandData("list", "Lists the permissions for a specific target")
@@ -72,7 +75,7 @@ public class DPerms
     public static SlashCommandData generateCommand(String name)
     {
         return Commands.slash(name, "View and edit permissions")
-            .addSubcommands(SET_SUB, LIST_SUB);
+            .addSubcommands(/*SELECT_SUB,*/ SET_SUB, LIST_SUB);
     }
 
     public DPerms(File file)
@@ -184,10 +187,25 @@ public class DPerms
     {
         try
         {
-            PermType type = event.getOption("type", PermType::of);
             switch (event.getSubcommandName())
             {
+//            case "select": {
+//                
+//                String kind = event.getOption("target").getAsMember() != null ? "user" : "role";
+//                String id = event.getOption("target").getAsMentionable().getId();
+//                for (PermType type : PermType.values())
+//                {
+//                    PermSet set = this.permissions.get(type);
+//                    for (int idx = 0, page = 0, len = set.suggestions.size(); idx < len; idx += 25, page++)
+//                    {
+//                        StringSelectMenu.create("permissions-select:"+kind+":"+id+":"+type.value()+":"+page);
+//                        set.suggestions.subList(idx, Math.min(idx + 25, len));
+//                    }
+//                }
+//                
+//            } break;
             case "set": {
+                PermType type = event.getOption("type", PermType::of);
                 String name = event.getOption("name", OptionMapping::getAsString);
                 Boolean value = event.getOption("value", DPerms::bool);
                 
@@ -205,6 +223,7 @@ public class DPerms
                 ).setEphemeral(true).queue();
             } break;
             case "list": {
+                PermType type = event.getOption("type", PermType::of);
                 Member member = event.getOption("target").getAsMember();
                 boolean isMember = member != null;
                 Role role = member != null ? null : event.getOption("target").getAsRole();
@@ -236,6 +255,20 @@ public class DPerms
         String rsp = perms.entrySet().stream().map($ -> "`"+$.getKey()+"`: "+boolStr($.getValue())).collect(Collectors.joining("\n"));
         sb.append(String.format("%s permissions for %s:\n%s\n\n", type.display, mention, rsp));
     }
+//    public void internal_handle(StringSelectInteractionEvent event)
+//    {
+//        try
+//        {
+//            
+//        }
+//        finally
+//        {
+//            if (!event.isAcknowledged())
+//            {
+//                event.reply("Internal error: command unacknowledged").setEphemeral(true).queue();
+//            }
+//        }
+//    }
 
     public static class PermSetSpec
     {
@@ -308,7 +341,11 @@ public class DPerms
         }
         public static PermType of(OptionMapping om)
         {
-            if (om != null) switch (om.getAsString())
+            return om == null ? null : of(om.getAsString());
+        }
+        public static PermType of(String string)
+        {
+            if (string != null) switch (string)
             {
             case "slash-command": return SLASH_COMMAND;
             case "message-command": return MESSAGE_COMMAND;
@@ -352,6 +389,9 @@ public class DPerms
             this.san_suggestions.add(SAN.matcher(suggestion.toLowerCase()).replaceAll(""));
         }
         final List<String> suggestions = new ArrayList<>(), san_suggestions = new ArrayList<>();
+        {
+            this.addSuggestion("*");
+        }
         final Map<String, Map<String, Boolean>> byUser = new ConcurrentHashMap<>(),
                                                 byRole = new ConcurrentHashMap<>();
 
@@ -380,14 +420,23 @@ public class DPerms
             Boolean value = this.get(this.byUser, member.getId(), perm);
             if (value != null)
                 return value;
+            value = this.get(this.byUser, member.getId(), "*");
+            if (value != null)
+                return value;
             for (Role role : member.getRoles())
-                if ((value = this.get(this.byRole, role.getId(), perm)) != null)
+                if ((value = this.get(role, perm)) != null)
                     return value;
             return null;
         }
         public Boolean get(Role role, String perm)
         {
-            return this.get(this.byRole, role.getId(), perm);
+            Boolean value = this.get(this.byRole, role.getId(), perm);
+            if (value != null)
+                return value;
+            value = this.get(this.byRole, role.getId(), "*");
+            if (value != null)
+                return value;
+            return null;
         }
         public Boolean set(Member member, String perm, Boolean value)
         {
