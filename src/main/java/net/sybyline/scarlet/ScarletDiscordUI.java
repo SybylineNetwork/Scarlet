@@ -35,10 +35,10 @@ import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.User;
 
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
-import net.dv8tion.jda.api.entities.channel.unions.MessageChannelUnion;
 import net.dv8tion.jda.api.events.interaction.GenericInteractionCreateEvent;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
@@ -192,11 +192,16 @@ public class ScarletDiscordUI
 
         String vrcTargetId = parts[1];
         
-        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(event.getUser().getId());
+        this._vrchatUserBan(hook, event.getMember(), vrcTargetId);
+    }
+
+    boolean _vrchatUserBan(InteractionHook hook, Member member, String vrcTargetId)
+    {
+        String vrcActorId = this.discord.scarlet.data.globalMetadata_getSnowflakeId(member.getId());
         if (vrcActorId == null)
         {
-            hook.sendMessage(this.discord.linkedIdsReply(event.getUser())).setEphemeral(true).queue();
-            return;
+            hook.sendMessage(this.discord.linkedIdsReply(member)).setEphemeral(true).queue();
+            return false;
         }
         
         long within1day = System.currentTimeMillis() - 86400_000L;
@@ -204,15 +209,15 @@ public class ScarletDiscordUI
         if (sc == null)
         {
             hook.sendMessageFormat("No VRChat user found with id %s", vrcTargetId).setEphemeral(true).queue();
-            return;
+            return false;
         }
 
-        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, event.getMember()))
+        if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_bans_manage, member))
         {
-            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, event.getMember(), false))
+            if (!this.discord.checkMemberHasScarletPermission(ScarletPermission.GROUPEX_BANS_MANAGE, member, false))
             {
                 hook.sendMessage("You do not have permission to ban users.\n||(Your admin can enable this by giving your associated VRChat user ban management permissions in the group or with the command `/scarlet-discord-permissions type:Other name:groupex-bans-manage value:Allow`)||").setEphemeral(true).queue();
-                return;
+                return false;
             }
         }
         
@@ -221,23 +226,89 @@ public class ScarletDiscordUI
         if (status == GroupMemberStatus.BANNED)
         {
             hook.sendMessage("This VRChat user is already banned").setEphemeral(true).queue();
-            return;
+            return false;
         }
         
         if (this.discord.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, vrcTargetId, vrcActorId) != null)
         {
             hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
-            return;
+            return false;
         }
         
         if (!this.discord.scarlet.vrc.banFromGroup(vrcTargetId))
         {
             this.discord.scarlet.pendingModActions.pollPending(GroupAuditType.USER_BAN, vrcTargetId);
             hook.sendMessageFormat("Failed to ban %s", sc.getDisplayName()).setEphemeral(true).queue();
-            return;
+            return false;
         }
         
         hook.sendMessageFormat("Banned %s", sc.getDisplayName()).setEphemeral(false).queue();
+        return true;
+    }
+
+    @StringSel("immediate-ban-select-tags")
+    public void immediateBanSelectTags(StringSelectInteractionEvent event)
+    {
+        String[] parts = event.getSelectMenu().getId().split(":");
+        String targetUserId = parts[1];
+        if (this.discord.scarlet.pendingModActions.setBanInfoTags(targetUserId, event.getValues().toArray(new String[0])))
+        {
+            event.reply("No pending ban").setEphemeral(true).queue();
+            return;
+        }
+        event.deferEdit().queue();
+    }
+
+    @ButtonClk("immediate-ban-edit-desc")
+    public void immediateBanEditDesc(ButtonInteractionEvent event)
+    {
+        String[] parts = event.getButton().getId().split(":");
+        String targetUserId = parts[1];
+        TextInput.Builder ti = TextInput
+            .create("input-desc:"+targetUserId, "Input description", TextInputStyle.PARAGRAPH)
+            .setRequired(true)
+            .setPlaceholder("Event description")
+            ;
+        
+        Modal.Builder m = Modal.create("immediate-ban-edit-desc:"+targetUserId, "Edit description")
+            .addActionRow(ti.build())
+            ;
+        
+        event.replyModal(m.build()).queue();
+    }
+
+    @ModalSub("immediate-ban-edit-desc")
+    public void immediateBanEditDesc(ModalInteractionEvent event)
+    {
+        String[] parts = event.getModalId().split(":");
+        String targetUserId = parts[1];
+        if (this.discord.scarlet.pendingModActions.setBanInfoDescription(targetUserId, event.getValue("input-desc:"+targetUserId).getAsString()))
+        {
+            event.reply("No pending ban").setEphemeral(true).queue();
+            return;
+        }
+        event.deferEdit().queue();
+    }
+
+    @ButtonClk("immediate-ban-cancel")
+    public void immediateBanCancel(ButtonInteractionEvent event)
+    {
+        String[] parts = event.getButton().getId().split(":");
+        String targetUserId = parts[1];
+        event.deferEdit().queue();
+        this.discord.scarlet.pendingModActions.pollBanInfo(targetUserId);
+        event.getMessage().delete().queue();
+    }
+
+    @ButtonClk("immediate-ban-confirm")
+    public void immediateBanConfirm(ButtonInteractionEvent event, InteractionHook hook)
+    {
+        String[] parts = event.getButton().getId().split(":");
+        String targetUserId = parts[1];
+        if (this._vrchatUserBan(hook, event.getMember(), targetUserId))
+        {
+            event.getMessage().delete().queue();
+        }
     }
 
     static final Pattern FIND_USER_IDS = Pattern.compile("\\W*(?<id>"+VrcIds.P_ID_USER+")\\W*");
@@ -734,6 +805,7 @@ public class ScarletDiscordUI
         String[] parts = event.getButton().getId().split(":");
         
         String auditEntryId = parts[1];
+        if (auditEntryId.endsWith("null")) auditEntryId = auditEntryId.substring(0, auditEntryId.length() - 4); // bugfix
         
         String targetUserId = null,
                targetDisplayName = null,

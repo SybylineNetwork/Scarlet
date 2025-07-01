@@ -28,6 +28,7 @@ import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.TTSService;
 import net.sybyline.scarlet.util.VersionedFile;
 import net.sybyline.scarlet.util.VrcIds;
@@ -48,6 +49,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userDisplayName2userId = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2avatarDisplayName = new ConcurrentHashMap<>();
         this.clientLocation_userId2userJoined = new ConcurrentHashMap<>();
+        this.clientLocation_pendingUpdates = Collections.synchronizedList(new ArrayList<>());
         this.clientLocationPrev_userIds = new HashSet<>();
         
         this.isTailerLive = false;
@@ -75,6 +77,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                               clientLocation_userDisplayName2userId,
                               clientLocation_userDisplayName2avatarDisplayName;
     final Map<String, OffsetDateTime> clientLocation_userId2userJoined;
+    final List<Runnable> clientLocation_pendingUpdates;
     Set<String> clientLocationPrev_userIds;
     boolean isTailerLive,
             isInGroupInstance,
@@ -125,6 +128,17 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.isTailerLive = true;
         this.scarlet.ui.fireSort();
         this.scarlet.splash.close();
+        this.clientLocation_pendingUpdates.forEach($ -> {
+            try
+            {
+                $.run();
+            }
+            catch (Exception ex)
+            {
+                Scarlet.LOG.warn("Exception running pending update", ex);
+            }
+        });
+        this.clientLocation_pendingUpdates.clear();
     }   
 
     @Override
@@ -166,6 +180,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocationPrev = this.clientLocation;
         this.clientLocation = null;
         this.isInGroupInstance = false;
+        this.clientLocation_pendingUpdates.clear();
     }
 
     @Override
@@ -179,9 +194,21 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userDisplayName2userId.put(userDisplayName, userId);
         List<String> advisories = new ArrayList<>();
         int[] priority = new int[]{Integer.MIN_VALUE+1};
-        Color text_color = this.checkPlayer(advisories, priority, preamble, userDisplayName, userId);
-        String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
-        this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
+        if (preamble)
+        {
+            this.clientLocation_pendingUpdates.add(() ->
+            {
+                Color text_color = this.checkPlayer(advisories, priority, false, userDisplayName, userId);
+                String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
+                this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
+            });
+        }
+        else
+        {
+            Color text_color = this.checkPlayer(advisories, priority, preamble, userDisplayName, userId);
+            String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
+            this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
+        }
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
 
@@ -280,8 +307,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_AVATAR, odt, userId, userDisplayName, potentialIds.length == 1 ? potentialIds[0] : null, avatarDisplayName);
     }
 
+    final Pacer checkPlayerLimiter = new Pacer(1_500L);
     Color checkPlayer(List<String> advisories, int[] priority, boolean preamble, String userDisplayName, String userId)
     {
+        this.checkPlayerLimiter.await();
         ScarletWatchedGroups.WatchedGroup.Type overall_type = null;
         User user = this.scarlet.vrc.getUser(userId);
         List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId);

@@ -47,22 +47,25 @@ import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
+import io.github.vrchatapi.model.CreateGroupInviteRequest;
 import io.github.vrchatapi.model.CurrentUser;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
+import io.github.vrchatapi.model.GroupJoinRequestAction;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.Instance;
-import io.github.vrchatapi.model.LimitedUser;
 import io.github.vrchatapi.model.LimitedUserGroups;
+import io.github.vrchatapi.model.LimitedUserSearch;
 import io.github.vrchatapi.model.LimitedWorld;
 import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.OrderOption;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.Print;
+import io.github.vrchatapi.model.RespondGroupJoinRequest;
 import io.github.vrchatapi.model.SortOption;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
 import io.github.vrchatapi.model.TwoFactorEmailCode;
@@ -473,7 +476,7 @@ public class ScarletVRChat implements Closeable
             return null;
         }
     }
-    public List<LimitedUser> searchUsers(String name, Integer n, Integer offset)
+    public List<LimitedUserSearch> searchUsers(String name, Integer n, Integer offset)
     {
         UsersApi users = new UsersApi(this.client);
         try
@@ -752,6 +755,39 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    public boolean inviteToGroup(String targetUserId, Boolean confirmOverrideBlock)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            groups.respondGroupJoinRequest(targetUserId, targetUserId, null);
+            groups.createGroupInvite(this.groupId, new CreateGroupInviteRequest().userId(targetUserId).confirmOverrideBlock(confirmOverrideBlock));
+            return true;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during invite to group: "+apiex.getMessage());
+            return false;
+        }
+    }
+
+    public boolean respondToGroupJoinRequest(String targetUserId, GroupJoinRequestAction action, Boolean block)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            groups.respondGroupJoinRequest(this.groupId, targetUserId, new RespondGroupJoinRequest().action(action).block(block));
+            return true;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during response to group join request: "+apiex.getMessage());
+            return false;
+        }
+    }
+
     public boolean checkSelfUserHasVRChatPermission(GroupPermissions vrchatPermission)
     {
         GroupLimitedMember glm = this.groupLimitedMember;
@@ -867,6 +903,20 @@ public class ScarletVRChat implements Closeable
         okhttp3.Call localVarCall = this.client.buildCall(null, "/instances", "POST", new ArrayList<>(), new ArrayList<>(), createInstanceRequest, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
         ApiResponse<Instance> localVarResp = this.client.execute(localVarCall, Instance.class);
         return localVarResp.getData();
+    }
+
+    public String getStickerImageUrl(String userId, String stickerId) throws ApiException
+    {
+        if (stickerId.startsWith("file_"))
+            return "https://api.vrchat.cloud/api/1/file/"+stickerId+"/1/file";
+        if (!stickerId.startsWith("inv_"))
+            return null;
+        Map<String, String> headers = new HashMap<>();
+            headers.put("Accept", "application/json");
+            headers.put("Content-Type", "application/json");
+        okhttp3.Call localVarCall = this.client.buildCall(null, "/user/"+userId+"/inventory/"+stickerId, "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+        ApiResponse<JsonObject> localVarResp = this.client.execute(localVarCall, JsonObject.class);
+        return localVarResp.getData().getAsJsonObject("metadata").getAsJsonPrimitive("imageUrl").getAsString();
     }
 
     static final TypeToken<List<LimitedUserGroups>> LIST_LUGROUPS = new TypeToken<List<LimitedUserGroups>>(){};

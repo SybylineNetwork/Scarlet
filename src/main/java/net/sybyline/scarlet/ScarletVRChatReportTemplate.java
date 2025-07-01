@@ -174,6 +174,8 @@ public class ScarletVRChatReportTemplate
             if (appendFooter)
             {
                 string = new StringBuilder(string)
+                .append("<br>")
+                .append("<br>")
                 .append("Partially autofilled with ")
                 .append(this.appName)
                 .append(" version ")

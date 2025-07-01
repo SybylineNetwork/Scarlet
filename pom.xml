@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.12-rc4</version><!--scarlet-version-->
+  <version>0.4.12-rc5</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -62,7 +62,7 @@
     </repository>
   </repositories>
   <properties>
-    <vrchatapi.version>1.19.4</vrchatapi.version>
+    <vrchatapi.version>1.20.0</vrchatapi.version>
     <JDA.version>5.2.1</JDA.version>
     <selenium.version>4.31.0</selenium.version>
     <jcef.version>132.3.1</jcef.version>

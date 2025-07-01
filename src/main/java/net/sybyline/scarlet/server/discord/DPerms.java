@@ -42,7 +42,6 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
-import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.sybyline.scarlet.Scarlet;
 import net.sybyline.scarlet.util.MiscUtils;
 
@@ -141,7 +140,12 @@ public class DPerms
 
     public void registerOther(String... perms)
     {
-        Arrays.stream(perms).forEachOrdered(this.permissions.get(PermType.OTHER)::addSuggestion);
+        this.registerSuggestion(PermType.OTHER, perms);
+    }
+
+    public void registerSuggestion(PermType permType, String... perms)
+    {
+        Arrays.stream(perms).forEachOrdered(this.permissions.get(permType)::addSuggestion);
     }
 
     static final Pattern SAN = Pattern.compile("[^0-9a-z]");

@@ -248,6 +248,12 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.perms.getGuildSnowflakesMutable().add(this.guildSf);
         this.discordCommands = new ScarletDiscordCommands(this);
         this.discordUI = new ScarletDiscordUI(this);
+        {
+            this.perms.registerSuggestion(DPerms.PermType.BUTTON_PRESS, this.interactions.getButtonClickIds());
+            this.perms.registerSuggestion(DPerms.PermType.STRING_SELECT, this.interactions.getStringSelectIds());
+            this.perms.registerSuggestion(DPerms.PermType.ENTITY_SELECT, this.interactions.getEntitySelectIds());
+            this.perms.registerSuggestion(DPerms.PermType.MODAL_SUBMIT, this.interactions.getModalSubmitIds());
+        }
         if (this.jda == null)
         {
             this.setStaffMode();
@@ -1265,6 +1271,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 String epochJoined = Long.toUnsignedString(target.getDateJoined().toEpochDay() * 86400L);
                 embed.addField("Account age", "<t:"+epochJoined+":D> (<t:"+epochJoined+":R>)", false);
                 embed.addField("Age verification", "`"+target.getAgeVerificationStatus()+"`", false);
+                embed.addField("Pronouns", "`"+MarkdownSanitizer.escape(target.getPronouns())+"`", false);
+                embed.addField("Status description", "`"+MarkdownSanitizer.escape(target.getStatusDescription())+"`", false);
             }
             if (history != null)
                 embed.addField("History", history, false);
@@ -1338,17 +1346,34 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         
         boolean mention;
+        String contentExtra = "\nUnclaimed";
         switch (GroupAuditType.of(entryMeta.entry.getEventType()))
         {
         case INSTANCE_WARN: mention = this.pingOnModeration_instanceWarn.get(); break;
         case INSTANCE_KICK: mention = this.pingOnModeration_instanceKick.get(); break;
         case MEMBER_REMOVE: mention = this.pingOnModeration_memberRemove.get(); break;
-        case USER_BAN:      mention = this.pingOnModeration_userBan     .get(); break;
+        case USER_BAN:      mention = this.pingOnModeration_userBan     .get();
+        ScarletPendingModActions.BanInfo pendingBan = this.scarlet.pendingModActions.pollBanInfo(entryMeta.entry.getTargetId());
+        if (pendingBan != null)
+        {
+            contentExtra = "";
+            if (pendingBan.tags != null && pendingBan.tags.length > 0)
+            {
+                entryMeta.entryTags.addAll(pendingBan.tags);
+                contentExtra = contentExtra + "\n### Tags:\n" + Stream.of(pendingBan.tags).map(this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
+            }
+            if (pendingBan.description != null && !pendingBan.description.trim().isEmpty())
+            {
+                entryMeta.entryDescription = pendingBan.description;
+                contentExtra = contentExtra + "\n### Description:\n" + pendingBan.description;
+            }
+        }
+        break;
         case USER_UNBAN:    mention = this.pingOnModeration_userUnban   .get(); break;
         default:            mention = false;                                    break;
         }
         
-        String timeext = entryMeta.getAuxData("targetJoined", $->':'+Long.toUnsignedString($.getAsLong()));
+        String timeext = entryMeta.getAuxData("targetJoined", "", $->':'+Long.toUnsignedString($.getAsLong()));
         
         ScarletData.UserMetadata actorMeta = scarlet.data.userMetadata(actorId);
         String content = actorMeta == null || actorMeta.userSnowflake == null
@@ -1357,7 +1382,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     ? ("<@"+actorMeta.userSnowflake+">")
                     : (entryMeta.hasAuxActor() ? entryMeta.auxActorDisplayName : entryMeta.entry.getActorDisplayName()));
         Message auxMessage = threadChannel.sendMessage(content)
-            .addContent("\nUnclaimed")
+            .addContent(contentExtra)
             .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
                           Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
                           Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link"))
@@ -1826,13 +1851,21 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.condEmitEx(GroupAuditTypeEx.SPAWN_STICKER, false, false, location, (channelSf, guild, channel) ->
         {
+            String stickerImageUrl = null;
+            try
+            {
+                stickerImageUrl = this.scarlet.vrc.getStickerImageUrl(userId, stickerId);
+            }
+            catch (Exception ex)
+            {
+            }
             return channel.sendMessageEmbeds(new EmbedBuilder()
                 .setTitle(MarkdownSanitizer.escape(displayName)+" spawned a sticker", "https://vrchat.com/home/user/"+userId)
                 .addField("User ID", "`"+userId+"`", false)
                 .addField("Location", "`"+location+"`", false)
                 .addField("Sticker ID", "`"+stickerId+"`", false)
                 .addField("Report sticker", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_stickers(this.requestingEmail.get(), userId, "Sticker", stickerId)), false)
-                .setImage(!stickerId.startsWith("file_") ? null : ("https://api.vrchat.cloud/api/1/file/"+stickerId+"/1/file"))
+                .setImage(stickerImageUrl)
                 .setColor(GroupAuditTypeEx.SPAWN_STICKER.color)
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))

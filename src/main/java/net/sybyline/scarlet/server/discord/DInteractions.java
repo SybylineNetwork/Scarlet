@@ -934,6 +934,35 @@ public class DInteractions
         return this.data;
     }
 
+    public String[] getSlashCmdIds()
+    {
+        return this.slashCmds.keySet().toArray(new String[0]);
+    }
+    public String[] getMessageCmdIds()
+    {
+        return this.messageCmds.keySet().toArray(new String[0]);
+    }
+    public String[] getUserCmdIds()
+    {
+        return this.userCmds.keySet().toArray(new String[0]);
+    }
+    public String[] getButtonClickIds()
+    {
+        return this.buttonClicks.keySet().toArray(new String[0]);
+    }
+    public String[] getStringSelectIds()
+    {
+        return this.stringSelects.keySet().toArray(new String[0]);
+    }
+    public String[] getEntitySelectIds()
+    {
+        return this.entitySelects.keySet().toArray(new String[0]);
+    }
+    public String[] getModalSubmitIds()
+    {
+        return this.modalSubmits.keySet().toArray(new String[0]);
+    }
+
     public Slash slash(String name, String desc)
     {
         return new Slash(name, desc);

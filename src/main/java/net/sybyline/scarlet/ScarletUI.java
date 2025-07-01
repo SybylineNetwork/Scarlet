@@ -77,6 +77,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.model.AgeVerificationStatus;
+import io.github.vrchatapi.model.GroupJoinRequestAction;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.User;
 
@@ -439,6 +440,14 @@ public class ScarletUI implements AutoCloseable
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(ConnectedPlayer.this.id), null);
             }
         };
+        Action invite = new AbstractAction("Invite") {
+            private static final long serialVersionUID = 1L;
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                ScarletUI.this.tryInvite(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
+            }
+        };
         Color text_color;
         int priority;
         AgeVerificationStatus ageVerificationStatus;
@@ -479,6 +488,7 @@ public class ScarletUI implements AutoCloseable
             this.propstable.addProperty("Copy ID", true, true, Action.class, $ -> $.copy);
             this.propstable.addProperty("Ban", true, true, Action.class, $ -> $.ban);
             this.propstable.addProperty("Unban", true, false, Action.class, $ -> $.unban);
+            this.propstable.addProperty("Invite", true, false, Action.class, $ -> $.invite);
             
             this.propstable.getColumnModel().addColumnModelListener(new TableColumnModelListener()
             {
@@ -834,6 +844,106 @@ public class ScarletUI implements AutoCloseable
 
     protected void tryUnban(String id, String name)
     {
+        String ownerId = this.scarlet.vrc.groupOwnerId;
+
+        if (!this.scarlet.staffMode)
+        if (ownerId == null)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Internal error", "Group owner id missing", Color.PINK);
+            return;
+        }
+        
+        GroupMemberStatus status = this.scarlet.vrc.getGroupMembershipStatus(this.scarlet.vrc.groupId, id);
+        
+        if (status != GroupMemberStatus.BANNED)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User not banned", name);
+            return;
+        }
+
+        if (!this.scarlet.staffMode)
+        if (this.scarlet.pendingModActions.addPending(GroupAuditType.USER_UNBAN, id, ownerId) != null)
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User unban pending", name, Color.CYAN);
+            return;
+        }
+        
+        if (!this.scarlet.vrc.unbanFromGroup(id))
+        {
+            this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Failed to unban user", name, Color.PINK);
+            return;
+        }
+        
+        this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Unbanned user", name);
+    }
+
+    protected void tryInvite(String id, String name)
+    {
+
+        ScarletUI.this.scarlet.execModal.execute(() ->
+        {
+            String ownerId = this.scarlet.vrc.groupOwnerId;
+            
+            if (!this.scarlet.staffMode)
+            if (ownerId == null)
+            {
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Internal error", "Group owner id missing", Color.PINK);
+                return;
+            }
+            
+            GroupMemberStatus status = this.scarlet.vrc.getGroupMembershipStatus(this.scarlet.vrc.groupId, id);
+            
+            String question = "Are you sure you want to invite "+name+"?",
+                   subquestion = "Confirm invite";
+            boolean respond = false;
+            if (status != null) switch (status)
+            {
+            case BANNED:
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User is currently banned", name);
+                return;
+            case INACTIVE:
+                break;
+            case INVITED:
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User is already invited", name);
+                return;
+            case MEMBER:
+                this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "User is already a member", name);
+                return;
+            case REQUESTED:
+                respond = true;
+                question = "Are you sure you want to accept "+name+"'s group join request?";
+                subquestion = "Confirm accept group join request";
+                break;
+            case USERBLOCKED:
+                question = "Are you sure you want to invite "+name+"? (User is currently blocked)";
+                break;
+            }
+            
+            
+            if (ScarletUI.this.scarlet.ui.confirmModal(null, question, subquestion))
+            {
+                if (respond)
+                {
+                    if (!this.scarlet.vrc.respondToGroupJoinRequest(id, GroupJoinRequestAction.ACCEPT, null))
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Failed to accept group join request", name, Color.PINK);
+                        return;
+                    }
+                    
+                    this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Accepted group join request", name);
+                }
+                else
+                {
+                    if (!this.scarlet.vrc.inviteToGroup(id, Boolean.TRUE))
+                    {
+                        this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Failed to invite to group", name, Color.PINK);
+                        return;
+                    }
+                    
+                    this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Invited to group", name);
+                }
+            }
+        });
         String ownerId = this.scarlet.vrc.groupOwnerId;
 
         if (!this.scarlet.staffMode)

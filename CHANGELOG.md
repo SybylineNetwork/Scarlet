@@ -7,6 +7,16 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12-rc5
+  - Added `tag-immediately` option to `vrchat-user-ban` Discord slash command, allowing user to specify tags and description before banning
+  - Added user pronouns and status description to moderation event embed
+  - Added Invite to Group button to Instance UI
+  - Added API call rate limit to Instance UI
+  - Changed Instance UI to skip updating during preamble
+  - Fixed `permissions` autocomplete suggestions missing for Discord interactions
+  - Fixed VRChat Help Desk autofill links missing most information
+  - Fixed sticker images not showing up in the User Spawn Sticker extended event embed
+
 ## 0.4.12-rc4
   - Added Outstanding Moderation and Action Failure extended events
   - Added `outstanding-moderation`, `submit-evidence`, `vrchat-user-ban-multi`, and `vrchat-user-unban-multi` Discord slash commands

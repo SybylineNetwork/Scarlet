@@ -881,7 +881,9 @@ public class ScarletData
         public JsonElement getAuxData(String name)
         { JsonObject auxData = this.auxData; return auxData == null ? null : auxData.get(name); }
         public <T> T getAuxData(String name, Function<JsonElement, T> func)
-        { JsonElement auxDataElement = this.getAuxData(name); return auxDataElement == null ? null : func.apply(auxDataElement); }
+        { return this.getAuxData(name, null, func); }
+        public <T> T getAuxData(String name, T fallback, Function<JsonElement, T> func)
+        { JsonElement auxDataElement = this.getAuxData(name); return auxDataElement == null ? fallback : func.apply(auxDataElement); }
         JsonObject setAuxData()
         { JsonObject auxData = this.auxData; if (auxData == null) this.auxData = auxData = new JsonObject(); return auxData; }
         public void setAuxData(String name, Boolean value)

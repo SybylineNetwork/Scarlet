@@ -39,7 +39,7 @@ import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.Instance;
-import io.github.vrchatapi.model.LimitedUser;
+import io.github.vrchatapi.model.LimitedUserSearch;
 import io.github.vrchatapi.model.LimitedWorld;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
@@ -121,7 +121,7 @@ public class ScarletDiscordCommands
                 return;
             }
         }
-        List<LimitedUser> lusers = this.discord.scarlet.vrc.searchUsers(value, 25, 0);
+        List<LimitedUserSearch> lusers = this.discord.scarlet.vrc.searchUsers(value, 25, 0);
         if (lusers == null)
         {
             event.replyChoices().queue();
@@ -170,6 +170,7 @@ public class ScarletDiscordCommands
     public final SlashOption<Integer> _daysBack = SlashOption.ofInt("days-back", "The number of days into the past to search for events", false, 4).with($->$.setRequiredRange(1L, 1000L));
     public final SlashOption<Integer> _hoursBack = SlashOption.ofInt("hours-back", "The number of hours into the past to search for events", false, 24).with($->$.setRequiredRange(1L, 24_000L));
     public final SlashOption<Integer> _pagination = SlashOption.ofInt("entries-per-page", "The number of entries to show per page", false, 4).with($->$.setRequiredRange(1L, 10L));
+    public final SlashOption<Boolean> _tagImmediately = SlashOption.ofBool("tag-immediately", "Whether to submit tags and description now", false, false);
 
 
     // vrchat-search
@@ -1070,7 +1071,7 @@ public class ScarletDiscordCommands
     @SlashCmd("vrchat-user-ban")
     @Desc("Ban a specific VRChat user")
     @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
-    public void vrchatUserBan(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser) throws Exception
+    public void vrchatUserBan(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("tag-immediately") boolean tagImmediately) throws Exception
     {
         String vrcTargetId = VrcIds.getAsString_user(event.getOption("vrchat-user"));
         if (vrchatUser == null)
@@ -1099,6 +1100,47 @@ public class ScarletDiscordCommands
         if (status == GroupMemberStatus.BANNED)
         {
             hook.sendMessage("This VRChat user is already banned").setEphemeral(true).queue();
+        }
+        else if (tagImmediately)
+        {
+            if (!this.discord.scarlet.pendingModActions.addBanInfo(vrcTargetId))
+            {
+                hook.sendMessage("This VRChat user currently has automated/assisted moderation pending, please retry later").setEphemeral(true).queue();
+                return;
+            }
+            
+            List<ScarletModerationTags.Tag> tags = this.discord.scarlet.moderationTags.getTags();
+            
+            if (tags == null || tags.isEmpty())
+            {
+                hook.sendMessage("No moderation tags!").setEphemeral(true).queue();
+            }
+            StringSelectMenu.Builder builder = StringSelectMenu
+                .create("immediate-ban-select-tags:"+vrcTargetId)
+                .setMinValues(0)
+                .setMaxValues(tags.size())
+                .setPlaceholder("Select tags")
+                ;
+            
+            for (ScarletModerationTags.Tag tag : tags)
+            {
+                String value = tag.value,
+                       label = tag.label != null ? tag.label : tag.value,
+                       desc = tag.description;
+                if (desc == null)
+                    builder.addOption(label, value);
+                else
+                    builder.addOption(label, value, desc);
+            }
+            
+            hook.sendMessageComponents(
+                    ActionRow.of(builder.build()),
+                    ActionRow.of(Button.primary("immediate-ban-edit-desc:"+vrcTargetId, "Set description"),
+                                 Button.secondary("immediate-ban-cancel:"+vrcTargetId, "Cancel"),
+                                 Button.danger("immediate-ban-confirm:"+vrcTargetId, "Ban"))
+                )
+                .setEphemeral(true)
+                .queue();
         }
         else if (this.discord.scarlet.pendingModActions.addPending(GroupAuditType.USER_BAN, vrcTargetId, vrcActorId) != null)
         {
@@ -1576,7 +1618,7 @@ public class ScarletDiscordCommands
             .append("\nWarns: ").append(warns == null ? "??? (query failed)" : warns.toString())
             .append("\nBans: ").append(bans == null ? "??? (query failed)" : bans.toString());
         
-        event.reply(sb.toString()).setEphemeral(true).queue();
+        hook.sendMessage(sb.toString()).setEphemeral(true).queue();
     }
 
     // moderation-summary
