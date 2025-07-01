@@ -74,6 +74,8 @@ import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
 import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.VersionedFile;
+import net.sybyline.scarlet.util.VrcIds;
 
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
@@ -905,10 +907,10 @@ public class ScarletVRChat implements Closeable
         return localVarResp.getData();
     }
 
-    public String getStickerImageUrl(String userId, String stickerId) throws ApiException
+    public String getStickerFileId(String userId, String stickerId) throws ApiException
     {
         if (stickerId.startsWith("file_"))
-            return "https://api.vrchat.cloud/api/1/file/"+stickerId+"/1/file";
+            return stickerId;
         if (!stickerId.startsWith("inv_"))
             return null;
         Map<String, String> headers = new HashMap<>();
@@ -916,7 +918,7 @@ public class ScarletVRChat implements Closeable
             headers.put("Content-Type", "application/json");
         okhttp3.Call localVarCall = this.client.buildCall(null, "/user/"+userId+"/inventory/"+stickerId, "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
         ApiResponse<JsonObject> localVarResp = this.client.execute(localVarCall, JsonObject.class);
-        return localVarResp.getData().getAsJsonObject("metadata").getAsJsonPrimitive("imageUrl").getAsString();
+        return VersionedFile.parse(localVarResp.getData().getAsJsonPrimitive("imageUrl").getAsString()).id;
     }
 
     static final TypeToken<List<LimitedUserGroups>> LIST_LUGROUPS = new TypeToken<List<LimitedUserGroups>>(){};

@@ -1851,21 +1851,25 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.condEmitEx(GroupAuditTypeEx.SPAWN_STICKER, false, false, location, (channelSf, guild, channel) ->
         {
-            String stickerImageUrl = null;
+            String stickerFileId = null;
             try
             {
-                stickerImageUrl = this.scarlet.vrc.getStickerImageUrl(userId, stickerId);
+                stickerFileId = this.scarlet.vrc.getStickerFileId(userId, stickerId);
             }
             catch (Exception ex)
             {
             }
+            String desc = stickerId;
+            if (stickerFileId != null)
+                desc = desc + " (" + stickerFileId + ")";
             return channel.sendMessageEmbeds(new EmbedBuilder()
                 .setTitle(MarkdownSanitizer.escape(displayName)+" spawned a sticker", "https://vrchat.com/home/user/"+userId)
                 .addField("User ID", "`"+userId+"`", false)
                 .addField("Location", "`"+location+"`", false)
                 .addField("Sticker ID", "`"+stickerId+"`", false)
-                .addField("Report sticker", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_stickers(this.requestingEmail.get(), userId, "Sticker", stickerId)), false)
-                .setImage(stickerImageUrl)
+                .addField("File ID", "`"+stickerFileId+"`", false)
+                .addField("Report sticker", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_stickers(this.requestingEmail.get(), userId, "Sticker", desc)), false)
+                .setImage(stickerFileId == null ? null : ("https://api.vrchat.cloud/api/1/file/"+stickerFileId+"/1/file"))
                 .setColor(GroupAuditTypeEx.SPAWN_STICKER.color)
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))

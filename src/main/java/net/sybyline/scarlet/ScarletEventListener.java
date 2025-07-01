@@ -198,7 +198,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         {
             this.clientLocation_pendingUpdates.add(() ->
             {
-                Color text_color = this.checkPlayer(advisories, priority, false, userDisplayName, userId);
+                Color text_color = this.checkPlayer(advisories, priority, true, userDisplayName, userId);
                 String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
                 this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
             });
@@ -307,10 +307,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_AVATAR, odt, userId, userDisplayName, potentialIds.length == 1 ? potentialIds[0] : null, avatarDisplayName);
     }
 
-    final Pacer checkPlayerLimiter = new Pacer(1_500L);
+    final Pacer checkPlayerLimiter = new Pacer(500L);
     Color checkPlayer(List<String> advisories, int[] priority, boolean preamble, String userDisplayName, String userId)
     {
-        this.checkPlayerLimiter.await();
+        if (preamble) this.checkPlayerLimiter.await();
         ScarletWatchedGroups.WatchedGroup.Type overall_type = null;
         User user = this.scarlet.vrc.getUser(userId);
         List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId);
