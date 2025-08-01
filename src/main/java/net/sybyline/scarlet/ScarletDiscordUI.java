@@ -55,8 +55,10 @@ import net.sybyline.scarlet.ScarletDiscordJDA.InstanceCreation;
 import net.sybyline.scarlet.server.discord.DInteractions.ButtonClk;
 import net.sybyline.scarlet.server.discord.DInteractions.Ephemeral;
 import net.sybyline.scarlet.server.discord.DInteractions.ModalSub;
+import net.sybyline.scarlet.server.discord.DInteractions.Pagination;
 import net.sybyline.scarlet.server.discord.DInteractions.StringSel;
 import net.sybyline.scarlet.util.HttpURLInputStream;
+import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VrcIds;
@@ -105,9 +107,15 @@ public class ScarletDiscordUI
                    label = tag.label != null ? tag.label : tag.value,
                    desc = tag.description;
             if (desc == null)
-                builder.addOption(label, value);
+                builder.addOption(label, MiscUtils.maybeEllipsis(100, value));
             else
-                builder.addOption(label, value, desc);
+                builder.addOption(label, MiscUtils.maybeEllipsis(100, value), MiscUtils.maybeEllipsis(50, desc));
+        }
+        
+        ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata(auditEntryId);
+        if (auditEntryMeta != null && auditEntryMeta.hasTags())
+        {
+            builder.setDefaultValues(auditEntryMeta.entryTags.toArray());
         }
         
         ActionRow ar = ActionRow.of(builder.build());
@@ -118,11 +126,13 @@ public class ScarletDiscordUI
     }
 
     @StringSel("select-tags")
-    public void selectTags(StringSelectInteractionEvent event)
+    @Ephemeral
+    public void selectTags(StringSelectInteractionEvent event, InteractionHook hook)
     {
         String[] parts = event.getSelectMenu().getId().split(":");
-        String joined = event.getValues().stream().map(this.discord.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", "));
-        event.replyFormat("### Setting tags:\n%s", joined).setEphemeral(true).queue();
+        String joined = event.getValues().stream().map(this.discord.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", ", "### Setting tags:\n", ""));
+        MessageEmbed[] embeds = event.getValues().stream().map(this.discord.scarlet.moderationTags::getTag).filter(Objects::nonNull).map(tag -> new EmbedBuilder().setAuthor(MiscUtils.maybeEllipsis(256, tag.label)).setDescription(MiscUtils.maybeEllipsis(4096, tag.description)).build()).toArray(MessageEmbed[]::new);
+        this.discord.interactions.new Pagination(event.getId(), embeds, 10).withAdditional((action, page) -> action.setContent(joined)).queue(hook);
         ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata_setTags(parts[1], event.getValues().toArray(new String[0]));
         this.updateAuxMessage(event.getChannel(), auditEntryMeta);
     }
@@ -886,6 +896,8 @@ public class ScarletDiscordUI
                       .append(" version ")
                       .append(Scarlet.VERSION)
                       .append("<br>")
+                      .append(Scarlet.GITHUB_URL)
+                      .append("<br>")
                       .append("Group ID: ")
                       .append(this.discord.scarlet.vrc.groupId)
                       .append("<br>")
@@ -907,7 +919,7 @@ public class ScarletDiscordUI
         
         
         hook.sendMessageEmbeds(new EmbedBuilder()
-                .setTitle("Help desk link")
+                .setTitle("Simple Help desk link")
                 .appendDescription("[Open new VRChat User Moderation Request](<")
                 .appendDescription(link)
                 .appendDescription(">)")

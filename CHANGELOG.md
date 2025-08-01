@@ -2,10 +2,20 @@
 # Changelog
 
 ## Unreleased
-  - Pending: Support for multiple groups
+  - Indefinitely postponed: Support for multiple groups
   - Pending: Staff & Instance Analysis, (live infographic?)
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
+
+## 0.4.12-rc6
+  - Added links to the Sybyline Network VRChat Group
+  - Added Group Invites created to Moderation Summary
+  - Added option to skip confirmation to send a group invite to players via Instance UI
+  - Added deep equality check to avoid editing Discord commands with identical content
+  - Changed the `Edit tags` button on moderation events to auto-populate currently assigned tags
+  - Fixed custom moderation tags with long descriptions causing some Discord interactions to fail
+  - Fixed Instance UI failing to send group invites
+  - Fixed instability caused by unexpected/unknown API enum values failing deserialization
 
 ## 0.4.12-rc5
   - Added `tag-immediately` option to `vrchat-user-ban` Discord slash command, allowing user to specify tags and description before banning

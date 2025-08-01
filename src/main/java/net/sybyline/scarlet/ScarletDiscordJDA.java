@@ -110,6 +110,7 @@ import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.ext.VrcLaunch;
+import net.sybyline.scarlet.server.discord.DCommands;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
 import net.sybyline.scarlet.util.LRUMap;
@@ -302,28 +303,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         try
         {
-            List<Command> cmds = new ArrayList<>(this.currentCommands);
             List<CommandData> datas = new ArrayList<>();
             datas.addAll(this.interactions.getCommandDataMutable());
             datas.add(DPerms.generateCommand("scarlet-discord-permissions"));
-            for (CommandData data : datas)
-            {
-                if (!cmds.removeIf($ -> {
-                    if (!Objects.equals(data.getType(), $.getType()))
-                        return false;
-                    if (!Objects.equals(data.getName(), $.getName()))
-                        return false;
-                    this.jda.editCommandById($.getId()).apply(data).queue($$ -> LOG.info("Edited "+$$.getType()+" command "+$$.getName()));
-                    return true;
-                }))
-                {
-                    this.jda.upsertCommand(data).queue($$ -> LOG.info("Upserted "+$$.getType()+" command "+$$.getName()));
-                }
-            }
-            for (Command cmd : cmds)
-            {
-                this.jda.deleteCommandById(cmd.getId()).queue($ -> LOG.info("Deleted "+cmd.getType()+" command "+cmd.getName()));
-            }
+            DCommands.delta(
+                this.currentCommands,
+                datas,
+                (     data) -> this.jda.upsertCommand(data).queue($ ->                      LOG.info("Upserted "+ $.getType()+" command "+  $.getName())),
+                (cmd      ) -> this.jda.deleteCommandById(cmd.getId()).queue($ ->           LOG.info("Deleted "+cmd.getType()+" command "+cmd.getName())), 
+                (cmd, data) -> this.jda.editCommandById(cmd.getId()).apply(data).queue($ -> LOG.info("Edited "+   $.getType()+" command "+  $.getName())),
+                (cmd, data) -> {}
+            );
             LOG.info("Queued commands update "+datas);
         }
         catch (Exception ex)
@@ -2020,7 +2010,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         String epochStart = Long.toUnsignedString(startOfDay.toEpochSecond()),
                epochEnd = Long.toUnsignedString(endOfDay.toEpochSecond());
         
-        List<GroupAuditLogEntry> entries = this.scarlet.vrc.auditQuery(startOfDay, endOfDay, null, "group.instance.kick,group.instance.warn,group.user.ban", null);
+        List<GroupAuditLogEntry> entries = this.scarlet.vrc.auditQuery(startOfDay, endOfDay, null, "group.instance.kick,group.instance.warn,group.user.ban,group.invite.create", null);
         
         if (entries == null)
         {
@@ -2068,7 +2058,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
             {
                 long gjoins = 0L,
                      gleaves = 0L,
-                     gremoves = 0L;
+                     gremoves = 0L,
+                     ginvites = 0L;
                 for (GroupAuditLogEntry entry : entries2) switch (entry.getEventType())
                 {
                 case "group.member.join": {
@@ -2080,8 +2071,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 case "group.member.remove": {
                     gremoves++;
                 } break;
+                case "group.invite.create": {
+                    ginvites++;
+                } break;
                 }
-                sb.append("### "+Long.toUnsignedString(gjoins)+"/"+Long.toUnsignedString(gleaves)+"/"+Long.toUnsignedString(gremoves)+" group joins/leaves/kicks\n");
+                sb.append("### "+Long.toUnsignedString(gjoins)+"/"+Long.toUnsignedString(gleaves)+"/"+Long.toUnsignedString(gremoves)+"/"+Long.toUnsignedString(ginvites)+" group joins/leaves/kicks/invites\n");
             }
         }
         {
@@ -2101,8 +2095,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
         long twarns = 0L,
              tkicks = 0L,
              tbans = 0L,
+             tinvites = 0L,
              tjoins = 0L;
-        sb.append("### Staff moderation (warns/kicks/bans/joins)\n");
+        sb.append("### Staff moderation (warns/kicks/bans/invites/joins)\n");
         boolean onlyActivity = this.moderationSummary_onlyActivity.get();
         int skippedForInactivity = 0;
         for (String staffUserId : this.scarlet.staffList.getStaffIds())
@@ -2112,12 +2107,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
             long warns = 0L,
                  kicks = 0L,
                  bans = 0L,
+                 invites = 0L,
                  joins = 0L;
             if (staffEntries != null)
             {
                 warns = staffEntries.stream().filter(GroupAuditType.INSTANCE_WARN::equals).count();
                 kicks = staffEntries.stream().filter(GroupAuditType.INSTANCE_KICK::equals).count();
                 bans = staffEntries.stream().filter(GroupAuditType.USER_BAN::equals).count();
+                invites = staffEntries.stream().filter(GroupAuditType.INVITE_CREATE::equals).count();
             }
             if (staffJoin != null)
             {
@@ -2126,8 +2123,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
             twarns += warns;
             tkicks += kicks;
             tbans += bans;
+            tinvites += invites;
             tjoins += joins;
-            if (onlyActivity && warns == 0L && kicks == 0L && bans == 0L && joins == 0L)
+            if (onlyActivity && warns == 0L && kicks == 0L && bans == 0L && invites == 0L && joins == 0L)
             {
                 skippedForInactivity++;
             }
@@ -2139,14 +2137,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     User actor = this.scarlet.vrc.getUser(staffUserId);
                     displayName = actor != null ? actor.getDisplayName() : staffUserId;
                 }
-                sb.append(String.format("[%s](https://vrchat.com/home/user/%s): %d / %d / %d / %d\n", displayName, staffUserId, warns, kicks, bans, joins));
+                sb.append(String.format("[%s](https://vrchat.com/home/user/%s): %d / %d / %d / %d / %d\n", displayName, staffUserId, warns, kicks, bans, invites, joins));
             }
         }
         if (onlyActivity)
         {
             sb.append(String.format("(skipped %d for inactivity)\n", skippedForInactivity));
         }
-        sb.append(String.format("Staff totals: %d / %d / %d / %d\n", twarns, tkicks, tbans, tjoins));
+        sb.append(String.format("Staff totals: %d / %d / %d / %d / %d\n", twarns, tkicks, tbans, tinvites, tjoins));
         
         Message message = mca.apply(new EmbedBuilder()
             .setTitle("Moderation Summary")

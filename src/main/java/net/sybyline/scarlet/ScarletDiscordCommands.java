@@ -257,7 +257,7 @@ public class ScarletDiscordCommands
         @Desc("Lists all custom moderation tags")
         public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
         {
-            MessageEmbed[] embeds = ScarletDiscordCommands.this.discord.scarlet.moderationTags.getTags().stream().map(tag -> new EmbedBuilder().setAuthor(tag.value).setTitle(tag.label).setDescription(tag.description).build()).toArray(MessageEmbed[]::new);
+            MessageEmbed[] embeds = ScarletDiscordCommands.this.discord.scarlet.moderationTags.getTags().stream().map(tag -> new EmbedBuilder().setAuthor(tag.value).setTitle(MiscUtils.maybeEllipsis(256, tag.label)).setDescription(MiscUtils.maybeEllipsis(4096, tag.description)).build()).toArray(MessageEmbed[]::new);
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
         }
         public final SlashOption<String> _valueNA = SlashOption.ofString("value", "The internal id of the tag (prefer only `a-zA-Z`, `0-9`, `-`, `_`)", true, null).with($ -> $.setRequiredLength(1, 100));
@@ -1128,9 +1128,9 @@ public class ScarletDiscordCommands
                        label = tag.label != null ? tag.label : tag.value,
                        desc = tag.description;
                 if (desc == null)
-                    builder.addOption(label, value);
+                    builder.addOption(label, MiscUtils.maybeEllipsis(100, value));
                 else
-                    builder.addOption(label, value, desc);
+                    builder.addOption(label, MiscUtils.maybeEllipsis(100, value), MiscUtils.maybeEllipsis(50, desc));
             }
             
             hook.sendMessageComponents(

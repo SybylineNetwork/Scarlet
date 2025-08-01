@@ -81,10 +81,15 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.12-rc5",
+        VERSION = "0.4.12-rc6",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
+        SCARLET_VRCHAT_GROUP_ID = "grp_f12667c7-df5f-454f-9a34-5ed8c33112a1",
+        SCARLET_VRCHAT_GROUP_CODE = "SYBNET.4134",
+        SCARLET_VRCHAT_GROUP_URL = "https://vrchat.com/home/group/"+SCARLET_VRCHAT_GROUP_ID,
+        SCARLET_VRCHAT_GROUP_SHORT_URL = "https://vrc.group/"+SCARLET_VRCHAT_GROUP_CODE,
+        SCARLET_VRCHAT_GROUP_ALT_SHORT_URL = "https://vrch.at/g/"+SCARLET_VRCHAT_GROUP_CODE,
         USER_AGENT_NAME = "Sybyline-Network-"+NAME,
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD+"; "+SCARLET_DISCORD_URL+"; "+GITHUB_URL,
         LICENSE_URL = GITHUB_URL+"?tab=MIT-1-ov-file",
@@ -296,7 +301,8 @@ public class Scarlet implements Closeable
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
-    final ScarletUI.Setting<Boolean> alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
+    final ScarletUI.Setting<Boolean> confirmGroupInvite = this.ui.settingBool("ui_confirm_group_invite", "Confirmation dialog for group invites", false),
+                                     alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
                                      alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true),
                                      showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
     final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);

@@ -566,6 +566,7 @@ public class ScarletUI implements AutoCloseable
             {
                 JMenu jmenu_help = new JMenu("Help");
                 {
+                    jmenu_help.add("Scarlet VRChat Group").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.SCARLET_VRCHAT_GROUP_URL)));
                     jmenu_help.add("Scarlet Github").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.GITHUB_URL)));
                     jmenu_help.add("Scarlet License").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.LICENSE_URL)));
                     jmenu_help.addSeparator();
@@ -920,7 +921,7 @@ public class ScarletUI implements AutoCloseable
             }
             
             
-            if (ScarletUI.this.scarlet.ui.confirmModal(null, question, subquestion))
+            if (!this.scarlet.confirmGroupInvite.get() || ScarletUI.this.scarlet.ui.confirmModal(null, question, subquestion))
             {
                 if (respond)
                 {

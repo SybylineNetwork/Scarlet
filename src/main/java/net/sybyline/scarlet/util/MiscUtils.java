@@ -51,6 +51,11 @@ import net.sybyline.scarlet.Scarlet;
 public interface MiscUtils
 {
 
+    static String maybeEllipsis(int maxLength, String string)
+    {
+        return string == null || string.length() <= maxLength ? string : (string.substring(0, maxLength - 1) + '\u2026');
+    }
+
     static final ZoneRules DEFAULT_ZONE_RULES = ZoneId.systemDefault().getRules();
     static OffsetDateTime odt2utc(LocalDateTime ldt)
     {

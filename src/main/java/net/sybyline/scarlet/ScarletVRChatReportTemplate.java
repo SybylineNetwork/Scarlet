@@ -154,9 +154,9 @@ public class ScarletVRChatReportTemplate
                 StringBuilder sb = new StringBuilder();
                 for (int idx = 0, len = tags.length, last = len - 1; idx < len; idx++)
                 {
-                    if (idx > 0)
+                    if (idx > 1)
                         sb.append(", ");
-                    if (idx == last)
+                    if (idx == last && idx > 0)
                         sb.append("and ");
                     sb.append(tags[idx]);
                 }
@@ -180,6 +180,8 @@ public class ScarletVRChatReportTemplate
                 .append(this.appName)
                 .append(" version ")
                 .append(this.appVersion)
+                .append("<br>")
+                .append(Scarlet.GITHUB_URL)
                 .append("<br>")
                 .append("Group ID: ")
                 .append(this.groupId)

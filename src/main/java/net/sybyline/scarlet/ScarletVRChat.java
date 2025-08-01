@@ -73,6 +73,7 @@ import io.github.vrchatapi.model.UpdateGroupMemberRequest;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
+import net.sybyline.scarlet.util.EnumHelper;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.VersionedFile;
 import net.sybyline.scarlet.util.VrcIds;
@@ -124,7 +125,32 @@ public class ScarletVRChat implements Closeable
                         try {
                             value = prevTA.fromJsonTree(je);
                         } catch (Exception ex) {
-                            value = fbTA.fromJsonTree(je);
+                            @SuppressWarnings("rawtypes")
+                            Class enumType = type.getRawType();
+                            if (enumType.isEnum()) try {
+                                value = fbTA.fromJsonTree(je);
+                            } catch (Exception ex1) {
+                                if (enumType.isEnum() && enumType.getName().replace('/', '.').startsWith("io.github.vrchatapi.model.")) {
+                                    String enumValue = je.getAsString();
+                                    LOG.warn("Encountering new API enum value for "+enumType.getName()+": `"+enumValue+"`, implicitly instantiating instance...");
+                                    @SuppressWarnings("unchecked")
+                                    Object newValue = EnumHelper.addJsonStringEnum(enumType, enumValue);
+                                    try {
+                                        value = fbTA.fromJsonTree(je);
+                                        if (newValue != value) {
+                                            LOG.error("Mismatch in parsed values: expected `"+newValue+"`, got `"+value+"`");
+                                        }
+                                    } catch (Exception ex2) {
+                                        LOG.error("Failed to instantiate encountered enum, returning null instead");
+                                        value = null;
+                                    }
+                                } else {
+                                    LOG.error("Unknown enum value for `"+je.getAsString()+"`, returning null instead");
+                                    value = null;
+                                }
+                            } else {
+                                value = fbTA.fromJsonTree(je);
+                            }
                         }
                         return value;
                     }
@@ -762,7 +788,6 @@ public class ScarletVRChat implements Closeable
         GroupsApi groups = new GroupsApi(this.client);
         try
         {
-            groups.respondGroupJoinRequest(targetUserId, targetUserId, null);
             groups.createGroupInvite(this.groupId, new CreateGroupInviteRequest().userId(targetUserId).confirmOverrideBlock(confirmOverrideBlock));
             return true;
         }

@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.ObjIntConsumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
@@ -849,11 +850,18 @@ public class DInteractions
             this.pages = pages;
             this.hook = null;
             this.messageId = null; //"@original";
+            this.additional = null;
+        }
+        public Pagination withAdditional(ObjIntConsumer<WebhookMessageEditAction<Message>> additional)
+        {
+            this.additional = additional;
+            return this;
         }
         final String paginationId;
         final Paginator[] pages;
         InteractionHook hook;
         String messageId;
+        ObjIntConsumer<WebhookMessageEditAction<Message>> additional;
         boolean removeIfExpired()
         {
             if (this.hook == null || !this.hook.isExpired())
@@ -862,6 +870,20 @@ public class DInteractions
             return true;
         }
         WebhookMessageEditAction<Message> action(int pageOrdinal)
+        {
+            WebhookMessageEditAction<Message> action = this._action(pageOrdinal);
+            ObjIntConsumer<WebhookMessageEditAction<Message>> additional = this.additional;
+            if (additional != null) try
+            {
+                additional.accept(action, pageOrdinal);
+            }
+            catch (Exception ex)
+            {
+                LOG.warn("Exception in pagination additional", ex);
+            }
+            return action;
+        }
+        WebhookMessageEditAction<Message> _action(int pageOrdinal)
         {
             if (pageOrdinal < 1) pageOrdinal = 1;
             if (pageOrdinal > this.pages.length) pageOrdinal = this.pages.length;
