@@ -87,6 +87,9 @@ public class DInteractions
     @Target(ElementType.PARAMETER)
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface SlashOpt { String value(); }
+    @Target(ElementType.PARAMETER)
+    @Retention(RetentionPolicy.RUNTIME)
+    public static @interface Required { boolean value() default true; }
     @Target({ElementType.TYPE,ElementType.METHOD})
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface SlashCmd { String value(); }
@@ -508,11 +511,15 @@ public class DInteractions
             SlashOption<?> ret = null;
             Parameter parameter = parameters[idx + off];
             SlashOpt so = parameter.getDeclaredAnnotation(SlashOpt.class);
+            Required req = parameter.getDeclaredAnnotation(Required.class);
             
             if (so != null && !so.value().isEmpty()) ret = this.findOption(slash, group, so.value());
             if (ret == null && parameter.isNamePresent()) ret = this.findOption(slash, group, parameter.getName());
             
             if (ret == null) LOG.error(String.format("No option found for %s:%d (%s) {%s}", method, idx, parameter, so));
+            
+            if (ret != null && req != null && req.value() != ret.data.isRequired()) ret = ret.with($ -> $.setRequired(req.value()));
+            
             return ret;
         }).toArray(SlashOption[]::new);
     }

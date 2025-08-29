@@ -62,11 +62,6 @@ public final class UniqueStrings implements Iterable<String>
         return string != null && this.strings.add(string);
     }
 
-    public boolean remove(String string)
-    {
-        return string != null && this.strings.remove(string);
-    }
-
     public boolean addAll(String... strings)
     {
         if (strings == null)
@@ -79,6 +74,28 @@ public final class UniqueStrings implements Iterable<String>
         if (strings == null)
             return false;
         if (!this.strings.addAll(strings))
+            return false;
+        this.strings.removeIf(Objects::isNull);
+        return true;
+    }
+
+    public boolean remove(String string)
+    {
+        return string != null && this.strings.remove(string);
+    }
+
+    public boolean removeAll(String... strings)
+    {
+        if (strings == null)
+            return false;
+        return this.removeAll(Arrays.asList(strings));
+    }
+
+    public boolean removeAll(Collection<? extends String> strings)
+    {
+        if (strings == null)
+            return false;
+        if (!this.strings.removeAll(strings))
             return false;
         this.strings.removeIf(Objects::isNull);
         return true;

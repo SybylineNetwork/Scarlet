@@ -37,12 +37,15 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.User;
 
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.ui.Swing;
 import net.sybyline.scarlet.util.GithubApi;
@@ -81,7 +84,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.12-rc6",
+        VERSION = "0.4.12-rc7",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -292,6 +295,26 @@ public class Scarlet implements Closeable
     final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(new File(dir, "pending_moderation_actions.json"));
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
     final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(new File(dir, "watched_groups.json"));
+    final ScarletWatchedEntities<User> watchedUsers = new ScarletWatchedEntities<>(new File(dir, "watched_users.json"), (user, id, embed) ->
+        embed.setAuthor(
+                 user != null ? MarkdownSanitizer.escape(user.getDisplayName()) : id,
+                 "https://vrchat.com/home/user/"+id,
+                 user != null ? user.getUserIcon() : null
+             )
+             .setThumbnail(
+                 user != null ? (user.getProfilePicOverride() == null || user.getProfilePicOverride().isEmpty() ? (user.getCurrentAvatarImageUrl() == null || user.getCurrentAvatarImageUrl().isEmpty() ? null : user.getCurrentAvatarImageUrl()) : user.getProfilePicOverride()) : null)
+             );
+    final ScarletWatchedEntities<Avatar> watchedAvatars = new ScarletWatchedEntities<>(new File(dir, "watched_avatars.json"), (avatar, id, embed) ->
+    {
+        User author = avatar != null ? this.vrc.getUser(avatar.getAuthorId()) : null;
+        embed.setAuthor(
+            avatar != null ? MarkdownSanitizer.escape(avatar.getAuthorName()) : null,
+            avatar != null ? "https://vrchat.com/home/user/"+avatar.getAuthorId() : null,
+            author != null ? author.getUserIcon() : null
+        )
+        .setThumbnail(avatar != null ? avatar.getThumbnailImageUrl() : null)
+        .setTitle(avatar != null ? MarkdownSanitizer.escape(avatar.getName()) : id, "https://vrchat.com/home/avatar/"+id);
+    });
     final ScarletStaffList staffList = new ScarletStaffList(new File(dir, "staff_list.json"));
     final ScarletSecretStaffList secretStaffList = new ScarletSecretStaffList(new File(dir, "secret_staff_list.json"));
     final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(new File(dir, "report_template.txt"));

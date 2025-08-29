@@ -41,8 +41,9 @@ import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.FilesApi;
 import io.github.vrchatapi.api.GroupsApi;
-import io.github.vrchatapi.api.PrintsApi;
+import io.github.vrchatapi.api.InventoryApi;
 import io.github.vrchatapi.api.MiscellaneousApi;
+import io.github.vrchatapi.api.PrintsApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
@@ -58,6 +59,7 @@ import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.Instance;
+import io.github.vrchatapi.model.InventoryItem;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.LimitedUserSearch;
 import io.github.vrchatapi.model.LimitedWorld;
@@ -76,7 +78,6 @@ import io.github.vrchatapi.model.World;
 import net.sybyline.scarlet.util.EnumHelper;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.VersionedFile;
-import net.sybyline.scarlet.util.VrcIds;
 
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
@@ -193,6 +194,7 @@ public class ScarletVRChat implements Closeable
         this.cachedUserGroups = new ScarletJsonCache<>("gmem", new TypeToken<List<LimitedUserGroups>>(){});
         this.cachedAvatars = new ScarletJsonCache<>("avtr", Avatar.class);
         this.cachedPrints = new ScarletJsonCache<>("prnt", Print.class);
+        this.cachedInventoryItems = new ScarletJsonCache<>("inv", InventoryItem.class);
         this.cachedModelFiles = new ScarletJsonCache<>("file", ModelFile.class);
     }
 
@@ -211,6 +213,7 @@ public class ScarletVRChat implements Closeable
     final ScarletJsonCache<List<LimitedUserGroups>> cachedUserGroups;
     final ScarletJsonCache<Avatar> cachedAvatars;
     final ScarletJsonCache<Print> cachedPrints;
+    final ScarletJsonCache<InventoryItem> cachedInventoryItems;
     final ScarletJsonCache<ModelFile> cachedModelFiles;
     long localDriftMillis = 0L;
 
@@ -891,6 +894,45 @@ public class ScarletVRChat implements Closeable
                 LOG.error("Error during get print: "+apiex.getMessage());
             return null;
         }
+    }
+
+    public InventoryItem getInventoryItem(String userId, String invId)
+    {
+        return this.getInventoryItem(userId, invId, Long.MAX_VALUE);
+    }
+    public InventoryItem getInventoryItem(String userId, String invId, long minEpoch)
+    {
+        InventoryItem item = this.cachedInventoryItems.get(invId, minEpoch);
+        if (item != null)
+            return item;
+        if (this.cachedInventoryItems.is404(invId))
+            return null;
+//        InventoryApi inventory = new InventoryApi(this.client);
+        try
+        {
+//            item = inventory.getInventoryItem(userId, invId);
+            item = this.getInventoryItemEx(userId, invId);
+            this.cachedInventoryItems.put(invId, item);
+            return item;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedInventoryItems.add404(invId);
+            else
+                LOG.error("Error during get inventory item: "+apiex.getMessage());
+            return null;
+        }
+    }
+    public InventoryItem getInventoryItemEx(String userId, String invId) throws ApiException
+    {
+        Map<String, String> headers = new HashMap<>();
+            headers.put("Accept", "application/json");
+            headers.put("Content-Type", "application/json");
+        okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+userId+"/inventory/"+invId, "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+        ApiResponse<InventoryItem> localVarResp = this.client.execute(localVarCall, InventoryItem.class);
+        return localVarResp.getData();
     }
 
     public ModelFile getModelFile(String fileId)

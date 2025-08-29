@@ -54,6 +54,16 @@ public interface VrcIds
         if ((m = id_user.matcher(string)).find()) return m.group();
         return string;
     }
+    static String resolveAvatarId(String string)
+    {
+        if (string == null) return null;
+        string = string.trim();
+        Matcher m;
+        if ((m = id_avatar.matcher(string)).matches()) return string;
+        if ((m = url_avatar.matcher(string)).matches()) return m.group("id");
+        if ((m = id_avatar.matcher(string)).find()) return m.group();
+        return string;
+    }
     static String resolveGroupId(String string)
     {
         if (string == null) return null;

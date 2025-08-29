@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -21,6 +22,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import io.github.vrchatapi.model.Avatar;
+import io.github.vrchatapi.model.InventoryItem;
+import io.github.vrchatapi.model.InventoryItemType;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.Print;
@@ -58,7 +61,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         
         this.ttsVoiceName = scarlet.ui.settingString("tts_voice_name", "TTS: Voice name", "", $ -> scarlet.ttsService != null && scarlet.ttsService.getInstalledVoices().contains($));
         this.ttsUseDefaultAudioDevice = scarlet.ui.settingBool("tts_use_default_audio_device", "TTS: Use default system audio device", false);
+        this.announceWatchedUsers = scarlet.ui.settingBool("tts_announce_watched_users", "TTS: Announce watched users", true);
         this.announceWatchedGroups = scarlet.ui.settingBool("tts_announce_watched_groups", "TTS: Announce watched groups", true);
+        this.announceWatchedAvatars = scarlet.ui.settingBool("tts_announce_watched_avatars", "TTS: Announce watched avatars", true);
         this.announceNewPlayers = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce new players", true);
         this.announceVotesToKick = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce Votes-to-Kick", true);
         this.announcePlayersNewerThan = scarlet.ui.settingInt("tts_announce_players_newer_than_days", "TTS: Announce players newer than (days)", 30, 1, 365);
@@ -85,7 +90,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
 
     final ScarletUI.Setting<String> ttsVoiceName;
     final ScarletUI.Setting<Boolean> ttsUseDefaultAudioDevice,
+                                     announceWatchedUsers,
                                      announceWatchedGroups,
+                                     announceWatchedAvatars,
                                      announceNewPlayers,
                                      announceVotesToKick,
                                      attemptAvatarImageMatch;
@@ -268,16 +275,21 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         }
     }
 
+    String[] searchAvatar(String avatarDisplayName)
+    {
+        return AvatarSearch
+        .vrcxSearchAllCached(((ScarletDiscordJDA)this.scarlet.discord).getAvatarSearchProviders(), avatarDisplayName)
+        .filter(Objects::nonNull)
+        .filter($$ -> avatarDisplayName.equals($$.name))
+        .map(AvatarSearch.VrcxAvatar::id)
+        .filter(Objects::nonNull)
+        .distinct()
+        .toArray(String[]::new)
+        ;
+    }
     void switchPlayerAvatar(OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
     {
-        String[] potentialIds = AvatarSearch
-            .vrcxSearchAllCached(((ScarletDiscordJDA)this.scarlet.discord).getAvatarSearchProviders(), avatarDisplayName)
-            .filter(Objects::nonNull)
-            .filter($$ -> avatarDisplayName.equals($$.name))
-            .map(AvatarSearch.VrcxAvatar::id)
-            .filter(Objects::nonNull)
-            .distinct()
-            .toArray(String[]::new);
+        String[] potentialIds = this.searchAvatar(avatarDisplayName);
         
         if (this.attemptAvatarImageMatch.get())
         {
@@ -303,6 +315,24 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             }
         }
         
+
+        // check avatar
+        Arrays
+            .stream(potentialIds)
+            .map(this.scarlet.watchedAvatars::getWatchedEntity)
+            .filter(Objects::nonNull)
+            .filter($ -> !$.silent)
+            .sorted(Comparator.naturalOrder())
+            .findFirst()
+            .ifPresent(watchedAvatar -> {
+                StringBuilder sb = new StringBuilder();
+                sb.append("User ").append(userDisplayName).append(" may be wearing a watched avatar.");
+                if (watchedAvatar.message != null)
+                    sb.append(' ').append(watchedAvatar.message);
+                this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
+                this.scarlet.ttsService.submit("wg-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
+            });
+        
         this.scarlet.discord.emitExtendedUserAvatar(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, avatarDisplayName, potentialIds);
         this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_AVATAR, odt, userId, userDisplayName, potentialIds.length == 1 ? potentialIds[0] : null, avatarDisplayName);
     }
@@ -311,7 +341,17 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     Color checkPlayer(List<String> advisories, int[] priority, boolean preamble, String userDisplayName, String userId)
     {
         if (preamble) this.checkPlayerLimiter.await();
-        ScarletWatchedGroups.WatchedGroup.Type overall_type = null;
+        Color overall_type = null;
+        
+        // check user
+        ScarletWatchedEntities.WatchedEntity watchedUser = this.scarlet.watchedUsers.getWatchedEntity(userId);
+        if (watchedUser != null && !watchedUser.silent)
+        {
+            advisories.add(watchedUser.message);
+            this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
+            this.scarlet.ttsService.submit("new-"+Long.toUnsignedString(System.nanoTime()), watchedUser.message);
+        }
+        
         User user = this.scarlet.vrc.getUser(userId);
         List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId);
         // check groups
@@ -324,10 +364,11 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 .sorted(Comparator.naturalOrder())
                 .collect(Collectors.toList());
             ScarletWatchedGroups.WatchedGroup wg = wgs.stream()
+                .filter($ -> !$.silent)
                 .findFirst()
                 .orElse(null)
                 ;
-            if (wg != null && !wg.silent)
+            if (wg != null)
             {
                 if (!preamble && this.announceWatchedGroups.get())
                 {
@@ -341,13 +382,17 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 priority[0] = wg.priority;
             }
             wgs.forEach($ -> advisories.add($.message));
+            if (overall_type == null)
+            {
             overall_type = wgs.stream()
                 .filter($ -> $.type.text_color != null)
-                .map($ -> $.type)
+                .map($ -> $.type.text_color)
                 .findFirst()
                 .orElse(null)
-            ;
+                ;
+            }
         }
+        // check new user
         if (!preamble && user != null && this.announceNewPlayers.get())
         {
             long acctAgeDays = LocalDate.now().toEpochDay() - user.getDateJoined().toEpochDay();
@@ -357,11 +402,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 this.scarlet.ttsService.submit("new-"+Long.toUnsignedString(System.nanoTime()), "User "+userDisplayName+" is new to VRChat, joined "+acctAgeDays+" days ago.");
             }
         }
-        // check staff
-        // check avatar
-        if (overall_type != null)
-            return overall_type.text_color;
-        return null;
+        
+        // TODO : check staff
+        
+        return overall_type;
     }
 
     @Override
@@ -448,6 +492,23 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                             this.scarlet.discord.emitExtendedUserSpawnPrint(this.scarlet, timestamp, this.clientLocation, print.getOwnerId(), ownerDisplayName, printId, print);
                             OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
                             this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_PRINT, odt, print.getOwnerId(), ownerDisplayName, printId, null);
+                        }
+                    }
+                    else if (url.startsWith("users/", pathIdx) && url.contains("/inventory/inv_"))
+                    {
+                        int sep0 = pathIdx + 6,
+                            sep1 = url.indexOf("/inventory/inv_", sep0),
+                            sep2 = sep1 + 11;
+                        String userId = url.substring(sep0, sep1);
+                        String invId = url.substring(sep2);
+                        InventoryItem item = this.scarlet.vrc.getInventoryItem(userId, invId);
+                        if (item != null && item.getItemType() == InventoryItemType.EMOJI)
+                        {
+                            User user = this.scarlet.vrc.getUser(userId);
+                            String ownerDisplayName = user == null ? userId : user.getDisplayName();
+                            this.scarlet.discord.emitExtendedUserSpawnEmoji(this.scarlet, timestamp, this.clientLocation, userId, ownerDisplayName, invId, item);
+                            OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+                            this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_EMOJI, odt, userId, ownerDisplayName, invId, null);
                         }
                     }
                 } break;

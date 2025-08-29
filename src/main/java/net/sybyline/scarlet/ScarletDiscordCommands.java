@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -32,6 +33,7 @@ import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
+import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupLimitedMember;
@@ -75,6 +77,7 @@ import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DInteractions.DefaultPerms;
 import net.sybyline.scarlet.server.discord.DInteractions.Desc;
 import net.sybyline.scarlet.server.discord.DInteractions.MsgCmd;
+import net.sybyline.scarlet.server.discord.DInteractions.Required;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashCmd;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOpt;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOption;
@@ -171,7 +174,15 @@ public class ScarletDiscordCommands
     public final SlashOption<Integer> _hoursBack = SlashOption.ofInt("hours-back", "The number of hours into the past to search for events", false, 24).with($->$.setRequiredRange(1L, 24_000L));
     public final SlashOption<Integer> _pagination = SlashOption.ofInt("entries-per-page", "The number of entries to show per page", false, 4).with($->$.setRequiredRange(1L, 10L));
     public final SlashOption<Boolean> _tagImmediately = SlashOption.ofBool("tag-immediately", "Whether to submit tags and description now", false, false);
+    public final SlashOption<Message.Attachment> _importedFile = SlashOption.ofAttachment("import-file", "Accepts: JSON, CSV", true);
 
+    public final SlashOption<ScarletWatchedEntities.WatchedEntity.Type> _entityType = SlashOption.ofEnum("entity-type", "The type of watched entity", true, ScarletWatchedEntities.WatchedEntity.Type.UNKNOWN);
+    public final SlashOption<String> _entityTags = SlashOption.ofString("entity-tags", "A list of tags, separated by one of ',', ';', '/'", false, null);
+    public final SlashOption<String> _entityTag = SlashOption.ofString("entity-tag", "A tag", true, null);
+    public final SlashOption<Integer> _entityPriority = SlashOption.ofInt("entity-priority", "The priority of this entity", false, 0).with($->$.setRequiredRange(-100L, 100L));
+    public final SlashOption<String> _entityMessage = SlashOption.ofString("entity-message", "A message to announce with TTS", false, null);
+    public final SlashOption<Boolean> _entityCritical = SlashOption.ofBool("entity-critical", "The critical status of the entity", true, null);
+    public final SlashOption<Boolean> _entitySilent = SlashOption.ofBool("entity-silent", "The silent status of the entity", true, null);
 
     // vrchat-search
 
@@ -273,7 +284,7 @@ public class ScarletDiscordCommands
                 hook.sendMessage("Failed to add moderation tag: list == null").setEphemeral(true).queue();
             } break;
             case -2: {
-                hook.sendMessage("Failed to add moderation tag: there are already the maximum of 25 moderation tags").setEphemeral(true).queue();
+                hook.sendMessage("Failed to add moderation tag: there are already the maximum of 125 moderation tags").setEphemeral(true).queue();
             } break;
             case -1: {
                 hook.sendMessage("Failed to add moderation tag: list.add returned false").setEphemeral(true).queue();
@@ -362,10 +373,9 @@ public class ScarletDiscordCommands
             LOG.info("Exporting watched groups JSON");
             hook.sendFiles(FileUpload.fromData(ScarletDiscordCommands.this.discord.scarlet.watchedGroups.watchedGroupsFile)).setEphemeral(false).queue();
         }
-        public final SlashOption<Message.Attachment> _importedFile = SlashOption.ofAttachment("import-file", "Accepts: JSON, CSV", true);
         @SlashCmd("import")
         @Desc("Imports watched groups from an attached file")
-        public void import_(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") Message.Attachment importedFile)
+        public void import_(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("import-file") Message.Attachment importedFile)
         {
             String fileName = importedFile.getFileName(),
                     attachmentUrl = importedFile.getUrl();
@@ -452,7 +462,7 @@ public class ScarletDiscordCommands
         public final SlashOption<String> _message = SlashOption.ofString("message", "A message to announce with TTS", false, null);
         
         @SlashCmd("add")
-        @Desc("Exports watched groups as a JSON file")
+        @Desc("Adds a watched group")
         public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-group") String groupId,
             @SlashOpt("group-type") ScarletWatchedGroups.WatchedGroup.Type groupType,
             @SlashOpt("group-tags") String groupTags,
@@ -761,6 +771,591 @@ public class ScarletDiscordCommands
         }
     }
 
+    protected abstract class WatchedEntity_<E>
+    {
+        protected abstract String _singular();
+        protected abstract String _plural();
+        protected abstract ScarletWatchedEntities<E> _watchedEntities();
+        protected abstract E _getEntity(String id);
+        protected abstract String _getEntityName(E entity);
+        final Map<String, Command.Choice> userSf2lastEdited_entityId = new ConcurrentHashMap<>();
+//        @SlashCmd("list")
+//        @Desc("Lists all watched groups")
+        protected void _list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
+        {
+            MessageEmbed[] embeds = this._watchedEntities()
+                .watchedEntities
+                .values()
+                .stream()
+                .map($ -> $.embed(this._watchedEntities(), this._getEntity($.id)).build())
+                .toArray(MessageEmbed[]::new)
+            ;
+            
+            ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
+        }
+//        @SlashCmd("export")
+//        @Desc("Exports watched groups as a JSON file")
+        protected void _export(SlashCommandInteractionEvent event, InteractionHook hook)
+        {
+            LOG.info("Exporting watched "+this._plural()+" JSON");
+            hook.sendFiles(FileUpload.fromData(this._watchedEntities().watchedEntitiesFile)).setEphemeral(false).queue();
+        }
+//        @SlashCmd("import")
+//        @Desc("Imports watched groups from an attached file")
+        protected void _import_(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("import-file") Message.Attachment importedFile)
+        {
+            String fileName = importedFile.getFileName(),
+                   attachmentUrl = importedFile.getUrl();
+             
+             if (fileName.endsWith(".csv"))
+             {
+                 LOG.info("Importing watched "+this._plural()+" legacy CSV from attachment: "+fileName);
+                 try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
+                 {
+                     if (this._watchedEntities().importLegacyCSV(reader, true))
+                     {
+                         LOG.info("Successfully imported watched "+this._plural()+" legacy CSV");
+                         hook.sendMessageFormat("Successfully imported watched "+this._plural()+" legacy CSV").setEphemeral(true).queue();
+                     }
+                     else
+                     {
+                         LOG.warn("Failed to import watched "+this._plural()+" legacy CSV with unknown reason");
+                         hook.sendMessageFormat("Failed to import watched "+this._plural()+" legacy CSV with unknown reason").setEphemeral(true).queue();
+                     }
+                 }
+                 catch (Exception ex)
+                 {
+                     LOG.error("Exception importing watched "+this._plural()+" legacy CSV from attachment: "+fileName, ex);
+                     hook.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
+                 }
+             }
+             else if (fileName.endsWith(".json"))
+             {
+                 LOG.info("Importing watched "+this._plural()+" JSON from attachment: "+fileName);
+                 try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
+                 {
+                     if (this._watchedEntities().importJson(reader, true))
+                     {
+                         LOG.info("Successfully imported watched "+this._plural()+" JSON");
+                         hook.sendMessageFormat("Successfully imported watched "+this._plural()+" JSON").setEphemeral(true).queue();
+                     }
+                     else
+                     {
+                         LOG.warn("Failed to import watched "+this._plural()+" JSON with unknown reason");
+                         hook.sendMessageFormat("Failed to import watched "+this._plural()+" JSON with unknown reason").setEphemeral(true).queue();
+                     }
+                 }
+                 catch (Exception ex)
+                 {
+                     LOG.error("Exception importing watched "+this._plural()+" JSON from attachment: "+fileName, ex);
+                     hook.sendMessageFormat("Exception while importing %s: %s", fileName, ex).setEphemeral(true).queue();
+                 }
+             }
+             else
+             {
+                 LOG.warn("Skipping attachment: "+fileName);
+                 hook.sendMessageFormat("File '%s' is not importable.", fileName).setEphemeral(true).queue();
+             }
+        }
+        void _vrchatEntity(CommandAutoCompleteInteractionEvent event) {
+            AutoCompleteCallbackAction action = event.replyChoices();
+            Command.Choice entityChoice = this.userSf2lastEdited_entityId.get(event.getUser().getId());
+            if (entityChoice != null)
+            {
+                action.addChoices(entityChoice);
+            }
+            String typing = event.getFocusedOption().getValue();
+            if (typing != null && !(typing = typing.trim()).isEmpty())
+            {
+                action.addChoiceStrings(typing);
+            }
+            action.queue();
+        }
+        E vrchatEntity(SlashCommandInteractionEvent event, String entityId)
+        {
+            if (entityId != null && !(entityId = entityId.trim()).isEmpty())
+            {
+                E entity = this._getEntity(entityId);
+                this.userSf2lastEdited_entityId.put(event.getUser().getId(), new Command.Choice(entity != null ? this._getEntityName(entity) : entityId, entityId));
+                return entity;
+            }
+            return null;
+        }
+        
+//        @SlashCmd("add")
+//        @Desc("Exports watched groups as a JSON file")
+        protected void _add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId,
+            @SlashOpt("entity-type") ScarletWatchedEntities.WatchedEntity.Type entityType,
+            @SlashOpt("entity-tags") String entityTags,
+            @SlashOpt("entity-priority") int entityPriority,
+            @SlashOpt("message") String message)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity != null)
+            {
+                hook.sendMessage("That "+this._singular()+" is already watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            E entity = this._getEntity(entityId);
+            if (entity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" doesn't seem to exist").setEphemeral(true).queue();
+                return;
+            }
+            watchedEntity = new ScarletWatchedEntities.WatchedEntity();
+            watchedEntity.id = entityId;
+            watchedEntity.type = entityType;
+            if (entityTags != null)
+                watchedEntity.tags.clear().addAll(Arrays.stream(entityTags.split("[,;/]")).map(String::trim).toArray(String[]::new));
+            if (message != null)
+                watchedEntity.message = message;
+            watchedEntity.priority = entityPriority;
+            this._watchedEntities().addWatchedEntity(entityId, watchedEntity);
+            hook.sendMessageFormat("Added %s [%s](https://vrchat.com/home/group/%s)", this._singular(), this._getEntityName(entity), entityId).setEphemeral(true).queue();
+        }
+//        @SlashCmd("delete")
+//        @Desc("Removes a watched group")
+        protected void _remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId)
+        {
+            if (this._watchedEntities().removeWatchedEntity(entityId))
+            {
+                E entity = this._getEntity(entityId);
+                hook.sendMessageFormat("Removed %s [%s](https://vrchat.com/home/group/%s)", this._singular(), entity == null ? entityId : this._getEntityName(entity), entityId).setEphemeral(true).queue();
+            }
+            else
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+            }
+        }
+//        @SlashCmd("view")
+//        @Desc("Views a group's watch information")
+        protected void _view(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            E entity = this._getEntity(entityId);
+            hook.sendMessageEmbeds(watchedEntity.embed(this._watchedEntities(), entity).build()).setEphemeral(true).queue();
+        }
+//        @SlashCmd("set-critical")
+//        @Desc("Sets a group's critical status")
+        protected void _setCritical(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_critical_R") boolean critical)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            if (critical)
+            {
+                if (watchedEntity.critical)
+                {
+                    hook.sendMessage("That "+this._singular()+" is already flagged as critical").setEphemeral(true).queue();
+                    return;
+                }
+                hook.sendMessage("Flagged "+this._singular()+" as critical").setEphemeral(true).queue();
+            }
+            else
+            {
+                if (!watchedEntity.critical)
+                {
+                    hook.sendMessage("That "+this._singular()+" is already not flagged as critical").setEphemeral(true).queue();
+                    return;
+                }
+                hook.sendMessage("Unflagged "+this._singular()+" as critical").setEphemeral(true).queue();
+            }
+            watchedEntity.critical = critical;
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("set-silent")
+//        @Desc("Sets a group's silent status")
+        protected void _setSilent(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_silent_R") boolean silent)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            if (silent)
+            {
+                if (watchedEntity.silent)
+                {
+                    hook.sendMessage("That "+this._singular()+" is already flagged as silent").setEphemeral(true).queue();
+                    return;
+                }
+                hook.sendMessage("Flagged "+this._singular()+" as silent").setEphemeral(true).queue();
+            }
+            else
+            {
+                if (!watchedEntity.silent)
+                {
+                    hook.sendMessage("That "+this._singular()+" is already not flagged as silent").setEphemeral(true).queue();
+                    return;
+                }
+                hook.sendMessage("Unflagged "+this._singular()+" as silent").setEphemeral(true).queue();
+            }
+            watchedEntity.silent = silent;
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("set-type")
+//        @Desc("Sets a group's watch type")
+        protected void _setType(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("entity-type") ScarletWatchedEntities.WatchedEntity.Type entityType)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            if (watchedEntity.type == entityType)
+            {
+                hook.sendMessage("That "+this._singular()+" is already marked as "+entityType).setEphemeral(true).queue();
+                return;
+            }
+            watchedEntity.type = entityType;
+            hook.sendMessage("Marking "+this._singular()+" as "+entityType).setEphemeral(true).queue();
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("set-priority")
+//        @Desc("Sets a group's priority")
+        protected void _setPriority(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_entityPriority_R") int entityPriority)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            watchedEntity.priority = entityPriority;
+            hook.sendMessage("Setting "+this._singular()+" priority to "+entityPriority).setEphemeral(true).queue();
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("set-message")
+//        @Desc("Sets a group's TTS announcement message")
+        protected void _setMessage(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_message_R") String message)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            if (message == null)
+            {
+                if (watchedEntity.message == null)
+                {
+                    hook.sendMessage("That "+this._singular()+" already has no message").setEphemeral(true).queue();
+                    return;
+                }
+                else
+                {
+                    hook.sendMessageFormat("Removing "+this._singular()+"'s message (was `%s`)", message).setEphemeral(true).queue();
+                }
+            }
+            else
+            {
+                if (message.equals(watchedEntity.message))
+                {
+                    hook.sendMessage("That "+this._singular()+"'s message is already exactly that").setEphemeral(true).queue();
+                    return;
+                }
+                else
+                {
+                    hook.sendMessageFormat("Setting "+this._singular()+" TTS announcement to `%s` (was `%s`)", message, watchedEntity.message).setEphemeral(true).queue();
+                }
+            }
+            watchedEntity.message = message;
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("set-tags")
+//        @Desc("Sets a group's tags")
+        protected void _setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_entityTags_R") String entityTags)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            if (entityTags == null)
+            {
+                if (watchedEntity.tags.isEmpty())
+                {
+                    hook.sendMessage("That "+this._singular()+" already has no tags").setEphemeral(true).queue();
+                    return;
+                }
+                else
+                {
+                    hook.sendMessageFormat("Removing "+this._singular()+"'s tags (was `%s`)",
+                            watchedEntity.tags.strings().stream().filter(Objects::nonNull).collect(Collectors.joining("`, `")))
+                        .setEphemeral(true)
+                        .queue();
+                    watchedEntity.tags.clear();
+                }
+            }
+            else
+            {
+                String[] newTags = Arrays.stream(entityTags.split("[,;/]")).map(String::trim).distinct().toArray(String[]::new);
+                if (watchedEntity.tags.strings().equals(new HashSet<>(Arrays.asList(newTags))))
+                {
+                    hook.sendMessage("That "+this._singular()+" already has those exact tags").setEphemeral(true).queue();
+                    return;
+                }
+                else
+                {
+                    hook.sendMessageFormat("Setting "+this._singular()+" tags to `%s` (was `%s`)",
+                            Arrays.stream(newTags).filter(Objects::nonNull).collect(Collectors.joining("`, `")),
+                            watchedEntity.tags.strings().stream().filter(Objects::nonNull).collect(Collectors.joining("`, `")))
+                        .setEphemeral(true)
+                        .queue();
+                    watchedEntity.tags.clear().addAll(newTags);
+                }
+            }
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("add-tag")
+//        @Desc("Adds a tag for a group")
+        protected void _addTag(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_entityTag_R") String entityTag)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            String entityTag0 = entityTag.trim();
+            if (watchedEntity.tags.isEmpty())
+            {
+                watchedEntity.tags.add(entityTag0);
+                hook.sendMessageFormat("Added tag `%s` (was empty)", entityTag0).setEphemeral(true).queue();
+            }
+            else if (watchedEntity.tags.add(entityTag0))
+            {
+                hook.sendMessageFormat("Added tag `%s` (was `%s`)",
+                        entityTag0,
+                        watchedEntity.tags.strings().stream().filter(Objects::nonNull).collect(Collectors.joining("`, `")))
+                    .setEphemeral(true)
+                    .queue();
+            }
+            else
+            {
+                hook.sendMessage("That "+this._singular()+" already has that tag").setEphemeral(true).queue();
+            }
+            this._watchedEntities().save();
+        }
+//        @SlashCmd("remove-tag")
+//        @Desc("Removes a tag from a group")
+        protected void _removeTag(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_entityTag_R") String entityTag)
+        {
+            ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+            if (watchedEntity == null)
+            {
+                hook.sendMessage("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatEntity(event, entityId);
+            if (watchedEntity.tags.isEmpty())
+            {
+                hook.sendMessage("That "+this._singular()+" already has no tags").setEphemeral(true).queue();
+                return;
+            }
+            if (watchedEntity.tags.remove(entityTag))
+            {
+                hook.sendMessageFormat("Removed "+this._singular()+" tag `%s`)", entityTag).setEphemeral(true).queue();
+            }
+            else
+            {
+                hook.sendMessage("That "+this._singular()+" doesn't have that tag").setEphemeral(true).queue();
+                return;
+            }
+            this._watchedEntities().save();
+        }
+    }
+
+    // watched-user
+
+    @SlashCmd("watched-user")
+    @Desc("Configures watched users")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public class WatchedUser_ extends WatchedEntity_<User>
+    {
+        @Override
+        protected String _singular()
+        { return "user"; }
+        @Override
+        protected String _plural()
+        { return "users"; }
+        @Override
+        protected ScarletWatchedEntities<User> _watchedEntities()
+        { return ScarletDiscordCommands.this.discord.scarlet.watchedUsers; }
+        @Override
+        protected User _getEntity(String id)
+        { return ScarletDiscordCommands.this.discord.scarlet.vrc.getUser(id); }
+        @Override
+        protected String _getEntityName(User entity)
+        { return entity.getDisplayName(); }
+        @SlashCmd("list")
+        @Desc("Lists all watched users")
+        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
+        { super._list(event, hook, entriesPerPage); }
+        @SlashCmd("export")
+        @Desc("Exports watched users as a JSON file")
+        public void export(SlashCommandInteractionEvent event, InteractionHook hook)
+        { super._export(event, hook); }
+        @SlashCmd("import")
+        @Desc("Imports watched users from an attached file")
+        public void import_(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("import-file") Message.Attachment importedFile)
+        { super._import_(event, hook, importedFile); }
+        public final SlashOption<String> _vrchatUser = SlashOption.ofString("vrchat-user", "The VRChat user id (usr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, VrcIds::resolveUserId, true, this::_vrchatEntity);
+        @SlashCmd("add")
+        @Desc("Adds a watched user")
+        public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId,
+            @SlashOpt("entity-type") ScarletWatchedEntities.WatchedEntity.Type entityType,
+            @SlashOpt("entity-tags") String entityTags,
+            @SlashOpt("entity-priority") int entityPriority,
+            @SlashOpt("entity-message") String message)
+        { super._add(event, hook, userId, entityType, entityTags, entityPriority, message); }
+        @SlashCmd("remove")
+        @Desc("Removes a watched user")
+        public void remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId)
+        { super._remove(event, hook, userId); }
+        @SlashCmd("view")
+        @Desc("Views a user's watch information")
+        public void view(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId)
+        { super._view(event, hook, userId); }
+        @SlashCmd("set-critical")
+        @Desc("Sets a user's critical status")
+        public void setCritical(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-critical") boolean critical)
+        { super._setCritical(event, hook, userId, critical); }
+        @SlashCmd("set-silent")
+        @Desc("Sets a user's silent status")
+        public void setSilent(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-silent") boolean silent)
+        { super._setSilent(event, hook, userId, silent); }
+        @SlashCmd("set-type")
+        @Desc("Sets a user's watch type")
+        public void setType(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-type") ScarletWatchedEntities.WatchedEntity.Type entityType)
+        { super._setType(event, hook, userId, entityType); }
+        @SlashCmd("set-priority")
+        @Desc("Sets a user's priority")
+        public void setPriority(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-priority") int entityPriority)
+        { super._setPriority(event, hook, userId, entityPriority); }
+        @SlashCmd("set-message")
+        @Desc("Sets a user's TTS announcement message")
+        public void setMessage(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-message") String message)
+        { super._setMessage(event, hook, userId, message); }
+        @SlashCmd("set-tags")
+        @Desc("Sets a user's tags")
+        public void setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-tags") String entityTags)
+        { super._setTags(event, hook, userId, entityTags); }
+        @SlashCmd("add-tag")
+        @Desc("Adds a tag for a user")
+        public void addTag(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-tag") String entityTag)
+        { super._addTag(event, hook, userId, entityTag); }
+        @SlashCmd("remove-tag")
+        @Desc("Removes a tag from a user")
+        public void removeTag(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-tag") String entityTag)
+        { super._removeTag(event, hook, userId, entityTag); }
+    }
+
+    // watched-avatar
+
+    @SlashCmd("watched-avatar")
+    @Desc("Configures watched avatars")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public class WatchedAvatar_ extends WatchedEntity_<Avatar>
+    {
+        @Override
+        protected String _singular()
+        { return "avatar"; }
+        @Override
+        protected String _plural()
+        { return "avatars"; }
+        @Override
+        protected ScarletWatchedEntities<Avatar> _watchedEntities()
+        { return ScarletDiscordCommands.this.discord.scarlet.watchedAvatars; }
+        @Override
+        protected Avatar _getEntity(String id)
+        { return ScarletDiscordCommands.this.discord.scarlet.vrc.getAvatar(id); }
+        @Override
+        protected String _getEntityName(Avatar entity)
+        { return entity.getName(); }
+        @SlashCmd("list")
+        @Desc("Lists all watched avatars")
+        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
+        { super._list(event, hook, entriesPerPage); }
+        @SlashCmd("export")
+        @Desc("Exports watched avatars as a JSON file")
+        public void export(SlashCommandInteractionEvent event, InteractionHook hook)
+        { super._export(event, hook); }
+        @SlashCmd("import")
+        @Desc("Imports watched avatars from an attached file")
+        public void import_(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("import-file") Message.Attachment importedFile)
+        { super._import_(event, hook, importedFile); }
+        public final SlashOption<String> _vrchatAvatar = SlashOption.ofString("vrchat-avatar", "The VRChat avatar id (avtr_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, VrcIds::resolveAvatarId, true, this::_vrchatEntity);
+        @SlashCmd("add")
+        @Desc("Adds a watched avatar")
+        public void add(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId,
+            @SlashOpt("entity-type") ScarletWatchedEntities.WatchedEntity.Type entityType,
+            @SlashOpt("entity-tags") String entityTags,
+            @SlashOpt("entity-priority") int entityPriority,
+            @SlashOpt("entity-message") String message)
+        { super._add(event, hook, avatarId, entityType, entityTags, entityPriority, message); }
+        @SlashCmd("remove")
+        @Desc("Removes a watched avatar")
+        public void remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId)
+        { super._remove(event, hook, avatarId); }
+        @SlashCmd("view")
+        @Desc("Views an avatar's watch information")
+        public void view(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId)
+        { super._view(event, hook, avatarId); }
+        @SlashCmd("set-critical")
+        @Desc("Sets an avatar's critical status")
+        public void setCritical(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-critical") boolean critical)
+        { super._setCritical(event, hook, avatarId, critical); }
+        @SlashCmd("set-silent")
+        @Desc("Sets an avatar's silent status")
+        public void setSilent(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-silent") boolean silent)
+        { super._setSilent(event, hook, avatarId, silent); }
+        @SlashCmd("set-type")
+        @Desc("Sets an avatar's watch type")
+        public void setType(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-type") ScarletWatchedEntities.WatchedEntity.Type entityType)
+        { super._setType(event, hook, avatarId, entityType); }
+        @SlashCmd("set-priority")
+        @Desc("Sets an avatar's priority")
+        public void setPriority(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-priority") int entityPriority)
+        { super._setPriority(event, hook, avatarId, entityPriority); }
+        @SlashCmd("set-message")
+        @Desc("Sets an avatar's TTS announcement message")
+        public void setMessage(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-message") String message)
+        { super._setMessage(event, hook, avatarId, message); }
+        @SlashCmd("set-tags")
+        @Desc("Sets an avatar's tags")
+        public void setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-tags") String entityTags)
+        { super._setTags(event, hook, avatarId, entityTags); }
+        @SlashCmd("add-tag")
+        @Desc("Adds a tag for an avatar")
+        public void addTag(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-tag") String entityTag)
+        { super._addTag(event, hook, avatarId, entityTag); }
+        @SlashCmd("remove-tag")
+        @Desc("Removes a tag from an avatar")
+        public void removeTag(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-tag") String entityTag)
+        { super._removeTag(event, hook, avatarId, entityTag); }
+    }
+    
     // staff-list
 
     @SlashCmd("staff-list")

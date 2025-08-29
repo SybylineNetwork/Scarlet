@@ -58,7 +58,7 @@ public class ScarletVRChatLogs implements Closeable
         
         void log_playerSpawnPedestal(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String contentType, String contentId);
         void log_playerSpawnSticker(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String stickerId);
-
+        
         void log_apiRequest(boolean preamble, LocalDateTime timestamp, int index, String method, String url);
         
     }

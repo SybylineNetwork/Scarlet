@@ -54,6 +54,7 @@ import io.github.vrchatapi.model.GroupRole;
 import io.github.vrchatapi.model.InstanceContentSettings;
 import io.github.vrchatapi.model.InstanceRegion;
 import io.github.vrchatapi.model.InstanceType;
+import io.github.vrchatapi.model.InventoryItem;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.Print;
 import io.github.vrchatapi.model.User;
@@ -1291,9 +1292,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
             
             return message;
         });
-        if ("group.instance.kick".equals(entryMeta.entry.getEventType()))
+        switch (entryMeta.entry.getEventType())
         {
+        case "group.instance.kick":
             this.tryEmitExtendedSuggestedModeration(scarlet, target);
+            // fallthrough
+        case "group.instance.warn":
+            this.tryEmitExtendedWatchedModeration(scarlet, target);
         }
     }
     ThreadChannel emitUserModeration_thread(Scarlet scarlet, ScarletData.AuditEntryMetadata entryMeta, String actorId, Message message)
@@ -1769,6 +1774,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
             Message message = channel
                 .sendMessageEmbeds(builder.build())
                 .addActionRow(Button.secondary("view-potential-avatar-matches", "View avatars"))
+                .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                        Button.success("vrchat-user-unban:"+userId, "Unban user"))
                 .complete();
             if (versionedFile != null)
                 return message;
@@ -1832,6 +1839,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
+            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
             .complete();
         });
     }
@@ -1864,6 +1873,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
+            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
             .complete();
         });
     }
@@ -1888,6 +1899,33 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
+            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .complete();
+        });
+    }
+
+    @Override
+    public void emitExtendedUserSpawnEmoji(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String emojiId, InventoryItem emoji)
+    {
+        this.condEmitEx(GroupAuditTypeEx.SPAWN_EMOJI, false, false, location, (channelSf, guild, channel) ->
+        {
+            String fileId = emoji.getMetadata().getFileId(),
+                   image = emoji.getImageUrl();
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                .setTitle(MarkdownSanitizer.escape(displayName)+" spawned an emoji", "https://vrchat.com/home/user/"+userId)
+                .addField("User ID", "`"+userId+"`", false)
+                .addField("Location", "`"+location+"`", false)
+                .addField("Emoji ID", "`"+emojiId+"`", false)
+                .addField("File ID", "`"+fileId+"`", false)
+                .addField("Report emoji", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_emoji(this.requestingEmail.get(), userId, "Emoji", emojiId)), false)
+                .setImage(image != null ? image : ("https://api.vrchat.cloud/api/1/file/"+fileId+"/1/file"))
+                .setColor(GroupAuditTypeEx.SPAWN_EMOJI.color)
+                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .build())
+            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
             .complete();
         });
     }
@@ -2281,6 +2319,33 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setDescription(String.format("%s has been kicked from group instances %s time%s in the last %s hours", MarkdownSanitizer.escape(target.getDisplayName()), kicks0, kicks0==1?"":"s", kickThreshold*24))
                 .addField("User ID", "`"+target.getId()+"`", false)
                 .setColor(GroupAuditTypeEx.SUGGESTED_MODERATION.color)
+                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .build())
+            .addActionRow(Button.danger("vrchat-user-ban:"+target.getId(), "Ban user"),
+                          Button.success("vrchat-user-unban:"+target.getId(), "Unban user"))
+            .complete();
+        });
+    }
+
+    @Override
+    public void tryEmitExtendedWatchedModeration(Scarlet scarlet, User target)
+    {
+        ScarletWatchedEntities.WatchedEntity watchedPlayer = this.scarlet.watchedUsers.getWatchedEntity(target.getId());
+        if (watchedPlayer == null) return;
+        this.condEmitEx(GroupAuditTypeEx.WATCHED_MODERATION, false, false, null, (channelSf, guild, channel) ->
+        {
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                .setTitle(MarkdownSanitizer.escape(target.getDisplayName()), "https://vrchat.com/home/user/"+target.getId())
+                .setDescription(watchedPlayer.message)
+                .addField("User ID", "`"+target.getId()+"`", false)
+                .addField("Type", "`"+watchedPlayer.type+"`", false)
+                .addField("Tags", watchedPlayer.tags.stream().map(this.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", ")), false)
+                .addField("Message", watchedPlayer.message, false)
+                .addField("Critical", "`"+watchedPlayer.critical+"`", true)
+                .addField("Priority", "`"+watchedPlayer.priority+"`", true)
+                .addField("Silent", "`"+watchedPlayer.silent+"`", true)
+                .setColor(GroupAuditTypeEx.WATCHED_MODERATION.color)
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())

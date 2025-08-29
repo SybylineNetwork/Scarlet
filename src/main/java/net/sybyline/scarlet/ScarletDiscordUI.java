@@ -45,6 +45,7 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.components.ActionRow;
+import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
 import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
@@ -81,9 +82,7 @@ public class ScarletDiscordUI
     public void editTags(ButtonInteractionEvent event, InteractionHook hook)
     {
         String[] parts = event.getButton().getId().split(":");
-        
-        // TODO : set default selected
-        
+                
         List<ScarletModerationTags.Tag> tags = this.discord.scarlet.moderationTags.getTags();
         
         if (tags == null || tags.isEmpty())
@@ -94,33 +93,44 @@ public class ScarletDiscordUI
         
         String auditEntryId = parts[1];
         
-        StringSelectMenu.Builder builder = StringSelectMenu
-            .create("select-tags:"+auditEntryId)
-            .setMinValues(0)
-            .setMaxValues(tags.size())
-            .setPlaceholder("Select tags")
-            ;
-        
-        for (ScarletModerationTags.Tag tag : tags)
+        int total = tags.size();
+        StringSelectMenu.Builder[] builders = new StringSelectMenu.Builder[total / 25 + 1];
+        for (int i = 0; i < builders.length; i++)
         {
+            int startord = i * 25 + 1,
+                width = i < builders.length - 1 ? 25 : total % 25,
+                endord = startord + width - 1;
+            
+            builders[i] = StringSelectMenu
+                .create((i == 0 ? "select-tags:" : ("select-tags-"+i+":")) + auditEntryId)
+                .setMinValues(0)
+                .setMaxValues(width)
+                .setPlaceholder("Select tags ("+startord+"-"+endord+")")
+                ;
+        }
+        
+        for (int i = 0; i < total; i++)
+        {
+            ScarletModerationTags.Tag tag = tags.get(i);
             String value = tag.value,
                    label = tag.label != null ? tag.label : tag.value,
                    desc = tag.description;
             if (desc == null)
-                builder.addOption(label, MiscUtils.maybeEllipsis(100, value));
+                builders[i / 25].addOption(label, MiscUtils.maybeEllipsis(100, value));
             else
-                builder.addOption(label, MiscUtils.maybeEllipsis(100, value), MiscUtils.maybeEllipsis(50, desc));
+                builders[i / 25].addOption(label, MiscUtils.maybeEllipsis(100, value), MiscUtils.maybeEllipsis(50, desc));
         }
         
         ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata(auditEntryId);
         if (auditEntryMeta != null && auditEntryMeta.hasTags())
         {
-            builder.setDefaultValues(auditEntryMeta.entryTags.toArray());
+            for (int i = 0; i < builders.length; i++)
+            {
+                builders[i].setDefaultValues(auditEntryMeta.entryTags.toArray());
+            }
         }
         
-        ActionRow ar = ActionRow.of(builder.build());
-        
-        hook.sendMessageComponents(ar)
+        hook.sendMessageComponents(Arrays.asList(MiscUtils.map(builders, ActionRow[]::new, $ -> ActionRow.of($.build()))))
             .setEphemeral(true)
             .queue();
     }
@@ -129,11 +139,48 @@ public class ScarletDiscordUI
     @Ephemeral
     public void selectTags(StringSelectInteractionEvent event, InteractionHook hook)
     {
+        this.selectTags_(event, hook);
+    }
+    @StringSel("select-tags-1")
+    @Ephemeral
+    public void selectTags1(StringSelectInteractionEvent event, InteractionHook hook)
+    {
+        this.selectTags_(event, hook);
+    }
+    @StringSel("select-tags-2")
+    @Ephemeral
+    public void selectTags2(StringSelectInteractionEvent event, InteractionHook hook)
+    {
+        this.selectTags_(event, hook);
+    }
+    @StringSel("select-tags-3")
+    @Ephemeral
+    public void selectTags3(StringSelectInteractionEvent event, InteractionHook hook)
+    {
+        this.selectTags_(event, hook);
+    }
+    @StringSel("select-tags-4")
+    @Ephemeral
+    public void selectTags4(StringSelectInteractionEvent event, InteractionHook hook)
+    {
+        this.selectTags_(event, hook);
+    }
+    private void selectTags_(StringSelectInteractionEvent event, InteractionHook hook)
+    {
         String[] parts = event.getSelectMenu().getId().split(":");
-        String joined = event.getValues().stream().map(this.discord.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", ", "### Setting tags:\n", ""));
-        MessageEmbed[] embeds = event.getValues().stream().map(this.discord.scarlet.moderationTags::getTag).filter(Objects::nonNull).map(tag -> new EmbedBuilder().setAuthor(MiscUtils.maybeEllipsis(256, tag.label)).setDescription(MiscUtils.maybeEllipsis(4096, tag.description)).build()).toArray(MessageEmbed[]::new);
+        
+        String auditEntryId = parts[1];
+        
+        ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata_editTags(auditEntryId,
+                event.getSelectMenu().getOptions().stream().map(SelectOption::getValue).filter($ -> !event.getValues().contains($)).toArray(String[]::new),
+                event.getValues().toArray(new String[0]));
+        
+        String joined = auditEntryMeta.entryTags.stream().map(this.discord.scarlet.moderationTags::getTagLabel).collect(Collectors.joining(", ", "### Setting tags:\n", ""));
+        
+        MessageEmbed[] embeds = auditEntryMeta.entryTags.stream().map(this.discord.scarlet.moderationTags::getTag).filter(Objects::nonNull).map(tag -> new EmbedBuilder().setAuthor(MiscUtils.maybeEllipsis(256, tag.label)).setDescription(MiscUtils.maybeEllipsis(4096, tag.description)).build()).toArray(MessageEmbed[]::new);
+        
         this.discord.interactions.new Pagination(event.getId(), embeds, 10).withAdditional((action, page) -> action.setContent(joined)).queue(hook);
-        ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata_setTags(parts[1], event.getValues().toArray(new String[0]));
+        
         this.updateAuxMessage(event.getChannel(), auditEntryMeta);
     }
 

@@ -7,6 +7,16 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12-rc7
+  - Added User Spawn Emoji and Watched Moderation extended events
+  - Added Ban User and Unban User buttons to several event embeds (User Switch Avatar, User Spawn Pedestal/Sticker/Print/Emoji)
+  - Added Watched Users and Watched Avatars
+  - Added user current avatar name to Instance UI
+  - Changed maxium number of custom moderation tags to 125 (was 25)
+  - Fixed watched entity imports via Discord command using the incorrect option name
+  - Fixed mislabeled Discord command descriptions
+  - Fixed silenced watched groups overriding TTS messages for lower priority groups
+
 ## 0.4.12-rc6
   - Added links to the Sybyline Network VRChat Group
   - Added Group Invites created to Moderation Summary

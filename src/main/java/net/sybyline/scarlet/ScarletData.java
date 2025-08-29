@@ -602,6 +602,16 @@ public class ScarletData
         this.auditEntryMetadata(auditEntryId, auditEntryMeta);
         return auditEntryMeta;
     }
+    public ScarletData.AuditEntryMetadata auditEntryMetadata_editTags(String auditEntryId, String[] entryTagsRemove, String[] entryTagsAdd)
+    {
+        ScarletData.AuditEntryMetadata auditEntryMeta = this.auditEntryMetadata(auditEntryId);
+        if (auditEntryMeta == null)
+            auditEntryMeta = new ScarletData.AuditEntryMetadata();
+        auditEntryMeta.entryTags.removeAll(entryTagsRemove);
+        auditEntryMeta.entryTags.addAll(entryTagsAdd);
+        this.auditEntryMetadata(auditEntryId, auditEntryMeta);
+        return auditEntryMeta;
+    }
     public ScarletData.AuditEntryMetadata auditEntryMetadata_setDescription(String auditEntryId, String entryDescription)
     {
         ScarletData.AuditEntryMetadata auditEntryMeta = this.auditEntryMetadata(auditEntryId);

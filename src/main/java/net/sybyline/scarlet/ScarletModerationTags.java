@@ -112,7 +112,7 @@ public class ScarletModerationTags
             this.saveJson();
             return 1;
         }
-        if (tags.size() >= 25)
+        if (tags.size() >= 125)
             return -2;
         Tag tag = new Tag(value, label, description);
         if (!tags.add(tag))

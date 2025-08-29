@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.InventoryItem;
 import io.github.vrchatapi.model.Print;
 import io.github.vrchatapi.model.User;
 
@@ -419,10 +420,11 @@ public interface ScarletDiscord extends Closeable
     public void emitExtendedUserSpawnPedestal(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String contentType, String contentId);
     public void emitExtendedUserSpawnSticker(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String stickerId);
     public void emitExtendedUserSpawnPrint(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String printId, Print print);
-//    public void emitExtendedUserSpawnEmoji(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String emojiId);
+    public void emitExtendedUserSpawnEmoji(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String emojiId, InventoryItem emoji);
     public void tryEmitExtendedAvatarBundles(Scarlet scarlet, LocalDateTime timestamp, String location, String name, VersionedFile file);
     public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
     public void tryEmitExtendedSuggestedModeration(Scarlet scarlet, User target);
+    public void tryEmitExtendedWatchedModeration(Scarlet scarlet, User target);
     public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay);
     public void emitOutstandingMod(Scarlet scarlet, OffsetDateTime endOfDay);
     public void emitActionFailure(Scarlet scarlet, Action action, String format, Object... args);

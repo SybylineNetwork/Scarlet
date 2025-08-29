@@ -51,6 +51,11 @@ import net.sybyline.scarlet.Scarlet;
 public interface MiscUtils
 {
 
+    static boolean blank(String string)
+    {
+        return string == null || string.isEmpty();
+    }
+
     static String maybeEllipsis(int maxLength, String string)
     {
         return string == null || string.length() <= maxLength ? string : (string.substring(0, maxLength - 1) + '\u2026');

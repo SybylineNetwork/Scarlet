@@ -141,25 +141,31 @@ For slash command arguments, it is the full command name of its parent, as above
 }
 ```
 
-## file `watched_groups.json`
+## file `watched_XXX.json`
 
-Array of watched groups
+Array of watched entities (groups, users, avatars)
 ```json
 [
     {
-        // The VRChat groupId
+        // The VRChat id
         "id": "grp_00000000-0000-0000-0000-000000000000",
         
-        // The category of group activity, one of: "UNKNOWN", "MALICIOUS", "NUISANCE", "COMMUNITY", "AFFILIATED", or "OTHER"
+        // The category of activity, one of: "UNKNOWN", "MALICIOUS", "NUISANCE", "COMMUNITY", "AFFILIATED", or "OTHER"
         "type": "NUISANCE",
         
-        // Array of custom moderation tags associated with group activity
+        // Array of custom moderation tags associated with activity
         "tags": [
             "trolling"
         ],
         
+        // Order in whichentities are considered, lowest first
+        "priority": -100,
+        
         // Whether action must be taken rapidly
         "critical": true,
+        
+        // Whether TTS message is skipped
+        "silent": false,
         
         // Message announced in the voice channel via TTS
         "message": "Anti-tupper group. Retaliate with documentation of custom tags."
@@ -285,8 +291,14 @@ General settings for Scarlet:
     // Whether to output TTS to the default system audio device
     "tts_use_default_audio_device": false,
     
+    // Whether to announce watched users with TTS
+    "tts_announce_watched_users": true,
+    
     // Whether to announce watched groups with TTS
     "tts_announce_watched_groups": true,
+    
+    // Whether to announce watched avatars with TTS
+    "tts_announce_watched_avatars": true,
     
     // Whether to announce new players with TTS
     "tts_announce_new_players": true,

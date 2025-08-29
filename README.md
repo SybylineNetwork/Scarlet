@@ -39,15 +39,23 @@ Since there is no automatic synchronization of data between groups running Scarl
   Removes a custom moderation tag (max of 25).  
   Example: `/delete-moderation-tag "trolling"`
 
+- **`watched-user`**  
+  Configures watched users.  
+  Example: `/watched-user add-tag "usr_00000000-0000-0000-0000-000000000000" "inappropriate_behaviour"`
+
 - **`watched-group`**  
   Configures watched groups.  
   Example: `/watched-group add-tag "grp_00000000-0000-0000-0000-000000000000" "trolling"`
+
+- **`watched-avatar`**  
+  Configures watched avatars.  
+  Example: `/watched-avatar add-tag "avtr_00000000-0000-0000-0000-000000000000" "missing_content_tags"`
 
 - **`vrchat-user-ban <vrchat-user:string>`**  
   Ban a specific VRChat user.  
   Example: `/vrchat-user-ban "usr_00000000-0000-0000-0000-000000000000"`
 
-- **`vrchat-user-ban-milti`**  
+- **`vrchat-user-ban-multi`**  
   Ban several VRChat users.  
   Example: `/vrchat-user-ban-multi`
 
@@ -55,7 +63,7 @@ Since there is no automatic synchronization of data between groups running Scarl
   Unban a specific VRChat user.  
   Example: `/vrchat-user-unban "usr_00000000-0000-0000-0000-000000000000"`
 
-- **`vrchat-user-unban-milti`**  
+- **`vrchat-user-unban-multi`**  
   Unban several VRChat users.  
   Example: `/vrchat-user-unban-multi`
 
