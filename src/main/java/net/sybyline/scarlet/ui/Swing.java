@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatSystemProperties;
 
 import net.sybyline.scarlet.util.Box;
@@ -33,6 +34,7 @@ public class Swing
     {
         try
         {
+            FlatLaf.setPreferredFontFamily("Arial Unicode MS");
             UIManager.setLookAndFeel(new FlatDarkLaf());
         }
         catch (Exception ex)

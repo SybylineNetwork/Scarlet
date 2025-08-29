@@ -193,6 +193,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void log_playerJoined(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId)
     {
+        String avatarDisplayName = this.clientLocation_userDisplayName2avatarDisplayName.get(userDisplayName);
         OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
         this.clientLocation_userIdsJoinOrder.add(userId);
         this.clientLocation_userId2userJoined.put(userId, odt);
@@ -201,6 +202,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userDisplayName2userId.put(userDisplayName, userId);
         List<String> advisories = new ArrayList<>();
         int[] priority = new int[]{Integer.MIN_VALUE+1};
+        
         if (preamble)
         {
             this.clientLocation_pendingUpdates.add(() ->
@@ -208,6 +210,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 Color text_color = this.checkPlayer(advisories, priority, true, userDisplayName, userId);
                 String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
                 this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
+                this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
             });
         }
         else
@@ -215,6 +218,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             Color text_color = this.checkPlayer(advisories, priority, preamble, userDisplayName, userId);
             String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
             this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
+            this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
         }
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
@@ -228,10 +232,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 this.scarlet.discord.emitExtendedStaffJoin(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName);
                 this.scarlet.data.customEvent_new(GroupAuditTypeEx.STAFF_JOIN, odt, userId, userDisplayName, this.clientLocation, null);
             }
-            String avatarDisplayName = this.clientLocation_userDisplayName2avatarDisplayName.get(userDisplayName);
             if (avatarDisplayName != null)
             {
-                this.switchPlayerAvatar(odt, timestamp, userDisplayName, userId, avatarDisplayName);
+                this.switchPlayerAvatar(preamble, odt, timestamp, userDisplayName, userId, avatarDisplayName);
             }
         }
         
@@ -261,17 +264,26 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     @Override
     public void log_playerSwitchAvatar(boolean preamble, LocalDateTime timestamp, String userDisplayName, String avatarDisplayName)
     {
-        this.clientLocation_userDisplayName2avatarDisplayName.put(userDisplayName, avatarDisplayName);
-        if (!preamble && this.isInGroupInstance)
+        String userId = this.clientLocation_userDisplayName2userId.get(userDisplayName);
+        if (userId != null)
         {
-            String userId = this.clientLocation_userDisplayName2userId.get(userDisplayName);
+            if (preamble)
             {
-                if (userId != null)
+                this.clientLocation_pendingUpdates.add(() ->
                 {
-                    OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
-                    this.switchPlayerAvatar(odt, timestamp, userDisplayName, userId, avatarDisplayName);
-                }
+                    this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
+                });
             }
+            else
+            {
+                this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
+            }
+        }
+        this.clientLocation_userDisplayName2avatarDisplayName.put(userDisplayName, avatarDisplayName);
+        if (!preamble && this.isInGroupInstance && userId != null)
+        {
+            OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+            this.switchPlayerAvatar(preamble, odt, timestamp, userDisplayName, userId, avatarDisplayName);
         }
     }
 
@@ -287,8 +299,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         .toArray(String[]::new)
         ;
     }
-    void switchPlayerAvatar(OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
+    void switchPlayerAvatar(boolean preamble, OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
     {
+        this.scarlet.ui.playerUpdate(isInGroupInstance, userId, null);
         String[] potentialIds = this.searchAvatar(avatarDisplayName);
         
         if (this.attemptAvatarImageMatch.get())

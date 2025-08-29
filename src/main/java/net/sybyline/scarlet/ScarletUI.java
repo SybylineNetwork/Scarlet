@@ -82,6 +82,7 @@ import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.ui.Swing;
+import net.sybyline.scarlet.util.Func;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.PropsTable;
@@ -219,6 +220,23 @@ public class ScarletUI implements AutoCloseable
                 this.propstable.addEntry(player);
             }
         }
+        if (initialPreamble)
+        {
+            ; // noop
+        }
+        else
+        {
+            this.fireSort();
+        }
+    }
+
+    public synchronized void playerUpdate(boolean initialPreamble, String id, Func.V1.NE<ConnectedPlayer> update)
+    {
+        ConnectedPlayer player = this.connectedPlayers.get(id);
+        if (player == null)
+            return;
+        update.invoke(player);
+        this.propstable.updateEntry(player);
         if (initialPreamble)
         {
             ; // noop
