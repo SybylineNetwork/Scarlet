@@ -94,19 +94,10 @@ public class ScarletDiscordUI
         String auditEntryId = parts[1];
         
         int total = tags.size();
-        StringSelectMenu.Builder[] builders = new StringSelectMenu.Builder[total / 25 + 1];
+        StringSelectMenu.Builder[] builders = new StringSelectMenu.Builder[(total - 1) / 25 + 1];
         for (int i = 0; i < builders.length; i++)
         {
-            int startord = i * 25 + 1,
-                width = i < builders.length - 1 ? 25 : total % 25,
-                endord = startord + width - 1;
-            
-            builders[i] = StringSelectMenu
-                .create((i == 0 ? "select-tags:" : ("select-tags-"+i+":")) + auditEntryId)
-                .setMinValues(0)
-                .setMaxValues(width)
-                .setPlaceholder("Select tags ("+startord+"-"+endord+")")
-                ;
+            builders[i] = StringSelectMenu.create((i == 0 ? "select-tags:" : ("select-tags-"+i+":")) + auditEntryId);
         }
         
         for (int i = 0; i < total; i++)
@@ -119,6 +110,14 @@ public class ScarletDiscordUI
                 builders[i / 25].addOption(label, MiscUtils.maybeEllipsis(100, value));
             else
                 builders[i / 25].addOption(label, MiscUtils.maybeEllipsis(100, value), MiscUtils.maybeEllipsis(50, desc));
+        }
+        for (int i = 0; i < builders.length; i++)
+        {
+            builders[i]
+                .setMinValues(0)
+                .setMaxValues(builders[i].getOptions().size())
+                .setPlaceholder("Select tags ("+(i*25+1)+"-"+(i*25+builders[i].getOptions().size())+")")
+                ;
         }
         
         ScarletData.AuditEntryMetadata auditEntryMeta = this.discord.scarlet.data.auditEntryMetadata(auditEntryId);
@@ -401,7 +400,7 @@ public class ScarletDiscordUI
         
         this.discord.queuedActions.addAll(banActions);
         
-        event.replyFormat("Queuing %s user ban(s)").setEphemeral(true).queue();
+        event.replyFormat("Queuing %s user ban(s)", banActions.size()).setEphemeral(true).queue();
     }
 
     @ButtonClk("vrchat-user-unban")
@@ -492,7 +491,7 @@ public class ScarletDiscordUI
         
         this.discord.queuedActions.addAll(unbanActions);
         
-        event.replyFormat("Queuing %s user unban(s)").setEphemeral(true).queue();
+        event.replyFormat("Queuing %s user unban(s)", unbanActions.size()).setEphemeral(true).queue();
     }
 
     @ButtonClk("event-redact")

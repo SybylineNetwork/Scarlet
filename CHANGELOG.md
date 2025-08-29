@@ -7,6 +7,10 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12-rc8
+  - Fixed error in output for banning or unbanning multiple users with the appropriate Discord command
+  - Fixed error when custom moderation tags is exactly a multiple of 25
+
 ## 0.4.12-rc7
   - Added User Spawn Emoji and Watched Moderation extended events
   - Added Ban User and Unban User buttons to several event embeds (User Switch Avatar, User Spawn Pedestal/Sticker/Print/Emoji)
