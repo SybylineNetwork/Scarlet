@@ -10,3 +10,7 @@ You should be using the `/query-target-history` command instead.
 
 If you want to stop logging a certain event to a channel, simply *omit* the channel parameter of the appropriate command, like this: `/set-audit-channel audit-event-type:'Instance Close'`
 
+### Why is logging delayed by several minutes?
+
+The system clock of the computer running Scarlet might be behind by a few minutes; you may have to update the system clock.
+
