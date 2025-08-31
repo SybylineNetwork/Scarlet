@@ -45,6 +45,7 @@ import com.google.gson.JsonObject;
 
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.api.GroupsApi;
+import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.CreateInstanceRequest;
 import io.github.vrchatapi.model.GroupAccessType;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
@@ -56,7 +57,9 @@ import io.github.vrchatapi.model.InstanceRegion;
 import io.github.vrchatapi.model.InstanceType;
 import io.github.vrchatapi.model.InventoryItem;
 import io.github.vrchatapi.model.LimitedUserGroups;
+import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.Print;
+import io.github.vrchatapi.model.Prop;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
@@ -312,7 +315,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 datas,
                 (     data) -> this.jda.upsertCommand(data).queue($ ->                      LOG.info("Upserted "+ $.getType()+" command "+  $.getName())),
                 (cmd      ) -> this.jda.deleteCommandById(cmd.getId()).queue($ ->           LOG.info("Deleted "+cmd.getType()+" command "+cmd.getName())), 
-                (cmd, data) -> this.jda.editCommandById(cmd.getId()).apply(data).queue($ -> LOG.info("Edited "+   $.getType()+" command "+  $.getName())),
+                (cmd, data) -> this.jda.editCommandById(cmd.getType(), cmd.getId()).apply(data).queue($ -> LOG.info("Edited "+   $.getType()+" command "+  $.getName())),
                 (cmd, data) -> {}
             );
             LOG.info("Queued commands update "+datas);
@@ -1750,10 +1753,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
 
     @Override
-    public void emitExtendedUserAvatar(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String avatarDisplayName, String[] potentialIds)
+    public void emitExtendedUserAvatar(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String avatarDisplayName, String[] potentialIds0)
     {
         this.condEmitEx(GroupAuditTypeEx.USER_AVATAR, false, false, location, (channelSf, guild, channel) ->
         {
+            String[] potentialIds = potentialIds0;
             EmbedBuilder builder = new EmbedBuilder()
                     .setTitle(MarkdownSanitizer.escape(displayName)+" switched avatars", "https://vrchat.com/home/user/"+userId)
                     .addField("User ID", "`"+userId+"`", false)
@@ -1770,7 +1774,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 builder.setThumbnail(aviThumbnail);
             VersionedFile versionedFile = this.avatarName2Bundle.get(avatarDisplayName);
             if (versionedFile != null)
+            {
                 builder.addField("Bundle ID", "`"+versionedFile.id+"`", false);
+                ModelFile modelFile = this.scarlet.vrc.getModelFile(versionedFile.id, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                if (modelFile != null)
+                {
+                    potentialIds = this.filterAvatarIdsByBundleOwner(modelFile, potentialIds);
+                    builder.setDescription(Arrays.stream(potentialIds).limit(32).collect(Collectors.joining("`\n`", "Potential ids:\n`", "`")));
+                }
+            }
             Message message = channel
                 .sendMessageEmbeds(builder.build())
                 .addActionRow(Button.secondary("view-potential-avatar-matches", "View avatars"))
@@ -1782,7 +1794,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             List<AviSwitch> list = this.avatarName2Switches.get(avatarDisplayName);
             if (list == null)
                 this.avatarName2Switches.put(avatarDisplayName, list = new ArrayList<>());
-            list.add(new AviSwitch(message, builder));
+            list.add(new AviSwitch(message, builder, potentialIds0));
             return message;
         });
     }
@@ -1930,22 +1942,56 @@ public class ScarletDiscordJDA implements ScarletDiscord
         });
     }
 
+    @Override
+    public void emitExtendedUserSpawnProp(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String propId, Prop prop)
+    {
+        this.condEmitEx(GroupAuditTypeEx.SPAWN_PROP, false, false, location, (channelSf, guild, channel) ->
+        {
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                .setTitle(MarkdownSanitizer.escape(displayName)+" spawned a prop", "https://vrchat.com/home/user/"+userId)
+                .addField("User ID", "`"+userId+"`", false)
+                .addField("Location", "`"+location+"`", false)
+                .addField("Prop Author", MarkdownUtil.maskedLink(MarkdownSanitizer.escape(prop.getAuthorName()), "https://vrchat.com/home/user/"+prop.getAuthorId()), false)
+                .addField("Prop ID", "`"+propId+"`", false)
+                .addField("Report prop", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account_other(this.requestingEmail.get(), prop.getAuthorId(), "Prop", propId)), false)
+                .setImage(MiscUtils.nonBlankOrNull(prop.getThumbnailImageUrl(), prop.getImageUrl()))
+                .setColor(GroupAuditTypeEx.SPAWN_PROP.color)
+                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .build())
+            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .complete();
+        });
+    }
+
+    String[] filterAvatarIdsByBundleOwner(ModelFile modelFile, String[] potentialIds)
+    {
+        return Arrays.stream(potentialIds).filter(id ->
+        {
+            Avatar avatar = this.scarlet.vrc.getAvatar(id, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+            return avatar == null || Objects.equals(modelFile.getOwnerId(), avatar.getAuthorId());
+        }).toArray(String[]::new);
+    }
     private final LRUMap<String, VersionedFile> avatarName2Bundle = LRUMap.of();
     private final LRUMap<String, List<AviSwitch>> avatarName2Switches = LRUMap.of();
     class AviSwitch
     {
-        AviSwitch(Message message, EmbedBuilder builder)
+        AviSwitch(Message message, EmbedBuilder builder, String[] potentialIds)
         {
             this.message = message;
             this.builder = builder;
+            this.potentialIds = potentialIds;
         }
         final Message message;
         final EmbedBuilder builder;
-        void update(VersionedFile versionedFile)
+        String[] potentialIds;
+        void update(ModelFile modelFile, VersionedFile versionedFile)
         {
+            this.potentialIds = ScarletDiscordJDA.this.filterAvatarIdsByBundleOwner(modelFile, this.potentialIds);
             try
             {
-                this.message.editMessageEmbeds(this.builder.addField("Bundle ID", "`"+versionedFile.id+"`", false).build()).completeAfter(1_000L, TimeUnit.MILLISECONDS);
+                this.message.editMessageEmbeds(this.builder.setDescription(Arrays.stream(this.potentialIds).limit(32).collect(Collectors.joining("`\n`", "Potential ids:\n`", "`"))).addField("Bundle ID", "`"+versionedFile.id+"`", false).build()).completeAfter(1_000L, TimeUnit.MILLISECONDS);
             }
             catch (RuntimeException rex)
             {
@@ -1954,34 +2000,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
 
     @Override
-    public void tryEmitExtendedAvatarBundles(Scarlet scarlet, LocalDateTime timestamp, String location, String name, VersionedFile file)
+    public void tryEmitExtendedAvatarBundles(Scarlet scarlet, LocalDateTime timestamp, String location, String name, ModelFile modelFile, VersionedFile file)
     {
         this.avatarName2Bundle.put(name, file);
         List<AviSwitch> aviSwitchs = this.avatarName2Switches.remove(name);
         if (aviSwitchs != null)
         {
-            this.scarlet.exec.execute(() -> aviSwitchs.forEach($ -> $.update(file)));
+            this.scarlet.exec.execute(() -> aviSwitchs.forEach($ -> $.update(modelFile, file)));
         }
     }
-
-//    @Override
-//    public void emitExtendedUserSpawnEmoji(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String emojiId)
-//    {
-//        this.condEmitEx(GroupAuditTypeEx.SPAWN_EMOJI, false, false, location, (channelSf, guild, channel) ->
-//        {
-//            return channel.sendMessageEmbeds(new EmbedBuilder()
-//                .setTitle(MarkdownSanitizer.escape(displayName)+" spawned an emoji", "https://vrchat.com/home/user/"+userId)
-//                .addField("User ID", "`"+userId+"`", false)
-//                .addField("Location", "`"+location+"`", false)
-//                .addField("Emoji ID", "`"+emojiId+"`", false)
-//                .setImage(!emojiId.startsWith("file_") ? null : ("https://api.vrchat.cloud/api/1/file/"+emojiId+"/1/file"))
-//                .setColor(GroupAuditTypeEx.SPAWN_EMOJI.color)
-//                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
-//                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
-//                .build())
-//            .complete();
-//        });
-//    }
 
     @Override
     public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, InstanceEmbedMessage instanceEmbedMessage)

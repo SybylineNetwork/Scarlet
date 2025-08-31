@@ -21,6 +21,10 @@ import net.sybyline.scarlet.util.MiscUtils;
 public class ScarletJsonCache<T>
 {
 
+    public static final long
+        ALWAYS_FETCH = Long.MAX_VALUE,
+        ALWAYS_PREFER_CACHED = Long.MIN_VALUE;
+
     public @FunctionalInterface interface Populator<T>
     {
         T populate(String id) throws Exception;

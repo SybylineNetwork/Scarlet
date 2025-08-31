@@ -13,6 +13,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +56,7 @@ import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.Webhook;
 import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
+import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -439,9 +441,48 @@ public class ScarletDiscordCommands
                 action.addChoices(groupChoice);
             }
             String typing = event.getFocusedOption().getValue();
+            long choicesLeft = 25L;
             if (typing != null && !(typing = typing.trim()).isEmpty())
             {
-                action.addChoiceStrings(typing);
+                if (VrcIds.id_group.matcher(typing).matches() || VrcIds.id_group_code.matcher(typing).matches())
+                {
+                    String groupId = VrcIds.resolveGroupId(typing);
+                    Group group = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup(groupId, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                    if (group != null)
+                    {
+                        action.addChoice(group.getName(), typing);
+                        choicesLeft--;
+                    }
+                }
+                else
+                {
+                    action.addChoices(ScarletDiscordCommands.this.discord.scarlet.watchedGroups
+                        .watchedGroups
+                        .keySet()
+                        .stream()
+                        .map(id -> {
+                            Group group0 = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup(id, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                            return new Command.Choice(group0 != null ? group0.getName() : id, id);
+                        })
+                        .sorted(DInteractions.choicesByLevenshtein(typing))
+                        .limit(choicesLeft)
+                        .collect(Collectors.toList())
+                    );
+                }
+            }
+            else
+            {
+                action.addChoices(ScarletDiscordCommands.this.discord.scarlet.watchedGroups
+                    .watchedGroups
+                    .keySet()
+                    .stream()
+                    .map(id -> {
+                        Group group0 = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup(id, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                        return new Command.Choice(group0 != null ? group0.getName() : id, id);
+                    })
+                    .limit(choicesLeft)
+                    .collect(Collectors.toList())
+                );
             }
             action.queue();
         }
@@ -664,6 +705,25 @@ public class ScarletDiscordCommands
             watchedGroup.message = message;
             ScarletDiscordCommands.this.discord.scarlet.watchedGroups.save();
         }
+        @SlashCmd("set-notes")
+        @Desc("Sets a group's notes")
+        public void setNotes(SlashCommandInteractionEvent event, @SlashOpt("vrchat-group") String groupId)
+        {
+            ScarletWatchedGroups.WatchedGroup watchedGroup = ScarletDiscordCommands.this.discord.scarlet.watchedGroups.getWatchedGroup(groupId);
+            if (watchedGroup == null)
+            {
+                event.reply("That group is not watched").setEphemeral(true).queue();
+                return;
+            }
+            this.vrchatGroup(event, groupId);
+            event.replyModal(Modal.create("watched-group-set-notes:"+groupId, "Edit notes")
+                .addActionRow(TextInput.create("notes", "Notes", TextInputStyle.PARAGRAPH)
+                    .setValue(MiscUtils.blank(watchedGroup.notes) ? null : watchedGroup.notes)
+                    .setRequiredRange(0, 1024)
+                    .build())
+                .build())
+            .queue();
+        }
         @SlashCmd("set-tags")
         @Desc("Sets a group's tags")
         public void setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-group") String groupId, @SlashOpt("_groupTags_R") String groupTags)
@@ -771,13 +831,18 @@ public class ScarletDiscordCommands
         }
     }
 
+    final Map<String, WatchedEntity_<?>> watchedEntityCommands = new HashMap<>();
     protected abstract class WatchedEntity_<E>
     {
+        {
+            ScarletDiscordCommands.this.watchedEntityCommands.put(this._singular(), this);
+        }
         protected abstract String _singular();
         protected abstract String _plural();
         protected abstract ScarletWatchedEntities<E> _watchedEntities();
-        protected abstract E _getEntity(String id);
+        protected abstract E _getEntity(String id, long minEpoch);
         protected abstract String _getEntityName(E entity);
+        protected abstract boolean _isValidEntityId(String id);
         final Map<String, Command.Choice> userSf2lastEdited_entityId = new ConcurrentHashMap<>();
 //        @SlashCmd("list")
 //        @Desc("Lists all watched groups")
@@ -787,7 +852,7 @@ public class ScarletDiscordCommands
                 .watchedEntities
                 .values()
                 .stream()
-                .map($ -> $.embed(this._watchedEntities(), this._getEntity($.id)).build())
+                .map($ -> $.embed(this._watchedEntities(), this._getEntity($.id, ScarletJsonCache.ALWAYS_PREFER_CACHED)).build())
                 .toArray(MessageEmbed[]::new)
             ;
             
@@ -860,14 +925,61 @@ public class ScarletDiscordCommands
         void _vrchatEntity(CommandAutoCompleteInteractionEvent event) {
             AutoCompleteCallbackAction action = event.replyChoices();
             Command.Choice entityChoice = this.userSf2lastEdited_entityId.get(event.getUser().getId());
+            long choicesLeft = 25L;
             if (entityChoice != null)
             {
                 action.addChoices(entityChoice);
+                choicesLeft--;
             }
             String typing = event.getFocusedOption().getValue();
             if (typing != null && !(typing = typing.trim()).isEmpty())
             {
-                action.addChoiceStrings(typing);
+                if (this._isValidEntityId(typing))
+                {
+                    if (this._watchedEntities().getWatchedEntity(typing) != null)
+                    {
+                        E entity = this._getEntity(typing, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                        String name;
+                        if (entity != null && (name = this._getEntityName(entity)) != null)
+                        {
+                            action.addChoice(name, typing);
+                        }
+                        else
+                        {
+                            action.addChoiceStrings(typing);
+                        }
+                        choicesLeft--;
+                    }
+                }
+                else
+                {
+                    action.addChoices(this._watchedEntities()
+                        .watchedEntities
+                        .keySet()
+                        .stream()
+                        .map(id -> {
+                            E entity0 = this._getEntity(id, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                            return new Command.Choice(entity0 != null ? this._getEntityName(entity0) : id, id);
+                        })
+                        .sorted(DInteractions.choicesByLevenshtein(typing))
+                        .limit(choicesLeft)
+                        .collect(Collectors.toList())
+                    );
+                }
+            }
+            else
+            {
+                action.addChoices(this._watchedEntities()
+                    .watchedEntities
+                    .keySet()
+                    .stream()
+                    .map(id -> {
+                        E entity0 = this._getEntity(id, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                        return new Command.Choice(entity0 != null ? this._getEntityName(entity0) : id, id);
+                    })
+                    .limit(choicesLeft)
+                    .collect(Collectors.toList())
+                );
             }
             action.queue();
         }
@@ -875,7 +987,7 @@ public class ScarletDiscordCommands
         {
             if (entityId != null && !(entityId = entityId.trim()).isEmpty())
             {
-                E entity = this._getEntity(entityId);
+                E entity = this._getEntity(entityId, ScarletJsonCache.ALWAYS_PREFER_CACHED);
                 this.userSf2lastEdited_entityId.put(event.getUser().getId(), new Command.Choice(entity != null ? this._getEntityName(entity) : entityId, entityId));
                 return entity;
             }
@@ -897,7 +1009,7 @@ public class ScarletDiscordCommands
                 return;
             }
             this.vrchatEntity(event, entityId);
-            E entity = this._getEntity(entityId);
+            E entity = this._getEntity(entityId, ScarletJsonCache.ALWAYS_FETCH);
             if (entity == null)
             {
                 hook.sendMessage("That "+this._singular()+" doesn't seem to exist").setEphemeral(true).queue();
@@ -912,16 +1024,16 @@ public class ScarletDiscordCommands
                 watchedEntity.message = message;
             watchedEntity.priority = entityPriority;
             this._watchedEntities().addWatchedEntity(entityId, watchedEntity);
-            hook.sendMessageFormat("Added %s [%s](https://vrchat.com/home/group/%s)", this._singular(), this._getEntityName(entity), entityId).setEphemeral(true).queue();
+            hook.sendMessageFormat("Added %s [%s](https://vrchat.com/home/%s/%s)", this._singular(), this._getEntityName(entity), this._singular(), entityId).setEphemeral(true).queue();
         }
-//        @SlashCmd("delete")
+//        @SlashCmd("remove")
 //        @Desc("Removes a watched group")
         protected void _remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId)
         {
             if (this._watchedEntities().removeWatchedEntity(entityId))
             {
-                E entity = this._getEntity(entityId);
-                hook.sendMessageFormat("Removed %s [%s](https://vrchat.com/home/group/%s)", this._singular(), entity == null ? entityId : this._getEntityName(entity), entityId).setEphemeral(true).queue();
+                E entity = this._getEntity(entityId, ScarletJsonCache.ALWAYS_PREFER_CACHED);
+                hook.sendMessageFormat("Removed %s [%s](https://vrchat.com/home/%s/%s)", this._singular(), entity == null ? entityId : this._getEntityName(entity), this._singular(), entityId).setEphemeral(true).queue();
             }
             else
             {
@@ -939,7 +1051,7 @@ public class ScarletDiscordCommands
                 return;
             }
             this.vrchatEntity(event, entityId);
-            E entity = this._getEntity(entityId);
+            E entity = this._getEntity(entityId, ScarletJsonCache.ALWAYS_PREFER_CACHED);
             hook.sendMessageEmbeds(watchedEntity.embed(this._watchedEntities(), entity).build()).setEphemeral(true).queue();
         }
 //        @SlashCmd("set-critical")
@@ -1079,6 +1191,37 @@ public class ScarletDiscordCommands
             watchedEntity.message = message;
             this._watchedEntities().save();
         }
+//      @SlashCmd("set-notes")
+//      @Desc("Sets a group's notes")
+      protected void _setNotes(SlashCommandInteractionEvent event, @SlashOpt("vrchat-entity") String entityId)
+      {
+          ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+          if (watchedEntity == null)
+          {
+              event.reply("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+              return;
+          }
+          this.vrchatEntity(event, entityId);
+          event.replyModal(Modal.create("watched-entity-set-notes:"+this._singular()+":"+entityId, "Edit notes")
+              .addActionRow(TextInput.create("notes", "Notes", TextInputStyle.PARAGRAPH)
+                  .setValue(MiscUtils.blank(watchedEntity.notes) ? null : watchedEntity.notes)
+                  .setRequiredRange(0, 1024)
+                  .build())
+              .build())
+          .queue();
+      }
+      protected void _setNotes(ModalInteractionEvent event, @SlashOpt("vrchat-entity") String entityId)
+      {
+          ScarletWatchedEntities.WatchedEntity watchedEntity = this._watchedEntities().getWatchedEntity(entityId);
+          if (watchedEntity == null)
+          {
+              event.reply("That "+this._singular()+" is not watched").setEphemeral(true).queue();
+              return;
+          }
+          event.reply("Set notes for "+this._singular()).setEphemeral(true).queue();
+          watchedEntity.notes = event.getValue("notes").getAsString();
+          this._watchedEntities().save();
+      }
 //        @SlashCmd("set-tags")
 //        @Desc("Sets a group's tags")
         protected void _setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-entity") String entityId, @SlashOpt("_entityTags_R") String entityTags)
@@ -1203,11 +1346,14 @@ public class ScarletDiscordCommands
         protected ScarletWatchedEntities<User> _watchedEntities()
         { return ScarletDiscordCommands.this.discord.scarlet.watchedUsers; }
         @Override
-        protected User _getEntity(String id)
-        { return ScarletDiscordCommands.this.discord.scarlet.vrc.getUser(id); }
+        protected User _getEntity(String id, long minEpoch)
+        { return ScarletDiscordCommands.this.discord.scarlet.vrc.getUser(id, minEpoch); }
         @Override
         protected String _getEntityName(User entity)
         { return entity.getDisplayName(); }
+        @Override
+        protected boolean _isValidEntityId(String id)
+        { return VrcIds.id_user.matcher(id).matches(); }
         @SlashCmd("list")
         @Desc("Lists all watched users")
         public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
@@ -1257,6 +1403,10 @@ public class ScarletDiscordCommands
         @Desc("Sets a user's TTS announcement message")
         public void setMessage(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-message") String message)
         { super._setMessage(event, hook, userId, message); }
+        @SlashCmd("set-notes")
+        @Desc("Sets a user's notes")
+        public void setNotes(SlashCommandInteractionEvent event, @SlashOpt("vrchat-user") String userId)
+        { super._setNotes(event, userId); }
         @SlashCmd("set-tags")
         @Desc("Sets a user's tags")
         public void setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") String userId, @Required@SlashOpt("entity-tags") String entityTags)
@@ -1288,11 +1438,14 @@ public class ScarletDiscordCommands
         protected ScarletWatchedEntities<Avatar> _watchedEntities()
         { return ScarletDiscordCommands.this.discord.scarlet.watchedAvatars; }
         @Override
-        protected Avatar _getEntity(String id)
-        { return ScarletDiscordCommands.this.discord.scarlet.vrc.getAvatar(id); }
+        protected Avatar _getEntity(String id, long minEpoch)
+        { return ScarletDiscordCommands.this.discord.scarlet.vrc.getAvatar(id, minEpoch); }
         @Override
         protected String _getEntityName(Avatar entity)
         { return entity.getName(); }
+        @Override
+        protected boolean _isValidEntityId(String id)
+        { return VrcIds.id_avatar.matcher(id).matches(); }
         @SlashCmd("list")
         @Desc("Lists all watched avatars")
         public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
@@ -1342,6 +1495,10 @@ public class ScarletDiscordCommands
         @Desc("Sets an avatar's TTS announcement message")
         public void setMessage(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-message") String message)
         { super._setMessage(event, hook, avatarId, message); }
+        @SlashCmd("set-notes")
+        @Desc("Sets an avatar's notes")
+        public void setNotes(SlashCommandInteractionEvent event, @SlashOpt("vrchat-avatar") String avatarId)
+        { super._setNotes(event, avatarId); }
         @SlashCmd("set-tags")
         @Desc("Sets an avatar's tags")
         public void setTags(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-avatar") String avatarId, @Required@SlashOpt("entity-tags") String entityTags)

@@ -27,6 +27,7 @@ import io.github.vrchatapi.model.InventoryItemType;
 import io.github.vrchatapi.model.LimitedUserGroups;
 import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.Print;
+import io.github.vrchatapi.model.Prop;
 import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.ext.AvatarSearch;
@@ -301,7 +302,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     }
     void switchPlayerAvatar(boolean preamble, OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
     {
-        this.scarlet.ui.playerUpdate(isInGroupInstance, userId, null);
         String[] potentialIds = this.searchAvatar(avatarDisplayName);
         
         if (this.attemptAvatarImageMatch.get())
@@ -483,6 +483,22 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     }
 
     @Override
+    public void log_playerSpawnProp(boolean preamble, LocalDateTime timestamp, String userId, String propId)
+    {
+        if (!preamble)
+        {
+            if (this.isInGroupInstance)
+            {
+                String userDisplayName = this.clientLocation_userId2userDisplayName.getOrDefault(userId, userId);
+                Prop prop = this.scarlet.vrc.getProp(propId);
+                this.scarlet.discord.emitExtendedUserSpawnProp(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, propId, prop);
+                OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+                this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_PROP, odt, userId, userDisplayName, propId, null);
+            }
+        }
+    }
+
+    @Override
     public void log_apiRequest(boolean preamble, LocalDateTime timestamp, int index, String method, String url)
     {
         int pathIdx = url.indexOf("/api/1/");
@@ -507,9 +523,9 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                             this.scarlet.data.customEvent_new(GroupAuditTypeEx.SPAWN_PRINT, odt, print.getOwnerId(), ownerDisplayName, printId, null);
                         }
                     }
-                    else if (url.startsWith("users/", pathIdx) && url.contains("/inventory/inv_"))
+                    else if (url.startsWith("user/", pathIdx) && url.contains("/inventory/inv_"))
                     {
-                        int sep0 = pathIdx + 6,
+                        int sep0 = pathIdx + 5,
                             sep1 = url.indexOf("/inventory/inv_", sep0),
                             sep2 = sep1 + 11;
                         String userId = url.substring(sep0, sep1);
@@ -544,7 +560,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                         if (file.getName().startsWith("Avatar - ") && (cidx = file.getName().lastIndexOf(" - Asset bundle - ")) != -1)
                         {
                             String name = file.getName().substring(9, cidx);
-                            this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, versionedFile);
+                            this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, file, versionedFile);
                         }
                     }
                 }

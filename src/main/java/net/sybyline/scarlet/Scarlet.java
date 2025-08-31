@@ -10,6 +10,7 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -26,6 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.swing.JButton;
 import javax.swing.JOptionPane;
 
 import org.scalasbt.ipcsocket.UnixDomainServerSocket;
@@ -43,7 +45,6 @@ import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.User;
 
-import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.sybyline.scarlet.log.ScarletLogger;
@@ -84,7 +85,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.12-rc8",
+        VERSION = "0.4.12",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -295,25 +296,38 @@ public class Scarlet implements Closeable
     final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(new File(dir, "pending_moderation_actions.json"));
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
     final ScarletWatchedGroups watchedGroups = new ScarletWatchedGroups(new File(dir, "watched_groups.json"));
-    final ScarletWatchedEntities<User> watchedUsers = new ScarletWatchedEntities<>(new File(dir, "watched_users.json"), (user, id, embed) ->
-        embed.setAuthor(
-                 user != null ? MarkdownSanitizer.escape(user.getDisplayName()) : id,
-                 "https://vrchat.com/home/user/"+id,
-                 user != null ? user.getUserIcon() : null
-             )
-             .setThumbnail(
-                 user != null ? (user.getProfilePicOverride() == null || user.getProfilePicOverride().isEmpty() ? (user.getCurrentAvatarImageUrl() == null || user.getCurrentAvatarImageUrl().isEmpty() ? null : user.getCurrentAvatarImageUrl()) : user.getProfilePicOverride()) : null)
-             );
-    final ScarletWatchedEntities<Avatar> watchedAvatars = new ScarletWatchedEntities<>(new File(dir, "watched_avatars.json"), (avatar, id, embed) ->
+    final ScarletWatchedEntities<User> watchedUsers = new ScarletWatchedEntities<>(new File(dir, "watched_users.json"), VrcIds.id_user, (user, id, embed) ->
     {
-        User author = avatar != null ? this.vrc.getUser(avatar.getAuthorId()) : null;
-        embed.setAuthor(
-            avatar != null ? MarkdownSanitizer.escape(avatar.getAuthorName()) : null,
-            avatar != null ? "https://vrchat.com/home/user/"+avatar.getAuthorId() : null,
-            author != null ? author.getUserIcon() : null
-        )
-        .setThumbnail(avatar != null ? avatar.getThumbnailImageUrl() : null)
-        .setTitle(avatar != null ? MarkdownSanitizer.escape(avatar.getName()) : id, "https://vrchat.com/home/avatar/"+id);
+        if (user == null)
+        {
+            embed.setAuthor(id, "https://vrchat.com/home/user/"+id);
+            return;
+        }
+        String userDisplayName = MarkdownSanitizer.escape(user.getDisplayName()),
+               userIcon = MiscUtils.nonBlankOrNull(user.getUserIcon()),
+               userThumbnail = MiscUtils.nonBlankOrNull(user.getProfilePicOverride(), user.getCurrentAvatarImageUrl());
+        embed.setAuthor(userDisplayName, "https://vrchat.com/home/user/"+id, userIcon);
+        if (userThumbnail != null)
+        {
+            embed.setThumbnail(userThumbnail);
+        }
+    });
+    final ScarletWatchedEntities<Avatar> watchedAvatars = new ScarletWatchedEntities<>(new File(dir, "watched_avatars.json"), VrcIds.id_avatar, (avatar, id, embed) ->
+    {
+        if (avatar == null)
+        {
+            embed.setTitle(id, "https://vrchat.com/home/avatar/"+id);
+            return;
+        }
+        embed.setTitle(MarkdownSanitizer.escape(avatar.getName()), "https://vrchat.com/home/avatar/"+id);
+        User author = this.vrc.getUser(avatar.getAuthorId());
+        String authorName = MarkdownSanitizer.escape(author != null ? author.getDisplayName() : avatar.getAuthorName()),
+               authorIcon = author != null && !MiscUtils.blank(author.getUserIcon()) ? author.getUserIcon() : null;
+        embed.setAuthor(authorName, "https://vrchat.com/home/user/"+avatar.getAuthorId(), authorIcon);
+        if (!MiscUtils.blank(avatar.getThumbnailImageUrl()))
+        {
+            embed.setThumbnail(avatar.getThumbnailImageUrl());
+        }
     });
     final ScarletStaffList staffList = new ScarletStaffList(new File(dir, "staff_list.json"));
     final ScarletSecretStaffList secretStaffList = new ScarletSecretStaffList(new File(dir, "secret_staff_list.json"));
@@ -680,7 +694,9 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
                 LOG.info(NAME+" version "+cmp_version+" available");
                 if (this.alertForUpdates.get())
                 {
-                    this.execModal.execute(() -> JOptionPane.showMessageDialog(null, NAME+" version "+cmp_version+" available", "Update available", JOptionPane.INFORMATION_MESSAGE));
+                    JButton openReleasePage = new JButton("Browse release page");
+                    openReleasePage.addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(GITHUB_URL+"/releases/tag/"+cmp_version)));
+                    this.execModal.execute(() -> JOptionPane.showMessageDialog(null, new Object[]{NAME+" version "+cmp_version+" available", openReleasePage}, "Update available", JOptionPane.INFORMATION_MESSAGE));
                 }
                 this.newerVersion = cmp_version;
             }

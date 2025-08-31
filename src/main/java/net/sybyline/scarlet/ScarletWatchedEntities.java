@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.csv.CSVFormat;
@@ -30,15 +32,25 @@ public class ScarletWatchedEntities<E>
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/WatchedEntities");
 
-    public ScarletWatchedEntities(File watchedEntitiesFile, Func.V3.NE<E, String, EmbedBuilder> builder)
+    public ScarletWatchedEntities(File watchedEntitiesFile, String idPrefix_, Func.V3.NE<E, String, EmbedBuilder> builder)
+    {
+        this(watchedEntitiesFile, id -> id.startsWith(idPrefix_), builder);
+    }
+    public ScarletWatchedEntities(File watchedEntitiesFile, Pattern idPattern, Func.V3.NE<E, String, EmbedBuilder> builder)
+    {
+        this(watchedEntitiesFile, id -> idPattern.matcher(id).matches(), builder);
+    }
+    public ScarletWatchedEntities(File watchedEntitiesFile, Predicate<String> idValid, Func.V3.NE<E, String, EmbedBuilder> builder)
     {
         this.watchedEntitiesFile = watchedEntitiesFile;
+        this.idValid = idValid;
         this.watchedEntities = new ConcurrentHashMap<>();
         this.builder = builder;
         this.load();
     }
 
     final File watchedEntitiesFile;
+    final Predicate<String> idValid;
     Map<String, WatchedEntity> watchedEntities;
     final Func.V3.NE<E, String, EmbedBuilder> builder;
 
@@ -79,6 +91,7 @@ public class ScarletWatchedEntities<E>
         public boolean critical = false;
         public boolean silent = false;
         public String message = null;
+        public String notes = null;
         
         public <E> EmbedBuilder embed(ScarletWatchedEntities<E> context, E entity)
         {
@@ -86,16 +99,17 @@ public class ScarletWatchedEntities<E>
             context.builder.invoke(entity, this.id, builder);
             return builder
                 .addField("Id", "`"+this.id+"`", false)
-                .addField("Watch type", this.type == null ? "none" : ("`"+this.type.name()+"`"), false)
-                .addField("Priority", "`"+this.priority+"`", false)
-                .addField("Critical", this.critical ? "`true`" : "`false`", false)
-                .addField("Silent", this.silent ? "`true`" : "`false`", false)
-                .addField("Message", this.message == null ? "none" : ("`"+this.message+"`"), false)
-                .addField("Tags", this.tags.isEmpty() ? "none" : this.tags
+                .addField("Watch type", this.type == null ? "`none`" : this.type.name(), false)
+                .addField("Priority", "`"+this.priority+"`", true)
+                .addField("Critical", this.critical ? "`true`" : "`false`", true)
+                .addField("Silent", this.silent ? "`true`" : "`false`", true)
+                .addField("Message", this.message == null ? "`none`" : this.message, false)
+                .addField("Tags", this.tags.isEmpty() ? "`none`" : this.tags
                     .strings()
                     .stream()
                     .filter(Objects::nonNull)
-                    .collect(Collectors.joining("`, `", "`", "`")), false)
+                    .collect(Collectors.joining(", ")), false)
+                .addField("Notes", this.notes == null ? "`none`" : this.notes, false)
             ;
         }
 
@@ -194,7 +208,7 @@ public class ScarletWatchedEntities<E>
     {
         for (WatchedEntity watchedEntity : importedWatchedEntities)
         {
-            if (watchedEntity.id != null && watchedEntity.id.startsWith("grp_"))
+            if (watchedEntity.id != null && this.idValid.test(watchedEntity.id))
             {
                 if (overwrite)
                 {
@@ -251,7 +265,7 @@ public class ScarletWatchedEntities<E>
         }
         Map<String, WatchedEntity> watchedEntities = new ConcurrentHashMap<>();
         for (WatchedEntity watchedEntity : watchedEntitiesArray)
-            if (watchedEntity != null && watchedEntity.id != null && watchedEntity.id.startsWith("grp_"))
+            if (watchedEntity != null && watchedEntity.id != null && this.idValid.test(watchedEntity.id))
                 watchedEntities.put(watchedEntity.id, watchedEntity);
         this.watchedEntities = watchedEntities;
         return true;

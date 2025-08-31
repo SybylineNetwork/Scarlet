@@ -58,6 +58,7 @@ public class ScarletVRChatLogs implements Closeable
         
         void log_playerSpawnPedestal(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String contentType, String contentId);
         void log_playerSpawnSticker(boolean preamble, LocalDateTime timestamp, String userDisplayName, String userId, String stickerId);
+        void log_playerSpawnProp(boolean preamble, LocalDateTime timestamp, String userId, String propId);
         
         void log_apiRequest(boolean preamble, LocalDateTime timestamp, int index, String method, String url);
         
@@ -157,6 +158,12 @@ public class ScarletVRChatLogs implements Closeable
                    userDisplayName = text.substring(oidx + 2, cidx),
                    stickerId = text.substring(cidx + 18);
             this.listener.log_playerSpawnSticker(preamble, timestamp, userDisplayName, userId, stickerId);
+        }
+        else if (text.startsWith("[VRCProps] Prop ") && (cidx = text.lastIndexOf(" spawned by ")) != -1)
+        {
+            String propId = text.substring(16, cidx),
+                   userId = text.substring(cidx + 12);
+            this.listener.log_playerSpawnProp(preamble, timestamp, userId, propId);
         }
         else if (text.startsWith("VRCApplication: HandleApplicationQuit at "))
         {

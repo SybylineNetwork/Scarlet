@@ -7,6 +7,18 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.12
+  - Added User Spawn Prop extended event
+  - Added notes field for watched entities and groups
+  - Added autocomplete for watched entity and group ids
+  - Added filter to narrow potential avatars based on author id
+  - Updated JDA to 5.6.1 (was 5.2.1)
+  - Fixed custom Emojis not being properly detected
+  - Fixed some text not being sanitized for Markdown
+  - Fixed some events not firing on player joins
+  - Fixed watched entities not loading or importing
+  - Fixed watched users commands failing and having incorrect links
+
 ## 0.4.12-rc8
   - Fixed error in output for banning or unbanning multiple users with the appropriate Discord command
   - Fixed error when custom moderation tags is exactly a multiple of 25

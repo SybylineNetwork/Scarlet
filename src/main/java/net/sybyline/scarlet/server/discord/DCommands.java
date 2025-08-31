@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -81,8 +82,8 @@ String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getF
             return neq("type", current.getType(), data.getType());
         if (!Objects.equals(data.getName(), current.getName()))
             return neq("name", current.getName(), data.getName());
-        if (data.isGuildOnly() != current.isGuildOnly())
-            return neq("guildOnly", current.isGuildOnly(), data.isGuildOnly());
+        if (!equals_set(data.getContexts(), current.getContexts()))
+            return neq("contexts", current.getContexts(), data.getContexts());
         if (data.isNSFW() != current.isNSFW())
             return neq("NSFW", current.isNSFW(), data.isNSFW());
         if (!equals_locale(data.getNameLocalizations(), current.getNameLocalizations()))
@@ -202,7 +203,7 @@ DCommandsUtil.option = "/ "+current.getName()+' '; try {
         return data.longValue() == current.longValue();
     }
 
-    static <Current, Data> boolean equals_list(List<Current> data, Function<Current, String> dataName, List<Data> current, Function<Data, String> currentName, BiPredicate<Current, Data> equalifier)
+    static <Data, Current> boolean equals_list(List<Data> data, Function<Data, String> dataName, List<Current> current, Function<Current, String> currentName, BiPredicate<Data, Current> equalifier)
     {
         if (data.size() != current.size())
             return false;
@@ -212,6 +213,19 @@ DCommandsUtil.option = "/ "+current.getName()+' '; try {
         current.sort(Comparator.comparing(currentName));
         for (int idx = 0, len = data.size(); idx < len; idx++)
             if (!equalifier.test(data.get(idx), current.get(idx)))
+                return false;
+        return true;
+    }
+
+    static <Data> boolean equals_set(Set<Data> data, Set<Data> current)
+    {
+        if (data.size() != current.size())
+            return false;
+        for (Data datum : data)
+            if (!current.contains(datum))
+                return false;
+        for (Data datum : current)
+            if (!data.contains(datum))
                 return false;
         return true;
     }

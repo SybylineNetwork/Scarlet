@@ -56,7 +56,6 @@ import net.sybyline.scarlet.ScarletDiscordJDA.InstanceCreation;
 import net.sybyline.scarlet.server.discord.DInteractions.ButtonClk;
 import net.sybyline.scarlet.server.discord.DInteractions.Ephemeral;
 import net.sybyline.scarlet.server.discord.DInteractions.ModalSub;
-import net.sybyline.scarlet.server.discord.DInteractions.Pagination;
 import net.sybyline.scarlet.server.discord.DInteractions.StringSel;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -76,6 +75,37 @@ public class ScarletDiscordUI
     }
 
     final ScarletDiscordJDA discord;
+
+    @ModalSub("watched-group-set-notes")
+    public void watchedGroupSetNotes(ModalInteractionEvent event)
+    {
+        String[] parts = event.getModalId().split(":");
+        String groupId = parts[1];
+        ScarletWatchedGroups.WatchedGroup watchedGroup = this.discord.scarlet.watchedGroups.getWatchedGroup(groupId);
+        if (watchedGroup == null)
+        {
+            event.reply("That group is not watched").setEphemeral(true).queue();
+            return;
+        }
+        event.reply("Set notes for group").setEphemeral(true).queue();
+        watchedGroup.notes = event.getValue("notes").getAsString();
+        this.discord.scarlet.watchedGroups.save();
+    }
+
+    @ModalSub("watched-entity-set-notes")
+    public void watchedEntitySetNotes(ModalInteractionEvent event)
+    {
+        String[] parts = event.getModalId().split(":");
+        String entityKind = parts[1],
+               entityId = parts[2];
+        ScarletDiscordCommands.WatchedEntity_<?> watchedEntityCommand = this.discord.discordCommands.watchedEntityCommands.get(entityKind);
+        if (watchedEntityCommand == null)
+        {
+            LOG.error("@ModalSub(watched-entity-set-notes): Unknown watched entity kind `"+entityKind+"`: `"+entityId+"`");
+            return;
+        }
+        watchedEntityCommand._setNotes(event, entityId);
+    }
 
     @ButtonClk("edit-tags")
     @Ephemeral

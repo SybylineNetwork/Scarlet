@@ -56,6 +56,19 @@ public interface MiscUtils
         return string == null || string.isEmpty();
     }
 
+    static String nonBlankOrNull(String string1)
+    {
+        return !blank(string1) ? string1 : null;
+    }
+    static String nonBlankOrNull(String string1, String string2)
+    {
+        return !blank(string1) ? string1 : !blank(string2) ? string2 : null;
+    }
+    static String nonBlankOrNull(String string1, String string2, String string3)
+    {
+        return !blank(string1) ? string1 : !blank(string2) ? string2 : !blank(string3) ? string3 : null;
+    }
+
     static String maybeEllipsis(int maxLength, String string)
     {
         return string == null || string.length() <= maxLength ? string : (string.substring(0, maxLength - 1) + '\u2026');

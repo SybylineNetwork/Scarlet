@@ -41,9 +41,9 @@ import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.FilesApi;
 import io.github.vrchatapi.api.GroupsApi;
-import io.github.vrchatapi.api.InventoryApi;
 import io.github.vrchatapi.api.MiscellaneousApi;
 import io.github.vrchatapi.api.PrintsApi;
+import io.github.vrchatapi.api.PropsApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
@@ -67,6 +67,7 @@ import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.OrderOption;
 import io.github.vrchatapi.model.PaginatedGroupAuditLogEntryList;
 import io.github.vrchatapi.model.Print;
+import io.github.vrchatapi.model.Prop;
 import io.github.vrchatapi.model.RespondGroupJoinRequest;
 import io.github.vrchatapi.model.SortOption;
 import io.github.vrchatapi.model.TwoFactorAuthCode;
@@ -194,6 +195,7 @@ public class ScarletVRChat implements Closeable
         this.cachedUserGroups = new ScarletJsonCache<>("gmem", new TypeToken<List<LimitedUserGroups>>(){});
         this.cachedAvatars = new ScarletJsonCache<>("avtr", Avatar.class);
         this.cachedPrints = new ScarletJsonCache<>("prnt", Print.class);
+        this.cachedProps = new ScarletJsonCache<>("prop", Prop.class);
         this.cachedInventoryItems = new ScarletJsonCache<>("inv", InventoryItem.class);
         this.cachedModelFiles = new ScarletJsonCache<>("file", ModelFile.class);
     }
@@ -213,6 +215,7 @@ public class ScarletVRChat implements Closeable
     final ScarletJsonCache<List<LimitedUserGroups>> cachedUserGroups;
     final ScarletJsonCache<Avatar> cachedAvatars;
     final ScarletJsonCache<Print> cachedPrints;
+    final ScarletJsonCache<Prop> cachedProps;
     final ScarletJsonCache<InventoryItem> cachedInventoryItems;
     final ScarletJsonCache<ModelFile> cachedModelFiles;
     long localDriftMillis = 0L;
@@ -896,6 +899,35 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    public Prop getProp(String propId)
+    {
+        return this.getProp(propId, Long.MAX_VALUE);
+    }
+    public Prop getProp(String propId, long minEpoch)
+    {
+        Prop prop = this.cachedProps.get(propId, minEpoch);
+        if (prop != null)
+            return prop;
+        if (this.cachedProps.is404(propId))
+            return null;
+        PropsApi props = new PropsApi(this.client);
+        try
+        {
+            prop = props.getProp(propId);
+            this.cachedProps.put(propId, prop);
+            return prop;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedProps.add404(propId);
+            else
+                LOG.error("Error during get prop: "+apiex.getMessage());
+            return null;
+        }
+    }
+
     public InventoryItem getInventoryItem(String userId, String invId)
     {
         return this.getInventoryItem(userId, invId, Long.MAX_VALUE);
@@ -930,7 +962,7 @@ public class ScarletVRChat implements Closeable
         Map<String, String> headers = new HashMap<>();
             headers.put("Accept", "application/json");
             headers.put("Content-Type", "application/json");
-        okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+userId+"/inventory/"+invId, "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+        okhttp3.Call localVarCall = this.client.buildCall(null, "/user/"+userId+"/inventory/"+invId, "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
         ApiResponse<InventoryItem> localVarResp = this.client.execute(localVarCall, InventoryItem.class);
         return localVarResp.getData();
     }

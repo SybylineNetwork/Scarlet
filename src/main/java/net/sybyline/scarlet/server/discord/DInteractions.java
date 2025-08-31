@@ -53,6 +53,7 @@ import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.interactions.Interaction;
+import net.dv8tion.jda.api.interactions.InteractionContextType;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.callbacks.IDeferrableCallback;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
@@ -534,9 +535,17 @@ public class DInteractions
     public static @FunctionalInterface interface ModalSubmitHandler { void handle(ModalInteractionEvent event); }
     public static @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
 
+    public static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
+    public static Comparator<String> stringsByLevenshtein(String typing)
+    {
+        return Comparator.comparingInt($ -> LD.apply(typing, $));
+    }
+    public static Comparator<Command.Choice> choicesByLevenshtein(String typing)
+    {
+        return Comparator.comparingInt($ -> Math.min(LD.apply(typing, $.getName()), LD.apply(typing, $.getAsString())));
+    }
     public static class SlashOptionStrings implements SlashCompleteHandler
     {
-        static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
         static final Pattern namer = Pattern.compile("[^0-9a-z]");
         static String normalize(String string)
         {
@@ -592,7 +601,6 @@ public class DInteractions
     }
     public static class SlashOptionStringsUnsanitized implements SlashCompleteHandler
     {
-        static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
         public SlashOptionStringsUnsanitized(Supplier<String[]> values, boolean includeTyping)
         {
             this.values = values;
@@ -610,7 +618,7 @@ public class DInteractions
             String typing = event.getFocusedOption().getValue().trim();
             if (!typing.isEmpty())
             {
-                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(Comparator.comparingInt($ -> LD.apply(typing, $))))).limit(25L).toArray(String[]::new);
+                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(stringsByLevenshtein(typing)))).limit(25L).toArray(String[]::new);
             }
             else if (values.length > 25)
             {
@@ -621,7 +629,6 @@ public class DInteractions
     }
     public static class SlashOptionsChoicesUnsanitized implements SlashCompleteHandler
     {
-        static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
         public SlashOptionsChoicesUnsanitized(Supplier<Command.Choice[]> values, boolean includeTyping)
         {
             this.values = values;
@@ -639,7 +646,7 @@ public class DInteractions
             String typing = event.getFocusedOption().getValue().trim();
             if (!typing.isEmpty())
             {
-                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(Comparator.comparingInt($ -> Math.min(LD.apply(typing, $.getName()), LD.apply(typing, $.getAsString())))))).limit(25L).toArray(Command.Choice[]::new);
+                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(choicesByLevenshtein(typing)))).limit(25L).toArray(Command.Choice[]::new);
             }
             else if (values.length > 25)
             {
@@ -1000,7 +1007,7 @@ public class DInteractions
     {
         Slash(String name, String desc)
         {
-            this.data = Commands.slash(name, desc).setGuildOnly(true);
+            this.data = Commands.slash(name, desc).setContexts(InteractionContextType.GUILD);
             this.subs = new HashMap<>();
             this.opts = new HashMap<>();
             DInteractions.this.data.add(this.data);
@@ -1075,7 +1082,7 @@ public class DInteractions
 
     public CommandData message(String name, MessageCommandHandler handler)
     {
-        CommandData data = Commands.message(name).setGuildOnly(true).setDefaultPermissions(DEFAULT_PERMISSIONS);
+        CommandData data = Commands.message(name).setContexts(InteractionContextType.GUILD).setDefaultPermissions(DEFAULT_PERMISSIONS);
         this.messageCmds.put(name, handler);
         this.data.add(data);
         return data;
@@ -1083,7 +1090,7 @@ public class DInteractions
 
     public CommandData user(String name, UserCommandHandler handler)
     {
-        CommandData data = Commands.user(name).setGuildOnly(true).setDefaultPermissions(DEFAULT_PERMISSIONS);
+        CommandData data = Commands.user(name).setContexts(InteractionContextType.GUILD).setDefaultPermissions(DEFAULT_PERMISSIONS);
         this.userCmds.put(name, handler);
         this.data.add(data);
         return data;
