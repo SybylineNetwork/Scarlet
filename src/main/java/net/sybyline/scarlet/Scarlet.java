@@ -12,6 +12,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -30,6 +31,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.JButton;
 import javax.swing.JOptionPane;
 
+import net.sybyline.scarlet.util.*;
+import net.sybyline.scarlet.util.tts.TTSService;
+import net.sybyline.scarlet.util.tts.TTSServiceFactory;
 import org.scalasbt.ipcsocket.UnixDomainServerSocket;
 import org.scalasbt.ipcsocket.Win32NamedPipeServerSocket;
 import org.scalasbt.ipcsocket.Win32SecurityLevel;
@@ -49,15 +53,6 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.ui.Swing;
-import net.sybyline.scarlet.util.GithubApi;
-import net.sybyline.scarlet.util.HttpURLInputStream;
-import net.sybyline.scarlet.util.JsonAdapters;
-import net.sybyline.scarlet.util.MavenDepsLoader;
-import net.sybyline.scarlet.util.MiscUtils;
-import net.sybyline.scarlet.util.Platform;
-import net.sybyline.scarlet.util.ProcLock;
-import net.sybyline.scarlet.util.TTSService;
-import net.sybyline.scarlet.util.VrcIds;
 
 public class Scarlet implements Closeable
 {
@@ -260,7 +255,7 @@ public class Scarlet implements Closeable
         catch (InterruptedException iex)
         {
         }
-        MiscUtils.close(this.ttsService);
+//        MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
         MiscUtils.close(this.ui);
@@ -333,9 +328,12 @@ public class Scarlet implements Closeable
     final ScarletSecretStaffList secretStaffList = new ScarletSecretStaffList(new File(dir, "secret_staff_list.json"));
     final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(new File(dir, "report_template.txt"));
     final ScarletData data = new ScarletData(new File(dir, "data"));
-    final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
+
+
+
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
+    final TTSService ttsService = TTSServiceFactory.build(Paths.get(dir.getAbsolutePath(), "tts"), discord);
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
     final ScarletUI.Setting<Boolean> confirmGroupInvite = this.ui.settingBool("ui_confirm_group_invite", "Confirmation dialog for group invites", false),
@@ -468,7 +466,6 @@ public class Scarlet implements Closeable
         }
         finally
         {
-            ;
         }
     }
 
@@ -567,10 +564,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
             String op = ls.next();
             switch (op)
             {
-            default: {
-                LOG.info("Unknown CLI command: "+op);
-            } break;
-            case "logout": {
+                case "logout": {
                 LOG.info("Logout success: "+this.vrc.logout());
             } // fallthrough
             case "exit":
@@ -648,6 +642,10 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
                     LOG.error("Exception importing watched groups JSON from "+(isUrl ? "URL: " : "file: ")+from, ex);
                 }
             } break;
+                default: {
+                    LOG.info("Unknown CLI command: "+op);
+                }
+                break;
             }
         }
         catch (Exception ex)
@@ -677,8 +675,8 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
     }
 
-    String newerVersion = null,
-           allVersions[] = {};
+    String newerVersion = null;
+    String[] allVersions = {};
     void checkUpdate()
     {
         try
