@@ -47,7 +47,7 @@ public class EspeakVoiceProvider implements VoiceProvider {
                throw new RuntimeException("espeak does not seem to be installed or is miss configured");
             }
             // This works as every linux machine should be POSIX compliant
-            pb = new ProcessBuilder().command("sh", "-c", "espeak --voices=en | tail -n +2 | sed 's/^ //' | sed -e 's/  \\+/ /g' | cut -d' ' -f4 | sort -u").redirectErrorStream(true);
+            pb = new ProcessBuilder().command("sh", "-c", "espeak --voices | awk 'NR>1 {print $2}'").redirectErrorStream(true);
             p = pb.start();
             List<String> availableVoices = new ArrayList<>();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
