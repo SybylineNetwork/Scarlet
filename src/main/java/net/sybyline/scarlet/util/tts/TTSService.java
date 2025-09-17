@@ -56,6 +56,8 @@ public class TTSService {
         return false;
     }
 
-    public synchronized void selectVoiceLater(String name) {}
+    public synchronized void selectVoiceLater(String name) {
+        this.selectVoice(name);
+    }
 
 }
