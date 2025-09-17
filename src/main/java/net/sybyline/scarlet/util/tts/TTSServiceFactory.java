@@ -30,7 +30,7 @@ public class TTSServiceFactory {
                 return new TTSService(
                         new EspeakVoiceProvider(dir),
                         sinks,
-                        "english"
+                        "default"
                 );
             } catch (IOException e) {
                 throw new RuntimeException("failed to create LinuxTTSService", e);

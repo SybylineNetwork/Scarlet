@@ -17,6 +17,9 @@ public class TTSService {
     public TTSService(VoiceProvider provider, List<AudioSink> sinks, String defaultVoice) {
         this.provider = provider;
         this.sinks = sinks;
+        if (!this.provider.ListAvailableVoices().contains(defaultVoice)) {
+            throw new IllegalArgumentException(defaultVoice + " is not available as a voice");
+        }
         this.selectedVoice = defaultVoice;
     }
 
