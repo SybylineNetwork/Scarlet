@@ -14,7 +14,7 @@ class LinuxTTSServiceTest {
     void e2e_espeak_and_aplay() throws IOException, VoiceProviderSynthException {
         Path tmp = Files.createTempDirectory("tmp");
         VoiceProvider a = new EspeakVoiceProvider(tmp);
-        Path out = a.Synthesize("hello world", "default");
+        Path out = a.Synthesize("hello world", "en-us");
         AplayAudioSink b = new AplayAudioSink();
         b.play(out);
         //noinspection ResultOfMethodCallIgnored
