@@ -63,13 +63,14 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
-import net.dv8tion.jda.api.interactions.components.ActionRow;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.selections.SelectOption;
-import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
-import net.dv8tion.jda.api.interactions.components.text.TextInput;
-import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
-import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.selections.SelectOption;
+import net.dv8tion.jda.api.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
+import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
@@ -717,10 +718,10 @@ public class ScarletDiscordCommands
             }
             this.vrchatGroup(event, groupId);
             event.replyModal(Modal.create("watched-group-set-notes:"+groupId, "Edit notes")
-                .addActionRow(TextInput.create("notes", "Notes", TextInputStyle.PARAGRAPH)
+                .addComponents(Label.of("Notes", TextInput.create("notes", TextInputStyle.PARAGRAPH)
                     .setValue(MiscUtils.blank(watchedGroup.notes) ? null : watchedGroup.notes)
                     .setRequiredRange(0, 1024)
-                    .build())
+                    .build()))
                 .build())
             .queue();
         }
@@ -1203,10 +1204,10 @@ public class ScarletDiscordCommands
           }
           this.vrchatEntity(event, entityId);
           event.replyModal(Modal.create("watched-entity-set-notes:"+this._singular()+":"+entityId, "Edit notes")
-              .addActionRow(TextInput.create("notes", "Notes", TextInputStyle.PARAGRAPH)
+              .addComponents(Label.of("Notes", TextInput.create("notes", TextInputStyle.PARAGRAPH)
                   .setValue(MiscUtils.blank(watchedEntity.notes) ? null : watchedEntity.notes)
                   .setRequiredRange(0, 1024)
-                  .build())
+                  .build()))
               .build())
           .queue();
       }
@@ -1934,10 +1935,10 @@ public class ScarletDiscordCommands
         }
         
         event.replyModal(Modal.create("vrchat-user-ban-multi", "Ban Multiple VRChat Users")
-            .addActionRow(TextInput.create("target-ids", "Target VRChat User IDs", TextInputStyle.PARAGRAPH)
+            .addComponents(Label.of("Target VRChat User IDs", TextInput.create("target-ids", TextInputStyle.PARAGRAPH)
                 .setPlaceholder("User IDs separated by something that isn't 0-9, a-z, A-Z, '-', or '_' (e.g., newline, space, comma)")
                 .setRequiredRange(10, -1)
-                .build())
+                .build()))
             .build())
         .queue();
     }
@@ -2017,10 +2018,10 @@ public class ScarletDiscordCommands
         }
         
         event.replyModal(Modal.create("vrchat-user-unban-multi", "Unban Multiple VRChat Users")
-            .addActionRow(TextInput.create("target-ids", "Target VRChat User IDs", TextInputStyle.PARAGRAPH)
+            .addComponents(Label.of("Target VRChat User IDs", TextInput.create("target-ids", TextInputStyle.PARAGRAPH)
                 .setPlaceholder("User IDs separated by something that isn't 0-9, a-z, A-Z, '-', or '_' (e.g., newline, space, comma)")
                 .setRequiredRange(10, -1)
-                .build())
+                .build()))
             .build())
         .queue();
     }
@@ -2072,25 +2073,25 @@ public class ScarletDiscordCommands
             List<GroupRole> roles = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupRoles(groupId);
             
             hook.sendMessageFormat("Create a new [%s](https://vrchat.com/home/world/%s) instance:", vrchatWorld.getName(), vrchatWorld.getId())
-                .addActionRow(StringSelectMenu.create("new-instance-access-type:"+ictoken)
+                .addComponents(ActionRow.of(StringSelectMenu.create("new-instance-access-type:"+ictoken)
                     .addOption("Group Public", "public")
                     .addOption("Group Plus", "plus")
                     .addOption("Group Members", "members")
                     .setDefaultValues("public")
-                    .build())
-                .addActionRow(StringSelectMenu.create("new-instance-roles:"+ictoken)
+                    .build()))
+                .addComponents(ActionRow.of(StringSelectMenu.create("new-instance-roles:"+ictoken)
                     .setPlaceholder("Select roles (Group Members)")
                     .addOptions(roles.stream().map($ -> SelectOption.of($.getName(), $.getId())).limit(25L).toArray(SelectOption[]::new))
                     .setRequiredRange(1, Math.min(25, roles.size()))
-                    .build())
-                .addActionRow(StringSelectMenu.create("new-instance-region:"+ictoken)
+                    .build()))
+                .addComponents(ActionRow.of(StringSelectMenu.create("new-instance-region:"+ictoken)
                     .addOption("Region: US", "us")
                     .addOption("Region: US East", "use")
                     .addOption("Region: Europe", "eu")
                     .addOption("Region: Japan", "jp")
                     .setDefaultValues("us")
-                    .build())
-                .addActionRow(StringSelectMenu.create("new-instance-flags:"+ictoken)
+                    .build()))
+                .addComponents(ActionRow.of(StringSelectMenu.create("new-instance-flags:"+ictoken)
                     .setPlaceholder("Options & Content Settings")
                     .addOption("Join queue (users wait to connect when full)", "queueEnabled")
                     .addOption("Hard close (kick connected users on close)", "hardClose")
@@ -2099,15 +2100,18 @@ public class ScarletDiscordCommands
 //                    .addOption("Instance persistence (state persists when empty)", "instancePersistenceEnabled")
                     .addOption("Content: drones", "contentSettings.drones")
                     .addOption("Content: emoji", "contentSettings.emoji")
+                    .addOption("Content: items", "contentSettings.items")
                     .addOption("Content: pedestals", "contentSettings.pedestals")
                     .addOption("Content: prints", "contentSettings.prints")
                     .addOption("Content: stickers", "contentSettings.stickers")
-                    .setRequiredRange(0, 8)
-                    .setDefaultValues("queueEnabled", "contentSettings.drones", "contentSettings.emoji", "contentSettings.pedestals", "contentSettings.prints", "contentSettings.stickers")
-                    .build())
-                .addActionRow(Button.success("new-instance-create:"+ictoken, "Create"),
-                              Button.danger("new-instance-cancel:"+ictoken, "Cancel"),
-                              Button.secondary("new-instance-modal:"+ictoken, "Additional options..."))
+                    .setRequiredRange(0, 9)
+                    .setDefaultValues("queueEnabled", "contentSettings.drones", "contentSettings.emoji", "contentSettings.items", "contentSettings.pedestals", "contentSettings.prints", "contentSettings.stickers")
+                    .build()))
+                .addComponents(ActionRow.of(
+                    Button.success("new-instance-create:"+ictoken, "Create"),
+                    Button.danger("new-instance-cancel:"+ictoken, "Cancel"),
+                    Button.secondary("new-instance-modal:"+ictoken, "Additional options...")
+                ))
                 .setEphemeral(true)
                 .queue();
         }
@@ -2404,9 +2408,10 @@ public class ScarletDiscordCommands
         Message message = event.getTarget();
         
         event.reply("Select submission type")
-            .addActionRow(
+            .addComponents(ActionRow.of(
                 Button.primary("submit-evidence:"+message.getId(), "Submit moderation evidence"),
-                Button.primary("import-watched-groups:"+message.getId(), "Import watched groups"))
+                Button.primary("import-watched-groups:"+message.getId(), "Import watched groups")
+            ))
             .setEphemeral(true)
             .queue();
     }

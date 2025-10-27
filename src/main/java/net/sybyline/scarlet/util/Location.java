@@ -12,6 +12,7 @@ public class Location
         NULL      = new Location(""),
         OFFLINE   = new Location("offline"),
         TRAVELING = new Location("traveling"),
+        TRAVELING_TRAVELING = new Location("traveling:traveling"),
         PRIVATE   = new Location("private");
 
     public static boolean isSpecial(String string)
@@ -22,6 +23,7 @@ public class Location
         case ""         :
         case "offline"  :
         case "traveling":
+        case "traveling:traveling":
         case "private"  :
         }
         return true;
@@ -34,6 +36,7 @@ public class Location
         case ""         :
         case "offline"  :
         case "traveling":
+        case "traveling:traveling":
         case "private"  :
         }
         return false;
@@ -49,10 +52,11 @@ public class Location
             return NULL;
         else switch (instance)
         {
-        case ""         : return NULL;
-        case "offline"  : return OFFLINE;
-        case "traveling": return TRAVELING;
-        case "private"  : return PRIVATE;
+        case ""                   : return NULL;
+        case "offline"            : return OFFLINE;
+        case "traveling"          : return TRAVELING;
+        case "traveling:traveling": return TRAVELING_TRAVELING;
+        case "private"            : return PRIVATE;
         }
         String name = null;
         Type type = null;

@@ -199,8 +199,9 @@ public class PropsTable<E> extends JTable
         }
         public void setDisplayIndex(int visualIndex)
         {
-            if (this.enabled)
-                PropsTable.this.columnModel.moveColumn(visualIndex, visualIndex);
+            int prev = this.getDisplayIndex();
+            if (this.enabled && prev >= 0)
+                PropsTable.this.columnModel.moveColumn(prev, visualIndex);
         }
     }
 

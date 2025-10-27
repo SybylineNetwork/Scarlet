@@ -98,7 +98,8 @@ import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.ICommandReference;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.FluentRestAction;
@@ -785,6 +786,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
         boolean contentSettings_drones = true;
         boolean contentSettings_emoji = true;
+        boolean contentSettings_items = true;
         boolean contentSettings_pedestals = true;
         boolean contentSettings_prints = true;
         boolean contentSettings_stickers = true;
@@ -806,6 +808,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             InstanceContentSettings contentSettings = new InstanceContentSettings();
             contentSettings.setDrones(this.contentSettings_drones);
             contentSettings.setEmoji(this.contentSettings_emoji);
+//            contentSettings.setItems(this.contentSettings_items);
             contentSettings.setPedestals(this.contentSettings_pedestals);
             contentSettings.setPrints(this.contentSettings_prints);
             contentSettings.setStickers(this.contentSettings_stickers);
@@ -816,6 +819,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             JsonObject cir = JSON.getGson().toJsonTree(this.createRequest()).getAsJsonObject();
             if (this.playerPersistenceEnabled != null) cir.addProperty("playerPersistenceEnabled", this.playerPersistenceEnabled);
+            cir.getAsJsonObject("contentSettings").addProperty("items", this.contentSettings_items);
             return cir;
         }
     }
@@ -1381,17 +1385,23 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     : (entryMeta.hasAuxActor() ? entryMeta.auxActorDisplayName : entryMeta.entry.getActorDisplayName()));
         Message auxMessage = threadChannel.sendMessage(content)
             .addContent(contentExtra)
-            .addActionRow(Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
-                          Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
-                          Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link"))
-            .addActionRow(Button.secondary("view-snapshot-user:"+entryMeta.entry.getId(), "Snapshot: user"),
-                          Button.secondary("view-snapshot-user-groups:"+entryMeta.entry.getId(), "Snapshot: user groups"),
-                          Button.secondary("view-snapshot-user-represented-group:"+entryMeta.entry.getId(), "Snapshot: user represented group"))
-            .addActionRow(Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
-                          Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"),
-//                          Button.secondary("vrchat-user-edit-manager-notes:"+entryMeta.entry.getTargetId(), "Edit manager notes"),
-                          Button.primary("event-redact:"+entryMeta.entry.getId(), "Redact event"),
-                          Button.secondary("event-unredact:"+entryMeta.entry.getId(), "Unredact event"))
+            .addComponents(ActionRow.of(
+                Button.primary("edit-tags:"+entryMeta.entry.getId(), "Edit tags"),
+                Button.primary("edit-desc:"+entryMeta.entry.getId(), "Edit description"),
+                Button.primary("vrchat-report:"+entryMeta.entry.getId()+timeext, "Get report link")
+            ))
+            .addComponents(ActionRow.of(
+                Button.secondary("view-snapshot-user:"+entryMeta.entry.getId(), "Snapshot: user"),
+                Button.secondary("view-snapshot-user-groups:"+entryMeta.entry.getId(), "Snapshot: user groups"),
+                Button.secondary("view-snapshot-user-represented-group:"+entryMeta.entry.getId(), "Snapshot: user represented group")
+            ))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+entryMeta.entry.getTargetId(), "Ban user"),
+                Button.success("vrchat-user-unban:"+entryMeta.entry.getTargetId(), "Unban user"),
+//                Button.secondary("vrchat-user-edit-manager-notes:"+entryMeta.entry.getTargetId(), "Edit manager notes"),
+                Button.primary("event-redact:"+entryMeta.entry.getId(), "Redact event"),
+                Button.secondary("event-unredact:"+entryMeta.entry.getId(), "Unredact event")
+            ))
             .completeAfter(1500L, TimeUnit.MILLISECONDS);
         
         entryMeta.auxMessageSnowflake = auxMessage.getId();
@@ -1785,9 +1795,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             Message message = channel
                 .sendMessageEmbeds(builder.build())
-                .addActionRow(Button.secondary("view-potential-avatar-matches", "View avatars"))
-                .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                        Button.success("vrchat-user-unban:"+userId, "Unban user"))
+                .addComponents(ActionRow.of(
+                    Button.secondary("view-potential-avatar-matches", "View avatars")
+                ))
+                .addComponents(ActionRow.of(
+                    Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                    Button.success("vrchat-user-unban:"+userId, "Unban user")
+                ))
                 .complete();
             if (versionedFile != null)
                 return message;
@@ -1820,8 +1834,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
             }
             return channel.sendMessageEmbeds(builder
                     .build())
-                .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                              Button.success("vrchat-user-unban:"+userId, "Unban user"))
+                .addComponents(ActionRow.of(
+                    Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                    Button.success("vrchat-user-unban:"+userId, "Unban user")
+                ))
                 .complete();
         });
     }
@@ -1851,8 +1867,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                Button.success("vrchat-user-unban:"+userId, "Unban user")
+            ))
             .complete();
         });
     }
@@ -1885,8 +1903,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                      Button.success("vrchat-user-unban:"+userId, "Unban user")
+            ))
             .complete();
         });
     }
@@ -1911,8 +1931,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                Button.success("vrchat-user-unban:"+userId, "Unban user")
+            ))
             .complete();
         });
     }
@@ -1936,8 +1958,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                      Button.success("vrchat-user-unban:"+userId, "Unban user")
+            ))
             .complete();
         });
     }
@@ -1959,8 +1983,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+userId, "Ban user"),
-                          Button.success("vrchat-user-unban:"+userId, "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                Button.success("vrchat-user-unban:"+userId, "Unban user")
+            ))
             .complete();
         });
     }
@@ -2349,8 +2375,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+target.getId(), "Ban user"),
-                          Button.success("vrchat-user-unban:"+target.getId(), "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+target.getId(), "Ban user"),
+                Button.success("vrchat-user-unban:"+target.getId(), "Unban user")
+            ))
             .complete();
         });
     }
@@ -2376,8 +2404,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                 .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .build())
-            .addActionRow(Button.danger("vrchat-user-ban:"+target.getId(), "Ban user"),
-                          Button.success("vrchat-user-unban:"+target.getId(), "Unban user"))
+            .addComponents(ActionRow.of(
+                Button.danger("vrchat-user-ban:"+target.getId(), "Ban user"),
+                Button.success("vrchat-user-unban:"+target.getId(), "Unban user")
+            ))
             .complete();
         });
     }

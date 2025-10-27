@@ -555,15 +555,15 @@ public class DPerms
     }
     public boolean check(ButtonInteractionEvent event)
     {
-        return this.isInGuild(event) && this.check(PermType.BUTTON_PRESS, event.getMember(), op(event.getButton().getId()), true);
+        return this.isInGuild(event) && this.check(PermType.BUTTON_PRESS, event.getMember(), op(event.getButton().getCustomId()), true);
     }
     public boolean check(StringSelectInteractionEvent event)
     {
-        return this.isInGuild(event) && this.check(PermType.STRING_SELECT, event.getMember(), op(event.getSelectMenu().getId()), true);
+        return this.isInGuild(event) && this.check(PermType.STRING_SELECT, event.getMember(), op(event.getSelectMenu().getCustomId()), true);
     }
     public boolean check(EntitySelectInteractionEvent event)
     {
-        return this.isInGuild(event) && this.check(PermType.ENTITY_SELECT, event.getMember(), op(event.getSelectMenu().getId()), true);
+        return this.isInGuild(event) && this.check(PermType.ENTITY_SELECT, event.getMember(), op(event.getSelectMenu().getCustomId()), true);
     }
     public boolean check(ModalInteractionEvent event)
     {

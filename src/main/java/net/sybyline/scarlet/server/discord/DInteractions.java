@@ -69,10 +69,12 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import net.dv8tion.jda.api.interactions.components.ComponentInteraction;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.text.TextInput;
-import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
-import net.dv8tion.jda.api.interactions.modals.Modal;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
+import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.interactions.modals.ModalInteraction;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 import net.sybyline.scarlet.util.Func;
@@ -926,12 +928,12 @@ public class DInteractions
                 return (this.messageId == null
                     ? this.hook.editOriginalEmbeds(embed)
                     : this.hook.editMessageEmbedsById(this.messageId, embed))
-                        .setActionRow(first.asDisabled(), prev.asDisabled(), self.asDisabled(), next.asDisabled(), last.asDisabled());
+                        .setComponents(ActionRow.of(first.asDisabled(), prev.asDisabled(), self.asDisabled(), next.asDisabled(), last.asDisabled()));
             }
             return this
                 .pages[pageIndex]
                 .applyContent(this.hook, this.messageId)
-                .setActionRow(first, prev, self, next, last);
+                .setComponents(ActionRow.of(first, prev, self, next, last));
         }
         public void queue(InteractionHook hook)
         {
@@ -1193,11 +1195,11 @@ public class DInteractions
                 event.deferEdit().queue();
             } break;
             case "pagination-select": {
-                event.replyModal(Modal.create(event.getButton().getId(), "Pagination")
-                    .addActionRow(TextInput.create("pagination-ordinal", "Page (1 to "+pagination.pages.length+", inclusive)", TextInputStyle.SHORT)
+                event.replyModal(Modal.create(event.getButton().getCustomId(), "Pagination")
+                    .addComponents(Label.of("Page (1 to "+pagination.pages.length+", inclusive)", TextInput.create("pagination-ordinal", TextInputStyle.SHORT)
                         .setRequiredRange(1, Integer.toString(pagination.pages.length).length())
                         .setValue(Integer.toString(pageOrdinal))
-                        .build())
+                        .build()))
                     .build()).queue();
             } break;
             default: throw new Exception("Unknown pagination action for "+id);
@@ -1354,7 +1356,7 @@ public class DInteractions
 
     public boolean handle(ButtonInteractionEvent event)
     {
-        String id = event.getButton().getId(),
+        String id = event.getButton().getCustomId(),
                parts[] = id.split(":"),
                op = parts[0];
         if (this.handlePagination(event, id, parts, op))
@@ -1382,7 +1384,7 @@ public class DInteractions
 
     public boolean handle(StringSelectInteractionEvent event)
     {
-        String id = event.getSelectMenu().getId(),
+        String id = event.getSelectMenu().getCustomId(),
                parts[] = id.split(":"),
                op = parts[0];
         StringSelectHandler select = this.stringSelects.get(op);
@@ -1408,7 +1410,7 @@ public class DInteractions
 
     public boolean handle(EntitySelectInteractionEvent event)
     {
-        String id = event.getSelectMenu().getId(),
+        String id = event.getSelectMenu().getCustomId(),
                parts[] = id.split(":"),
                op = parts[0];
         EntitySelectHandler select = this.entitySelects.get(op);
