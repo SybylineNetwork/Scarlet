@@ -7,6 +7,10 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.13
+  - Bump dependency `vrchatapi`: 1.20.1 -> 1.20.4
+  - Bump dependency `jda`: 5.6.1 -> 6.1.0
+
 ## 0.4.12
   - Added User Spawn Prop extended event
   - Added notes field for watched entities and groups
