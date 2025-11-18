@@ -123,6 +123,19 @@ public class ScarletVRChat implements Closeable
                             return null;
                         }
                         JsonElement je = prevJE.read(in);
+                        
+                        // Fix for VRChat API change: currentAvatarTags is now an array instead of string
+                        // Strip it from presence object to avoid deserialization errors
+                        if (je.isJsonObject()) {
+                            JsonObject obj = je.getAsJsonObject();
+                            if (obj.has("presence") && obj.get("presence").isJsonObject()) {
+                                JsonObject presence = obj.getAsJsonObject("presence");
+                                if (presence.has("currentAvatarTags")) {
+                                    presence.remove("currentAvatarTags");
+                                }
+                            }
+                        }
+                        
                         T value;
                         try {
                             value = prevTA.fromJsonTree(je);
