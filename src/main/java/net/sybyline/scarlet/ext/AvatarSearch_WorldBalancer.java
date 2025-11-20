@@ -5,7 +5,7 @@ import java.io.IOException;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 
 /**
- * https://worldbalancer.com/about-us
+ * https://avatar.worldbalancer.com
  */
 public interface AvatarSearch_WorldBalancer
 {
