@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import io.github.vrchatapi.model.Avatar;
+import io.github.vrchatapi.model.FileAnalysis;
 import io.github.vrchatapi.model.InventoryItem;
 import io.github.vrchatapi.model.InventoryItemType;
 import io.github.vrchatapi.model.LimitedUserGroups;
@@ -343,7 +344,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 if (watchedAvatar.message != null)
                     sb.append(' ').append(watchedAvatar.message);
                 this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
-                this.scarlet.ttsService.submit("wg-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
+                this.scarlet.ttsService.submit("wa-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
             });
         
         this.scarlet.discord.emitExtendedUserAvatar(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, avatarDisplayName, potentialIds);
@@ -362,7 +363,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         {
             advisories.add(watchedUser.message);
             this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
-            this.scarlet.ttsService.submit("new-"+Long.toUnsignedString(System.nanoTime()), watchedUser.message);
+            this.scarlet.ttsService.submit("wu-"+Long.toUnsignedString(System.nanoTime()), watchedUser.message);
         }
         
         User user = this.scarlet.vrc.getUser(userId);
@@ -561,10 +562,60 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                         {
                             String name = file.getName().substring(9, cidx);
                             this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, file, versionedFile);
+                            FileAnalysis analysis = this.scarlet.vrc.getFileAnalysis(versionedFile.id, versionedFile.version);
+                            if (analysis != null)
+                            {
+                                String avatarPerf = analysis.getPerformanceRating();
+                                String[] userIds = this.clientLocation_userDisplayName2avatarDisplayName
+                                    .entrySet()
+                                    .stream()
+                                    .filter(entry -> name.equals(entry.getValue()))
+                                    .map(Map.Entry::getKey)
+                                    .map(this.clientLocation_userDisplayName2userId::get)
+                                    .toArray(String[]::new);
+                                if (preamble)
+                                {
+                                    this.clientLocation_pendingUpdates.add(() ->
+                                    {
+                                        for (String userId : userIds)
+                                        {
+                                            this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarPerf = avatarPerf);
+                                        }
+                                    });
+                                }
+                                else
+                                {
+                                    for (String userId : userIds)
+                                    {
+                                        this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarPerf = avatarPerf);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             } break;
+            }
+        }
+    }
+
+    @Override
+    public void log_videoLoad(boolean preamble, LocalDateTime timestamp, String userDisplayName, String url, String title)
+    {
+        if (!preamble)
+        {
+            if (this.isInGroupInstance)
+            {
+                String userId = this.clientLocation_userDisplayName2userId.get(userDisplayName);
+                if (userId == null)
+                    userId = this.scarlet.vrc.searchUserId(userDisplayName);
+                if (userId == null)
+                    userId = "";
+                else
+                    this.clientLocation_userDisplayName2userId.put(userDisplayName, userId);
+                this.scarlet.discord.emitExtendedUserVideo(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, url, title);
+                OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
+                this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_VIDEO, odt, userId, userDisplayName, url, title);
             }
         }
     }

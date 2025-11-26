@@ -411,6 +411,7 @@ public class ScarletUI implements AutoCloseable
         String name;
         String id;
         String avatarName;
+        String avatarPerf;
         Period acctdays;
         LocalDateTime joined;
         LocalDateTime left;
@@ -499,6 +500,7 @@ public class ScarletUI implements AutoCloseable
             this.propstable.addProperty("Name", false, true, String.class, $ -> $.name);
             this.propstable.addProperty("Id", false, true, String.class, $ -> $.id);
             this.propstable.addProperty("Avatar", false, true, String.class, $ -> $.avatarName);
+            this.propstable.addProperty("Performance", false, true, String.class, $ -> $.avatarPerf);
             this.propstable.addProperty("AcctAge", "Acc-Age", false, true, Period.class, $ -> $.acctdays);
             this.propstable.addProperty("Joined", false, true, LocalDateTime.class, $ -> $.joined);
             this.propstable.addProperty("Left", false, true, LocalDateTime.class, $ -> $.left);

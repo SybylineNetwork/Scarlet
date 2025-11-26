@@ -1739,6 +1739,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                     .build())
+                .addComponents(ActionRow.of(
+                    Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                    Button.success("vrchat-user-unban:"+userId, "Unban user")
+                ))
                 .complete();
         });
     }
@@ -1758,6 +1762,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
                     .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
                     .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
                     .build())
+                .addComponents(ActionRow.of(
+                    Button.danger("vrchat-user-ban:"+userId, "Ban user"),
+                    Button.success("vrchat-user-unban:"+userId, "Unban user")
+                ))
                 .complete();
         });
     }
@@ -1810,6 +1818,25 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 this.avatarName2Switches.put(avatarDisplayName, list = new ArrayList<>());
             list.add(new AviSwitch(message, builder, potentialIds0));
             return message;
+        });
+    }
+
+    @Override
+    public void emitExtendedUserVideo(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String videoUrl, String videoTitle)
+    {
+        this.condEmitEx(GroupAuditTypeEx.USER_VIDEO, false, false, location, (channelSf, guild, channel) ->
+        {
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                    .setTitle(MarkdownSanitizer.escape(displayName)+" loaded video", "https://vrchat.com/home/user/"+userId)
+                    .addField("User ID", "`"+userId+"`", false)
+                    .addField("Location", "`"+location+"`", false)
+                    .addField("Video URL", "`"+videoUrl+"`", false)
+                    .addField("Video Title", MarkdownSanitizer.escape(videoTitle), false)
+                    .setColor(GroupAuditTypeEx.USER_VIDEO.color)
+                    .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+                    .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                    .build())
+                .complete();
         });
     }
 

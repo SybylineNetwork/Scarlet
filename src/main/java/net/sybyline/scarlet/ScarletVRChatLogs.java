@@ -62,6 +62,8 @@ public class ScarletVRChatLogs implements Closeable
         
         void log_apiRequest(boolean preamble, LocalDateTime timestamp, int index, String method, String url);
         
+        void log_videoLoad(boolean preamble, LocalDateTime timestamp, String userDisplayName, String url, String title);
+        
     }
 
     private final Listener listener;
@@ -170,6 +172,29 @@ public class ScarletVRChatLogs implements Closeable
             double lifetimeSeconds = MiscUtils.parseDoubleElse(text.substring(41), Double.NaN);
             this.listener.log_userQuit(preamble, timestamp, lifetimeSeconds);
         }
+    // Video players
+        else if (text.startsWith("[<color=#9C6994>USharpVideo</color>] Started video load for URL: ") && (cidx = text.lastIndexOf(", requested by ")) != -1)
+        {
+            String url = text.substring(65, cidx),
+                   userDisplayName = text.substring(cidx + 15);
+            this.listener.log_videoLoad(preamble, timestamp, userDisplayName, url, "");
+        }
+        // old version (pre 2025-02-12)
+        else if (text.startsWith("[USharpVideo] Started video load for URL: ") && (cidx = text.lastIndexOf(", requested by ")) != -1)
+        {
+            String url = text.substring(42, cidx),
+                   userDisplayName = text.substring(cidx + 15);
+            this.listener.log_videoLoad(preamble, timestamp, userDisplayName, url, "");
+        }
+ /*
+        else if (text.startsWith("[VRCX] "))
+        {
+            VrcxVideoPlay.Info vrcx = VrcxVideoPlay.parse(text);
+            if (vrcx.url.isEmpty())
+                ;//vrcx.url = ; // TODO : reverse resolve somehow with more log entries?
+            this.listener.log_videoLoad(preamble, timestamp, vrcx.owner, vrcx.url, vrcx.title);
+        }
+//*/
     }
 
     private final Thread tailThread;

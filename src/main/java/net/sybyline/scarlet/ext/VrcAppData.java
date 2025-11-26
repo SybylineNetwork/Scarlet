@@ -10,4 +10,8 @@ public interface VrcAppData
         System.getProperty("user.home"),
         (Platform.CURRENT.is$nix() ? ".steam/steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/" : "")
             + "AppData/LocalLow/VRChat/VRChat");
+    File TEMP = new File(
+        System.getProperty("user.home"),
+        (Platform.CURRENT.is$nix() ? ".steam/steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/" : "")
+            + "AppData/Local/Temp/VRChat/VRChat");
 }

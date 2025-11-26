@@ -50,6 +50,7 @@ import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
 import io.github.vrchatapi.model.CreateGroupInviteRequest;
 import io.github.vrchatapi.model.CurrentUser;
+import io.github.vrchatapi.model.FileAnalysis;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupInstance;
@@ -198,6 +199,7 @@ public class ScarletVRChat implements Closeable
         this.cachedProps = new ScarletJsonCache<>("prop", Prop.class);
         this.cachedInventoryItems = new ScarletJsonCache<>("inv", InventoryItem.class);
         this.cachedModelFiles = new ScarletJsonCache<>("file", ModelFile.class);
+        this.cachedFileAnalyses = new ScarletJsonCache<>("file.analysis", FileAnalysis.class);
     }
 
     final Scarlet scarlet;
@@ -218,6 +220,7 @@ public class ScarletVRChat implements Closeable
     final ScarletJsonCache<Prop> cachedProps;
     final ScarletJsonCache<InventoryItem> cachedInventoryItems;
     final ScarletJsonCache<ModelFile> cachedModelFiles;
+    final ScarletJsonCache<FileAnalysis> cachedFileAnalyses;
     long localDriftMillis = 0L;
 
     public ApiClient getClient()
@@ -274,7 +277,7 @@ public class ScarletVRChat implements Closeable
                     LOG.info("Logged in (cached-verified)");
                     try
                     {
-                        this.currentUserId = (this.currentUser = auth.getCurrentUser()).getId();
+                        this.currentUserId = (this.currentUser = this.getCurrentUser(auth)).getId();
                     }
                     catch (ApiException apiex)
                     {
@@ -398,7 +401,7 @@ public class ScarletVRChat implements Closeable
 
             try
             {
-                this.currentUserId = (this.currentUser = auth.getCurrentUser()).getId();
+                this.currentUserId = (this.currentUser = this.getCurrentUser(auth)).getId();
             }
             catch (ApiException apiex)
             {
@@ -424,6 +427,19 @@ public class ScarletVRChat implements Closeable
                 }
             }
         }
+    }
+    /**
+     * <u><i><b>REMOVE AFTER API SDK UPDATE</b></i></u>
+     */
+    @Deprecated
+    CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
+    {
+        JsonObject json = this.client.<JsonObject>execute(auth.getCurrentUserCall(null), JsonObject.class).getData(),
+                   presence = json.getAsJsonObject("presence");
+        JsonElement cat = presence.get("currentAvatarTags");
+        if (cat != null && cat.isJsonArray())
+            presence.addProperty("currentAvatarTags", cat.getAsJsonArray().asList().stream().map(JsonElement::getAsString).collect(Collectors.joining(",")));
+        return JSON.getGson().fromJson(json, CurrentUser.class);
     }
 
     public boolean logout()
@@ -522,6 +538,11 @@ public class ScarletVRChat implements Closeable
             this.scarlet.checkVrcRefresh(apiex);
             return null;
         }
+    }
+    public String searchUserId(String name)
+    {
+        List<LimitedUserSearch> search = this.searchUsers(name, 100, 0);
+        return search == null ? null : search.stream().filter(user -> name.equals(user.getDisplayName())).findFirst().map(LimitedUserSearch::getId).orElse(null);
     }
 
     public User getUser(String userId)
@@ -992,6 +1013,35 @@ public class ScarletVRChat implements Closeable
                 this.cachedModelFiles.add404(fileId);
             else
                 LOG.error("Error during get file: "+apiex.getMessage());
+            return null;
+        }
+    }
+
+    public FileAnalysis getFileAnalysis(String fileId, int version)
+    {
+        return this.getFileAnalysis(fileId, version, Long.MAX_VALUE);
+    }
+    public FileAnalysis getFileAnalysis(String fileId, int version, long minEpoch)
+    {
+        FileAnalysis analysis = this.cachedFileAnalyses.get(fileId, minEpoch);
+        if (analysis != null)
+            return analysis;
+        if (this.cachedFileAnalyses.is404(fileId))
+            return null;
+        FilesApi files = new FilesApi(this.client);
+        try
+        {
+            analysis = files.getFileAnalysis(fileId, version);
+            this.cachedFileAnalyses.put(fileId, analysis);
+            return analysis;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedFileAnalyses.add404(fileId);
+            else
+                LOG.error("Error during get file analysis: "+apiex.getMessage());
             return null;
         }
     }

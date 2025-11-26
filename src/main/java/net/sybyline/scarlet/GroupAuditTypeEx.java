@@ -14,6 +14,7 @@ public enum GroupAuditTypeEx implements DEnum.DEnumString<GroupAuditTypeEx>
     USER_JOIN                   ("groupex.instance.user.join"          , "User Join"                     , 0x00_007F00),
     USER_LEAVE                  ("groupex.instance.user.leave"         , "User Leave"                    , 0x00_7F7F00),
     USER_AVATAR                 ("groupex.instance.user.avatar"        , "User Switch Avatar"            , 0x00_FF00FF),
+    USER_VIDEO                  ("groupex.instance.user.video"         , "User Load Video"               , 0x00_7F00FF),
     VTK_START                   ("groupex.instance.vtk"                , "Vote-to-Kick Initiated"        , 0x00_FF7F00),
     SPAWN_PEDESTAL              ("groupex.instance.user.pedestal"      , "User Spawn Pedestal"           , 0x00_7F007F),
     SPAWN_STICKER               ("groupex.instance.user.sticker"       , "User Spawn Sticker"            , 0x00_7F007F),
