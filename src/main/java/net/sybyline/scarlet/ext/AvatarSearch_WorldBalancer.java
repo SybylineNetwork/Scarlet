@@ -5,7 +5,7 @@ import java.io.IOException;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 
 /**
- * https://worldbalancer.com/about-us
+ * https://avatar.worldbalancer.com
  */
 public interface AvatarSearch_WorldBalancer
 {
@@ -28,7 +28,7 @@ public interface AvatarSearch_WorldBalancer
 
     static boolean putAvatarExternal(String id, String userid)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/v1/vrchat/avatars/store/putavatarExternal", HttpURLInputStream.writeAsJson(null, null, PutAvatarExternalRequest.class, new PutAvatarExternalRequest(id, userid))))
+        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/v2/vrchat/avatars/store/putavatarEx", HttpURLInputStream.writeAsJson(null, null, PutAvatarExternalRequest.class, new PutAvatarExternalRequest(id, userid))))
         {
         }
         catch (IOException ioex)
