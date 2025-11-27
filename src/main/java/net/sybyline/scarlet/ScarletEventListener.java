@@ -32,6 +32,7 @@ import io.github.vrchatapi.model.Prop;
 import io.github.vrchatapi.model.User;
 
 import net.sybyline.scarlet.ext.AvatarSearch;
+import net.sybyline.scarlet.util.CollectionMap;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.TTSService;
@@ -53,6 +54,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userId2userDisplayName = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2userId = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2avatarDisplayName = new ConcurrentHashMap<>();
+        this.clientLocation_userDisplayName2avatarPerformance = new ConcurrentHashMap<>();
+        this.clientLocation_avatarDisplayName2userDisplayName = CollectionMap.setsConcurrent();
         this.clientLocation_userId2userJoined = new ConcurrentHashMap<>();
         this.clientLocation_pendingUpdates = Collections.synchronizedList(new ArrayList<>());
         this.clientLocationPrev_userIds = new HashSet<>();
@@ -82,9 +85,18 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     Set<String> clientLocation_userIdsJoinOrder;
     final Map<String, String> clientLocation_userId2userDisplayName,
                               clientLocation_userDisplayName2userId,
-                              clientLocation_userDisplayName2avatarDisplayName;
+                              clientLocation_userDisplayName2avatarDisplayName,
+                              clientLocation_userDisplayName2avatarPerformance;
+    final CollectionMap.OfSets<String, String> clientLocation_avatarDisplayName2userDisplayName;
     final Map<String, OffsetDateTime> clientLocation_userId2userJoined;
     final List<Runnable> clientLocation_pendingUpdates;
+    void pendingOrNow(boolean preamble, Runnable runnable)
+    {
+        if (preamble)
+            this.clientLocation_pendingUpdates.add(runnable);
+        else
+            runnable.run();
+    }
     Set<String> clientLocationPrev_userIds;
     boolean isTailerLive,
             isInGroupInstance,
@@ -205,23 +217,13 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         List<String> advisories = new ArrayList<>();
         int[] priority = new int[]{Integer.MIN_VALUE+1};
         
-        if (preamble)
+        this.pendingOrNow(preamble, () ->
         {
-            this.clientLocation_pendingUpdates.add(() ->
-            {
-                Color text_color = this.checkPlayer(advisories, priority, true, userDisplayName, userId);
-                String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
-                this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
-                this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
-            });
-        }
-        else
-        {
-            Color text_color = this.checkPlayer(advisories, priority, preamble, userDisplayName, userId);
+            Color text_color = this.checkPlayer(advisories, priority, true, userDisplayName, userId);
             String advisory = advisories == null || advisories.isEmpty() ? null : advisories.stream().collect(Collectors.joining("\n"));
             this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
             this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
-        }
+        });
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
 
@@ -247,7 +249,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     {
         this.clientLocation_userId2userDisplayName.remove(userId);
         this.clientLocation_userIdsJoinOrder.remove(userId);
-        this.clientLocation_userDisplayName2avatarDisplayName.remove(userDisplayName);
+        this._setPlayerAvatar(userDisplayName, null);
         this.scarlet.ui.playerLeave(!this.isTailerLive, userId, userDisplayName, timestamp);
         
         if (!preamble && this.isInGroupInstance)
@@ -269,24 +271,34 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         String userId = this.clientLocation_userDisplayName2userId.get(userDisplayName);
         if (userId != null)
         {
-            if (preamble)
-            {
-                this.clientLocation_pendingUpdates.add(() ->
-                {
-                    this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
-                });
-            }
-            else
+            this.pendingOrNow(preamble, () ->
             {
                 this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
-            }
+            });
         }
-        this.clientLocation_userDisplayName2avatarDisplayName.put(userDisplayName, avatarDisplayName);
+        this._setPlayerAvatar(userDisplayName, avatarDisplayName);
         if (!preamble && this.isInGroupInstance && userId != null)
         {
             OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
             this.switchPlayerAvatar(preamble, odt, timestamp, userDisplayName, userId, avatarDisplayName);
         }
+    }
+
+    void _setPlayerAvatar(String userDisplayName, String avatarDisplayName)
+    {
+        if (avatarDisplayName == null)
+        {
+            String oldAvatarDisplayName = this.clientLocation_userDisplayName2avatarDisplayName.remove(userDisplayName);
+            if (oldAvatarDisplayName != null)
+                this.clientLocation_avatarDisplayName2userDisplayName.valuesRemove(oldAvatarDisplayName, userDisplayName);
+            return;
+        }
+        String oldAvatarDisplayName = this.clientLocation_userDisplayName2avatarDisplayName.put(userDisplayName, avatarDisplayName);
+        if (avatarDisplayName.equals(oldAvatarDisplayName))
+            return;
+        if (oldAvatarDisplayName != null)
+            this.clientLocation_avatarDisplayName2userDisplayName.valuesRemove(oldAvatarDisplayName, userDisplayName);
+        this.clientLocation_avatarDisplayName2userDisplayName.valuesAdd(avatarDisplayName, userDisplayName);
     }
 
     String[] searchAvatar(String avatarDisplayName)
@@ -546,7 +558,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             }
         }
         // always
-        if (this.isInGroupInstance)
+//      if (this.isInGroupInstance)
         {
             switch (method.toLowerCase())
             {
@@ -561,36 +573,41 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                         if (file.getName().startsWith("Avatar - ") && (cidx = file.getName().lastIndexOf(" - Asset bundle - ")) != -1)
                         {
                             String name = file.getName().substring(9, cidx);
-                            this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, file, versionedFile);
-                            FileAnalysis analysis = this.scarlet.vrc.getFileAnalysis(versionedFile.id, versionedFile.version);
+                            if (this.isInGroupInstance && !preamble)
+                            {
+                                this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, file, versionedFile);
+                            }
+                            FileAnalysis analysis = this.scarlet.vrc.getFileAnalysis(versionedFile.id, versionedFile.version, System.currentTimeMillis() - 60_000L);
+                            String avatarPerf0 = null;
                             if (analysis != null)
                             {
-                                String avatarPerf = analysis.getPerformanceRating();
-                                String[] userIds = this.clientLocation_userDisplayName2avatarDisplayName
-                                    .entrySet()
-                                    .stream()
-                                    .filter(entry -> name.equals(entry.getValue()))
-                                    .map(Map.Entry::getKey)
-                                    .map(this.clientLocation_userDisplayName2userId::get)
-                                    .toArray(String[]::new);
-                                if (preamble)
+                                avatarPerf0 = analysis.getPerformanceRating();
+                            }
+                            if (avatarPerf0 == null)
+                            {
+                                analysis = this.scarlet.vrc.getFileAnalysis(versionedFile.id, versionedFile.version - 1);
+                                if (analysis != null)
                                 {
-                                    this.clientLocation_pendingUpdates.add(() ->
-                                    {
-                                        for (String userId : userIds)
-                                        {
-                                            this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarPerf = avatarPerf);
-                                        }
-                                    });
+                                    avatarPerf0 = analysis.getPerformanceRating();
                                 }
-                                else
+                                if (avatarPerf0 == null)
                                 {
-                                    for (String userId : userIds)
-                                    {
-                                        this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarPerf = avatarPerf);
-                                    }
+                                    Scarlet.LOG.warn("Performance missing for "+versionedFile+": "+analysis);
                                 }
                             }
+                            String avatarPerf = avatarPerf0 != null ? avatarPerf0 : "Unknown";
+                            this.clientLocation_avatarDisplayName2userDisplayName
+                                .valuesGetOrEmpty(name)
+                                .forEach(userDisplayName ->
+                                {
+                                     Scarlet.LOG.info(userDisplayName+"'s chosen avatar "+name+" is "+avatarPerf);
+                                     this.clientLocation_userDisplayName2avatarPerformance.put(userDisplayName, avatarPerf);
+                                     String userId = this.clientLocation_userDisplayName2userId.get(userDisplayName);
+                                     this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> {
+                                         Scarlet.LOG.info(userDisplayName+"'s CHOSEN avatar "+name+" is "+avatarPerf);
+                                         $.avatarPerf = avatarPerf;
+                                     });
+                                });
                         }
                     }
                 }

@@ -11,7 +11,7 @@ import io.github.vrchatapi.model.ModelFile;
 public class VersionedFile
 {
 
-    static final Pattern pattern = Pattern.compile("(?<id>file_\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12})[/:](?<version>\\d+)([/:](?<qualifier>[\\-\\?\\&\\/\\w]))?");
+    static final Pattern pattern = Pattern.compile("(?<id>file_\\w{8}-\\w{4}-\\w{4}-\\w{4}-\\w{12})[/:](?<version>-?\\d+)([/:](?<qualifier>[\\-\\?\\&\\/\\w]+))?");
     public static final int DEFAULT_FILE_VERSION = 1;
 
     public static VersionedFile parse(String string)

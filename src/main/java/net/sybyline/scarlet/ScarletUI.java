@@ -135,6 +135,7 @@ public class ScarletUI implements AutoCloseable
         this.ssettings = Collections.synchronizedList(new ArrayList<>());
         this.propstableColumsDirty = false;
         this.connectedPlayers = new HashMap<>();
+        this.pendingUpdates = new HashMap<>();
         
         this.initUI();
     }
@@ -164,6 +165,14 @@ public class ScarletUI implements AutoCloseable
         });
     }
 
+    void updatePending(String id, ConnectedPlayer player)
+    {
+        List<Func.V1.NE<ConnectedPlayer>> pending = this.pendingUpdates.remove(id);
+        if (pending != null)
+            for (Func.V1.NE<ConnectedPlayer> update : pending)
+                update.invoke(player);
+    }
+
     public synchronized void playerJoin(boolean initialPreamble, String id, String name, LocalDateTime joined, String advisory, Color text_color, int priority, boolean isRejoinFromPrev)
     {
         User user = this.scarlet.vrc.getUser(id);
@@ -187,6 +196,8 @@ public class ScarletUI implements AutoCloseable
             player.text_color = text_color;
             player.priority = priority;
             player.ageVerificationStatus = user.getAgeVerificationStatus();
+            player.avatarPerf = this.scarlet.eventListener.clientLocation_userDisplayName2avatarPerformance.get(name);
+            this.updatePending(id, player);
             if (initialPreamble)
             {
                 ; // noop
@@ -210,6 +221,8 @@ public class ScarletUI implements AutoCloseable
             player.text_color = text_color;
             player.priority = priority;
             player.ageVerificationStatus = user.getAgeVerificationStatus();
+            player.avatarPerf = this.scarlet.eventListener.clientLocation_userDisplayName2avatarPerformance.get(name);
+            this.updatePending(id, player);
             this.connectedPlayers.put(id, player);
             if (initialPreamble)
             {
@@ -234,7 +247,13 @@ public class ScarletUI implements AutoCloseable
     {
         ConnectedPlayer player = this.connectedPlayers.get(id);
         if (player == null)
+        {
+            List<Func.V1.NE<ConnectedPlayer>> pending = this.pendingUpdates.get(id);
+            if (pending == null)
+                this.pendingUpdates.put(id, pending = new ArrayList<>());
+            pending.add(update);
             return;
+        }
         update.invoke(player);
         this.propstable.updateEntry(player);
         if (initialPreamble)
@@ -254,6 +273,7 @@ public class ScarletUI implements AutoCloseable
         {
             player.name = name;
             player.left = left;
+            this.updatePending(id, player);
             if (initialPreamble)
             {
                 ; // noop
@@ -269,6 +289,7 @@ public class ScarletUI implements AutoCloseable
             player.id = id;
             player.name = name;
             player.left = left;
+            this.updatePending(id, player);
             this.connectedPlayers.put(id, player);
             if (initialPreamble)
             {
@@ -405,6 +426,7 @@ public class ScarletUI implements AutoCloseable
     final List<SerializableSetting<?>> ssettings;
     boolean propstableColumsDirty;
     final Map<String, ConnectedPlayer> connectedPlayers;
+    final Map<String, List<Func.V1.NE<ConnectedPlayer>>> pendingUpdates;
     
     class ConnectedPlayer
     {

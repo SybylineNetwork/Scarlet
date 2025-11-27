@@ -7,6 +7,9 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.15-rc1
+  - Fixed user current avatar performance updating in only one case
+
 ## 0.4.14
   - Added user current avatar performance to Instance UI
   - Updated WorldBalancer request paths
