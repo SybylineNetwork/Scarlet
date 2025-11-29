@@ -20,12 +20,12 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class TTSService implements Closeable
+public class OldTTSService implements Closeable
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/TTSService");
 
-    public TTSService(File dir, Listener listener) throws IOException
+    public OldTTSService(File dir, Listener listener) throws IOException
     {
         this.running = true;
         this.dir = dir;
@@ -39,7 +39,7 @@ public class TTSService implements Closeable
             psname = "powershell";
         }
         
-        byte[] srcBytes = MiscUtils.readAllBytes(TTSService.class.getResourceAsStream("TTSService.ps1"));
+        byte[] srcBytes = MiscUtils.readAllBytes(OldTTSService.class.getResourceAsStream("TTSService.ps1"));
         String sourceString = new String(srcBytes, StandardCharsets.UTF_8);
         String psb64 = Base64.getEncoder().encodeToString(sourceString.getBytes(StandardCharsets.UTF_16LE));
         
@@ -80,7 +80,7 @@ public class TTSService implements Closeable
     public interface Listener
     {
         
-        void tts_init(TTSService tts);
+        void tts_init(OldTTSService tts);
         
         void tts_ready(String job, File file);
         

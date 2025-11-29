@@ -35,11 +35,11 @@ import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.CollectionMap;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
-import net.sybyline.scarlet.util.TTSService;
+import net.sybyline.scarlet.util.OldTTSService;
 import net.sybyline.scarlet.util.VersionedFile;
 import net.sybyline.scarlet.util.VrcIds;
 
-public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSService.Listener
+public class ScarletEventListener implements ScarletVRChatLogs.Listener, OldTTSService.Listener
 {
 
     public ScarletEventListener(Scarlet scarlet)
@@ -640,7 +640,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     // TTSService.Listener
 
     @Override
-    public void tts_init(TTSService tts)
+    public void tts_init(OldTTSService tts)
     {
     }
 
