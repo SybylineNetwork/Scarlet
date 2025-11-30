@@ -22,6 +22,7 @@ public enum GroupAuditTypeEx implements DEnum.DEnumString<GroupAuditTypeEx>
     SPAWN_EMOJI                 ("groupex.instance.user.emoji"         , "User Spawn Emoji"              , 0x00_7F007F),
     SPAWN_PROP                  ("groupex.instance.user.prop"          , "User Spawn Prop"               , 0x00_7F007F),
     INSTANCE_MONITOR            ("groupex.instance.monitor"            , "Instance Monitor"              , 0x00_007F7F),
+    INSTANCE_ENFORCE            ("groupex.instance.enforce"            , "Instance Enforcement"          , 0x00_FF0000),
     MOD_SUMMARY                 ("groupex.periodic.mod_summary"        , "Moderation Summary"            , 0x00_7F7FFF),
     SUGGESTED_MODERATION        ("groupex.heuristic.mod"               , "Suggested Moderation"          , 0x00_FF007F),
     OUTSTANDING_MODERATION      ("groupex.outstanding.mod"             , "Outstanding Moderation"        , 0x00_FF7F00),

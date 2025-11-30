@@ -2,7 +2,8 @@ package net.sybyline.scarlet.util;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -14,9 +15,9 @@ public class TemplateStrings<T>
     static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{(?<id>[\\-\\:\\.\\w]+)\\}");
     static final Map<Class<?>, TemplateStrings<?>> MAP = new ConcurrentHashMap<>();
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    static <T> TemplateStrings<T> of(T parameters)
+    public static <T> TemplateStrings<T> of(Class<T> type)
     {
-        return (TemplateStrings)MAP.computeIfAbsent(parameters.getClass(), TemplateStrings::new);
+        return (TemplateStrings)MAP.computeIfAbsent(type, TemplateStrings::new);
     }
 
     TemplateStrings(Class<T> clazz)
@@ -26,7 +27,12 @@ public class TemplateStrings<T>
                 this.fields.put(field.getName(), field);
     }
 
-    final Map<String, Field> fields = new HashMap<>();
+    final Map<String, Field> fields = new LinkedHashMap<>();
+
+    public Map<String, Field> fields()
+    {
+        return Collections.unmodifiableMap(this.fields);
+    }
 
     public Field field(String id)
     {
@@ -61,9 +67,10 @@ public class TemplateStrings<T>
         return result.toString();
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> String interpolateTemplate(CharSequence text, T parameters)
     {
-        return of(parameters).interpolate(text, parameters);
+        return TemplateStrings.<T>of((Class<T>)parameters.getClass()).interpolate(text, parameters);
     }
 
 }

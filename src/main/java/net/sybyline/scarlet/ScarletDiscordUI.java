@@ -1361,6 +1361,30 @@ public class ScarletDiscordUI
         }
     }
 
+    @ModalSub("edit-report-template")
+    public void editReportTemplate(ModalInteractionEvent event)
+    {
+        String contents = event.getValue("report-template").getAsString();
+        try
+        {
+            if (this.discord.scarlet.vrcReport.trySet(contents))
+            {
+                LOG.info("Successfully edited report template");
+                event.replyFormat("Successfully edited report template").setEphemeral(true).queue();
+            }
+            else
+            {
+                LOG.warn("Failed to edited report template: empty content");
+                event.replyFormat("Failed to edited report template: empty content").setEphemeral(true).queue();
+            }
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception editing report template", ex);
+            event.replyFormat("Exception while editing report template: %s", ex).setEphemeral(true).queue();
+        }
+    }
+
     @StringSel("set-audit-aux-webhooks")
     public void setAuditAuxWebhooks(StringSelectInteractionEvent event)
     {

@@ -52,12 +52,15 @@ import net.sybyline.scarlet.ui.Swing;
 import net.sybyline.scarlet.util.GithubApi;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.JsonAdapters;
+import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MavenDepsLoader;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Platform;
 import net.sybyline.scarlet.util.ProcLock;
 import net.sybyline.scarlet.util.TTSService;
 import net.sybyline.scarlet.util.VrcIds;
+import net.sybyline.scarlet.util.EnforcementAgeState;
+import net.sybyline.scarlet.util.EnforcementListState;
 
 public class Scarlet implements Closeable
 {
@@ -85,7 +88,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.15-rc1",
+        VERSION = "0.4.15-rc2",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -342,6 +345,9 @@ public class Scarlet implements Closeable
                                      alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
                                      alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true),
                                      showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
+    final ScarletUI.Setting<EnforcementAgeState> enforceInstances18plus = this.ui.settingEnum("enforce_instances_18_plus", "Instances: enforce 18+", EnforcementAgeState.DISABLED);
+    final ScarletUI.Setting<EnforcementListState> enforceInstancesWorlds = this.ui.settingEnum("enforce_instances_worlds", "Instances: enforce worlds", EnforcementListState.DISABLED);
+    final ScarletUI.Setting<String[]> enforceInstancesWorldList = this.ui.settingStringArr("enforce_instances_world_list", "Instances: enforce world list", new String[0]);
     final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
     final ScarletUI.Setting<Void> uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
 
@@ -422,6 +428,7 @@ public class Scarlet implements Closeable
                 if (!this.staffMode) try
                 {
                     this.maybeCheckInstances();
+                    this.maybeEnforceInstances();
                 }
                 catch (Exception ex)
                 {
@@ -727,6 +734,17 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
     }
 
+    OffsetDateTime lastInstanceEnforce = OffsetDateTime.now(ZoneOffset.UTC);
+    void maybeEnforceInstances()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (now.isAfter(this.lastInstanceEnforce.plusMinutes(1L)))
+        {
+            this.lastInstanceEnforce = now;
+            this.enforceInstances();
+        }
+    }
+
     void checkInstances()
     {
         List<GroupInstance> groupInstances = this.vrc.getGroupInstances(this.vrc.groupId);
@@ -742,6 +760,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
             locations.remove(location);
             ScarletData.InstanceEmbedMessage instanceEmbedMessage = this.data.liveInstancesMetadata_getLocationInstanceEmbedMessage(location, false);
             this.discord.emitExtendedInstanceMonitor(this, location, instanceEmbedMessage);
+            
         }
         if (locations.isEmpty())
             return;
@@ -750,6 +769,102 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
             String auditEntryId = this.data.liveInstancesMetadata_getLocationAudit(location, true);
             ScarletData.InstanceEmbedMessage instanceEmbedMessage = this.data.liveInstancesMetadata_getLocationInstanceEmbedMessage(location, true);
             this.discord.emitExtendedInstanceInactive(this, location, auditEntryId, instanceEmbedMessage);
+        }
+    }
+
+    void enforceInstances()
+    {
+        EnforcementAgeState enforceAge = this.enforceInstances18plus.get();
+        EnforcementListState enforceWorlds = this.enforceInstancesWorlds.get();
+        if (enforceAge == EnforcementAgeState.DISABLED && enforceWorlds == EnforcementListState.DISABLED)
+            return;
+        List<GroupInstance> groupInstances = this.vrc.getGroupInstances(this.vrc.groupId);
+        if (groupInstances == null || groupInstances.isEmpty())
+            return;
+        String[] enforceWorldsList = this.enforceInstancesWorldList.get();
+//        this.vrc.getWorld(API_BASE_0)t
+        for (GroupInstance groupInstance : groupInstances)
+        {
+            String worldId = groupInstance.getWorld().getId(),
+                   worldName = groupInstance.getWorld().getName(),
+                   instanceId = groupInstance.getInstanceId(),
+                   location = groupInstance.getLocation();
+            switch (enforceWorlds)
+            {
+            case ENABLED_WHITELIST:
+            {
+                if (0 > MiscUtils.indexOf(worldId, enforceWorldsList))
+                {
+                    if (this.vrc.closeInstance(worldId, instanceId, true, null) != null)
+                    {
+                        this.discord.emitExtendedInstanceEnforcement(this, location, worldName, "World not whitelisted");
+                        LOG.info("Instance enforcement: "+location+" ("+worldName+"): World not whitelisted");
+                    }
+                    else
+                    {
+                        LOG.warn("Instance enforcement failure: "+location+" ("+worldName+"): World not whitelisted");
+                    }
+                    continue;
+                }
+            }
+            break;
+            case ENABLED_BLACKLIST:
+            {
+                if (0 >= MiscUtils.indexOf(groupInstance.getWorld().getId(), enforceWorldsList))
+                {
+                    if (this.vrc.closeInstance(worldId, instanceId, true, null) != null)
+                    {
+                        this.discord.emitExtendedInstanceEnforcement(this, location, worldName, "World blacklisted");
+                        LOG.info("Instance enforcement: "+location+" ("+worldName+"): World blacklisted");
+                    }
+                    else
+                    {
+                        LOG.warn("Instance enforcement failure: "+location+" ("+worldName+"): World blacklisted");
+                    }
+                    continue;
+                }
+            }
+            default:
+            }
+            switch (enforceAge)
+            {
+            case ENABLED_NEVER_18_PLUS:
+            {
+                Location locationModel = Location.of(worldId, instanceId);
+                if (locationModel.isConcrete() && locationModel.ageGate)
+                {
+                    if (this.vrc.closeInstance(worldId, instanceId, true, null) != null)
+                    {
+                        this.discord.emitExtendedInstanceEnforcement(this, location, worldName, "Age-gating disallowed");
+                        LOG.info("Instance enforcement: "+location+" ("+worldName+"): Age-gating disallowed");
+                    }
+                    else
+                    {
+                        LOG.warn("Instance enforcement failure: "+location+" ("+worldName+"): Age-gating disallowed");
+                    }
+                    continue;
+                }
+            }
+            break;
+            case ENABLED_ONLY_18_PLUS:
+            {
+                Location locationModel = Location.of(worldId, instanceId);
+                if (locationModel.isConcrete() && !locationModel.ageGate)
+                {
+                    if (this.vrc.closeInstance(worldId, instanceId, true, null) != null)
+                    {
+                        this.discord.emitExtendedInstanceEnforcement(this, location, worldName, "Age-gating mandatory");
+                        LOG.info("Instance enforcement: "+location+" ("+worldName+"): Age-gating mandatory");
+                    }
+                    else
+                    {
+                        LOG.warn("Instance enforcement failure: "+location+" ("+worldName+"): Age-gating mandatory");
+                    }
+                    continue;
+                }
+            }
+            default:
+            }
         }
     }
 

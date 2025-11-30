@@ -427,6 +427,7 @@ public interface ScarletDiscord extends Closeable
     public void emitExtendedUserSpawnProp(Scarlet scarlet, LocalDateTime timestamp, String location, String userId, String displayName, String propId, Prop prop);
     public void tryEmitExtendedAvatarBundles(Scarlet scarlet, LocalDateTime timestamp, String location, String name, ModelFile modelFile, VersionedFile file);
     public void emitExtendedInstanceMonitor(Scarlet scarlet, String location, ScarletData.InstanceEmbedMessage instanceEmbedMessage);
+    public void emitExtendedInstanceEnforcement(Scarlet scarlet, String location, String worldName, String reason);
     public void tryEmitExtendedSuggestedModeration(Scarlet scarlet, User target);
     public void tryEmitExtendedWatchedModeration(Scarlet scarlet, User target);
     public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay);

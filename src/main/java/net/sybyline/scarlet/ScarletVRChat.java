@@ -41,6 +41,7 @@ import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
 import io.github.vrchatapi.api.FilesApi;
 import io.github.vrchatapi.api.GroupsApi;
+import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.MiscellaneousApi;
 import io.github.vrchatapi.api.PrintsApi;
 import io.github.vrchatapi.api.PropsApi;
@@ -545,6 +546,13 @@ public class ScarletVRChat implements Closeable
         return search == null ? null : search.stream().filter(user -> name.equals(user.getDisplayName())).findFirst().map(LimitedUserSearch::getId).orElse(null);
     }
 
+    public String getUserDisplayName(String userId)
+    {
+        if (userId == null)
+            return null;
+        User user = this.getUser(userId, Long.MIN_VALUE);
+        return user == null ? userId : user.getDisplayName();
+    }
     public User getUser(String userId)
     {
         return this.getUser(userId, Long.MAX_VALUE);
@@ -612,6 +620,45 @@ public class ScarletVRChat implements Closeable
                 this.cachedWorlds.add404(worldId);
             else
                 LOG.error("Error during get world: "+apiex.getMessage());
+            return null;
+        }
+    }
+    public Instance getInstance(String worldId, String instanceId)
+    {
+        InstancesApi instances = new InstancesApi(this.client);
+        try
+        {
+            return instances.getInstance(worldId, instanceId);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during get instance: "+apiex.getMessage());
+        }
+        
+        WorldsApi worlds = new WorldsApi(this.client);
+        try
+        {
+            return worlds.getWorldInstance(worldId, instanceId);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during get world instance: "+apiex.getMessage());
+        }
+        return null;
+    }
+    public Instance closeInstance(String worldId, String instanceId, Boolean hardClose, OffsetDateTime closedAt)
+    {
+        InstancesApi instances = new InstancesApi(this.client);
+        try
+        {
+            return instances.closeInstance(worldId, instanceId, hardClose, closedAt);
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during close instance: "+apiex.getMessage());
             return null;
         }
     }
@@ -1017,29 +1064,35 @@ public class ScarletVRChat implements Closeable
         }
     }
 
-    public FileAnalysis getFileAnalysis(String fileId, int version)
+    public FileAnalysis getFileAnalysis(VersionedFile versionedFile)
     {
-        return this.getFileAnalysis(fileId, version, Long.MAX_VALUE);
+        return this.getFileAnalysis(versionedFile, Long.MAX_VALUE);
     }
-    public FileAnalysis getFileAnalysis(String fileId, int version, long minEpoch)
+    public FileAnalysis getFileAnalysis(VersionedFile versionedFile, long minEpoch)
     {
-        FileAnalysis analysis = this.cachedFileAnalyses.get(fileId, minEpoch);
+        String stringified = versionedFile.toString('#'); // avoid ':' and '/' for file path semantic reasons
+        FileAnalysis analysis = this.cachedFileAnalyses.get(stringified, minEpoch);
         if (analysis != null)
             return analysis;
-        if (this.cachedFileAnalyses.is404(fileId))
+        if (this.cachedFileAnalyses.is404(stringified))
             return null;
         FilesApi files = new FilesApi(this.client);
         try
         {
-            analysis = files.getFileAnalysis(fileId, version);
-            this.cachedFileAnalyses.put(fileId, analysis);
+            if ("security".equals(versionedFile.qualifier))
+                analysis = files.getFileAnalysisSecurity(versionedFile.id, versionedFile.version);
+            else if ("standard".equals(versionedFile.qualifier))
+                analysis = files.getFileAnalysisStandard(versionedFile.id, versionedFile.version);
+            else
+                analysis = files.getFileAnalysis(versionedFile.id, versionedFile.version);
+            this.cachedFileAnalyses.put(stringified, analysis);
             return analysis;
         }
         catch (ApiException apiex)
         {
             this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
-                this.cachedFileAnalyses.add404(fileId);
+                this.cachedFileAnalyses.add404(stringified);
             else
                 LOG.error("Error during get file analysis: "+apiex.getMessage());
             return null;

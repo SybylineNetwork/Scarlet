@@ -3,6 +3,7 @@ package net.sybyline.scarlet;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -14,6 +15,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.awt.event.ItemEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -47,6 +49,7 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -77,16 +80,21 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.model.AgeVerificationStatus;
+import io.github.vrchatapi.model.FileAnalysis;
+import io.github.vrchatapi.model.FileAnalysisAvatarStats;
 import io.github.vrchatapi.model.GroupJoinRequestAction;
 import io.github.vrchatapi.model.GroupMemberStatus;
+import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.ext.AvatarBundleInfo;
 import net.sybyline.scarlet.ui.Swing;
 import net.sybyline.scarlet.util.Func;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.PropsTable;
 import net.sybyline.scarlet.util.VRChatWebPageURLs;
+import net.sybyline.scarlet.util.VersionedFile;
 
 public class ScarletUI implements AutoCloseable
 {
@@ -196,7 +204,7 @@ public class ScarletUI implements AutoCloseable
             player.text_color = text_color;
             player.priority = priority;
             player.ageVerificationStatus = user.getAgeVerificationStatus();
-            player.avatarPerf = this.scarlet.eventListener.clientLocation_userDisplayName2avatarPerformance.get(name);
+            player.avatarInfo = this.scarlet.eventListener.clientLocation_userDisplayName2avatarBundleInfo.get(name);
             this.updatePending(id, player);
             if (initialPreamble)
             {
@@ -221,7 +229,7 @@ public class ScarletUI implements AutoCloseable
             player.text_color = text_color;
             player.priority = priority;
             player.ageVerificationStatus = user.getAgeVerificationStatus();
-            player.avatarPerf = this.scarlet.eventListener.clientLocation_userDisplayName2avatarPerformance.get(name);
+            player.avatarInfo = this.scarlet.eventListener.clientLocation_userDisplayName2avatarBundleInfo.get(name);
             this.updatePending(id, player);
             this.connectedPlayers.put(id, player);
             if (initialPreamble)
@@ -373,7 +381,7 @@ public class ScarletUI implements AutoCloseable
     {
         try
         {
-            return new StringArrSetting(id, name, defaultValue, validator);
+            return new StringArr2Setting(id, name, defaultValue, validator);
         }
         finally
         {
@@ -398,6 +406,18 @@ public class ScarletUI implements AutoCloseable
         try
         {
             return new BoolSetting(id, name, defaultValue);
+        }
+        finally
+        {
+            this.readdSettingUI();
+        }
+    }
+
+    public synchronized <E extends Enum<E>> Setting<E> settingEnum(String id, String name, E defaultValue)
+    {
+        try
+        {
+            return new EnumSetting<>(id, name, defaultValue);
         }
         finally
         {
@@ -433,7 +453,20 @@ public class ScarletUI implements AutoCloseable
         String name;
         String id;
         String avatarName;
-        String avatarPerf;
+        AvatarBundleInfo avatarInfo;
+        Action avatarStats = new AbstractAction("View") {
+            private static final long serialVersionUID = 1L;
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                ScarletUI.this.infoStats(ConnectedPlayer.this.name, ConnectedPlayer.this.avatarName, ConnectedPlayer.this.avatarInfo);
+            }
+            @Override
+            public String toString()
+            {
+                return "View";
+            }
+        };
         Period acctdays;
         LocalDateTime joined;
         LocalDateTime left;
@@ -444,6 +477,11 @@ public class ScarletUI implements AutoCloseable
             public void actionPerformed(ActionEvent e)
             {
                 MiscUtils.AWTDesktop.browse(URI.create("https://vrchat.com/home/user/"+ConnectedPlayer.this.id));
+            }
+            @Override
+            public String toString()
+            {
+                return "https://vrchat.com/home/user/"+ConnectedPlayer.this.id;
             }
         };
         Action ban = new AbstractAction("Ban") {
@@ -459,6 +497,11 @@ public class ScarletUI implements AutoCloseable
                     }
                 });
             }
+            @Override
+            public String toString()
+            {
+                return "Ban";
+            }
         };
         Action unban = new AbstractAction("Unban") {
             private static final long serialVersionUID = 1L;
@@ -473,6 +516,11 @@ public class ScarletUI implements AutoCloseable
                     }
                 });
             }
+            @Override
+            public String toString()
+            {
+                return "Unban";
+            }
         };
         Action copy = new AbstractAction("Copy") {
             private static final long serialVersionUID = 1L;
@@ -481,6 +529,11 @@ public class ScarletUI implements AutoCloseable
             {
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(ConnectedPlayer.this.id), null);
             }
+            @Override
+            public String toString()
+            {
+                return "Copy";
+            }
         };
         Action invite = new AbstractAction("Invite") {
             private static final long serialVersionUID = 1L;
@@ -488,6 +541,11 @@ public class ScarletUI implements AutoCloseable
             public void actionPerformed(ActionEvent e)
             {
                 ScarletUI.this.tryInvite(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
+            }
+            @Override
+            public String toString()
+            {
+                return "Invite";
             }
         };
         Color text_color;
@@ -522,7 +580,8 @@ public class ScarletUI implements AutoCloseable
             this.propstable.addProperty("Name", false, true, String.class, $ -> $.name);
             this.propstable.addProperty("Id", false, true, String.class, $ -> $.id);
             this.propstable.addProperty("Avatar", false, true, String.class, $ -> $.avatarName);
-            this.propstable.addProperty("Performance", false, true, String.class, $ -> $.avatarPerf);
+            this.propstable.addProperty("Performance", false, true, String.class, $ -> $.avatarInfo==null?null:$.avatarInfo.analysis==null?null:$.avatarInfo.analysis.getPerformanceRating());
+            this.propstable.addProperty("Avatar Stats", true, true, Action.class, $ -> $.avatarStats);
             this.propstable.addProperty("AcctAge", "Acc-Age", false, true, Period.class, $ -> $.acctdays);
             this.propstable.addProperty("Joined", false, true, LocalDateTime.class, $ -> $.joined);
             this.propstable.addProperty("Left", false, true, LocalDateTime.class, $ -> $.left);
@@ -850,6 +909,122 @@ public class ScarletUI implements AutoCloseable
         }
         this.scarlet.splash.queueFeedbackPopup(this.jframe, 3_000L, "Operation queued", Color.WHITE);
         this.scarlet.execModal.execute(this.scarlet.discord::updateCommandList);
+    }
+
+    static void infoStatsAppend(JPanel panel, GridBagConstraints constraints, String name)
+    {
+        constraints.gridx = 0;
+        constraints.anchor = GridBagConstraints.WEST;
+        panel.add(new JLabel(name, JLabel.LEFT), constraints);
+        constraints.gridy++;
+    }
+    static void infoStatsAppend(JPanel panel, GridBagConstraints constraints, String name, Supplier<Object> getter)
+    {
+        Object value = getter.get();
+        if (value == null)
+            return;
+        constraints.gridx = 0;
+        constraints.anchor = GridBagConstraints.EAST;
+        panel.add(new JLabel(name+":", JLabel.RIGHT), constraints);
+        constraints.gridx = 1;
+        constraints.anchor = GridBagConstraints.WEST;
+        panel.add(new JLabel(value.toString(), JLabel.LEFT), constraints);
+        constraints.gridy++;
+    }
+    protected void infoStats(String name, String avatarDisplayName, AvatarBundleInfo bundleInfo)
+    {
+        JPanel panel = new JPanel(new GridBagLayout());
+        {
+            GridBagConstraints constraints = new GridBagConstraints();
+            constraints.gridheight = 1;
+            constraints.gridwidth = 1;
+            constraints.gridx = 0;
+            constraints.gridy = 0;
+            constraints.insets = new Insets(1, 1, 1, 1);
+            constraints.weightx = 0.0D;
+            constraints.weighty = 0.0D;
+            FileAnalysis analysis = bundleInfo.analysis;
+            VersionedFile versionedFile = bundleInfo.id;
+            ModelFile file = bundleInfo.file;
+            FileAnalysisAvatarStats stats = analysis.getAvatarStats();
+            infoStatsAppend(panel, constraints, "Avatar name", ()->avatarDisplayName);
+            infoStatsAppend(panel, constraints, "File statistics");
+            if (file != null)
+            {
+                infoStatsAppend(panel, constraints, "Owner ID", file::getOwnerId);
+                infoStatsAppend(panel, constraints, "Owner name", ()->this.scarlet.vrc.getUserDisplayName(file.getOwnerId()));
+            }
+            if (analysis != null)
+            {
+                infoStatsAppend(panel, constraints, "Created at", analysis::getCreatedAt);
+                infoStatsAppend(panel, constraints, "Performance rating", analysis::getPerformanceRating);
+                infoStatsAppend(panel, constraints, "Uncompressed size", analysis::getUncompressedSize);
+                infoStatsAppend(panel, constraints, "File size", analysis::getFileSize);
+            }
+            if (versionedFile != null)
+            {
+                infoStatsAppend(panel, constraints, "File version", versionedFile::version);
+                infoStatsAppend(panel, constraints, "File qualifier", versionedFile::qualifier);
+            }
+            if (file != null)
+            {
+                infoStatsAppend(panel, constraints, "File version count", ()->file.getVersions().size());
+            }
+            if (stats != null)
+            {
+            infoStatsAppend(panel, constraints, "Avatar statistics");
+                infoStatsAppend(panel, constraints, "Animator count", stats::getAnimatorCount);
+                infoStatsAppend(panel, constraints, "Audio source count", stats::getAudioSourceCount);
+                infoStatsAppend(panel, constraints, "Blend shape count", stats::getBlendShapeCount);
+                infoStatsAppend(panel, constraints, "Bone count", stats::getBoneCount);
+                infoStatsAppend(panel, constraints, "Bounds", stats::getBounds);
+                infoStatsAppend(panel, constraints, "Camera count", stats::getCameraCount);
+                infoStatsAppend(panel, constraints, "Cloth count", stats::getClothCount);
+                infoStatsAppend(panel, constraints, "Constraint count", stats::getConstraintCount);
+                infoStatsAppend(panel, constraints, "Constraint depth", stats::getConstraintDepth);
+                infoStatsAppend(panel, constraints, "Contact count", stats::getContactCount);
+                infoStatsAppend(panel, constraints, "Custom expressions", stats::getCustomExpressions);
+                infoStatsAppend(panel, constraints, "Customize animation layers", stats::getCustomizeAnimationLayers);
+                infoStatsAppend(panel, constraints, "Enable eye look", stats::getEnableEyeLook);
+                infoStatsAppend(panel, constraints, "Light count", stats::getLightCount);
+                infoStatsAppend(panel, constraints, "Line renderer count", stats::getLineRendererCount);
+                infoStatsAppend(panel, constraints, "Lip sync", stats::getLipSync);
+                infoStatsAppend(panel, constraints, "Material count", stats::getMaterialCount);
+                infoStatsAppend(panel, constraints, "Material slots used", stats::getMaterialSlotsUsed);
+                infoStatsAppend(panel, constraints, "Mesh count", stats::getMeshCount);
+                infoStatsAppend(panel, constraints, "Mesh indices", stats::getMeshIndices);
+                infoStatsAppend(panel, constraints, "Mesh particle max polygons", stats::getMeshParticleMaxPolygons);
+                infoStatsAppend(panel, constraints, "Mesh polygons", stats::getMeshPolygons);
+                infoStatsAppend(panel, constraints, "Mesh vertices", stats::getMeshVertices);
+                infoStatsAppend(panel, constraints, "Particle collision enabled", stats::getParticleCollisionEnabled);
+                infoStatsAppend(panel, constraints, "Particle system count", stats::getParticleSystemCount);
+                infoStatsAppend(panel, constraints, "Particle trails enabled", stats::getParticleTrailsEnabled);
+                infoStatsAppend(panel, constraints, "Phys bone collider count", stats::getPhysBoneColliderCount);
+                infoStatsAppend(panel, constraints, "Phys bone collision check count", stats::getPhysBoneCollisionCheckCount);
+                infoStatsAppend(panel, constraints, "Phys bone component count", stats::getPhysBoneComponentCount);
+                infoStatsAppend(panel, constraints, "Phys bone transform count", stats::getPhysBoneTransformCount);
+                infoStatsAppend(panel, constraints, "Physics colliders", stats::getPhysicsColliders);
+                infoStatsAppend(panel, constraints, "Physics rigidbodies", stats::getPhysicsRigidbodies);
+                infoStatsAppend(panel, constraints, "Skinned mesh count", stats::getSkinnedMeshCount);
+                infoStatsAppend(panel, constraints, "Skinned mesh indices", stats::getSkinnedMeshIndices);
+                infoStatsAppend(panel, constraints, "Skinned mesh polygons", stats::getSkinnedMeshPolygons);
+                infoStatsAppend(panel, constraints, "Skinned mesh vertices", stats::getSkinnedMeshVertices);
+                infoStatsAppend(panel, constraints, "Total cloth vertices", stats::getTotalClothVertices);
+                infoStatsAppend(panel, constraints, "Total indices", stats::getTotalIndices);
+                infoStatsAppend(panel, constraints, "Total max particles", stats::getTotalMaxParticles);
+                infoStatsAppend(panel, constraints, "Total polygons", stats::getTotalPolygons);
+                infoStatsAppend(panel, constraints, "Total texture usage", stats::getTotalTextureUsage);
+                infoStatsAppend(panel, constraints, "Total vertices", stats::getTotalVertices);
+                infoStatsAppend(panel, constraints, "Trail renderer count", stats::getTrailRendererCount);
+                infoStatsAppend(panel, constraints, "Write defaults used", stats::getWriteDefaultsUsed);
+            }
+            
+        }
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setSize(new Dimension(500, 300));
+        scroll.setPreferredSize(new Dimension(500, 300));
+        scroll.setMaximumSize(new Dimension(500, 300));
+        ScarletUI.this.messageModalAsyncInfo(null, scroll, name+"'s selected avatar's stats");
     }
 
     protected void tryBan(String id, String name)
@@ -1212,6 +1387,7 @@ public class ScarletUI implements AutoCloseable
             this.name = name;
             this.defaultValue = defaultValue;
             this.value = defaultValue;
+            this.valueFiltered = null;
             this.render = render;
             this.dirty = new AtomicBoolean(false);
             this.update();
@@ -1222,6 +1398,7 @@ public class ScarletUI implements AutoCloseable
         final C render;
         final AtomicBoolean dirty;
         T value;
+        T valueFiltered;
         Consumer<T> onChanged;
         @Override
         public final String id()
@@ -1236,7 +1413,10 @@ public class ScarletUI implements AutoCloseable
         @Override
         public final T get()
         {
-            return this.value;
+            T value = this.valueFiltered;
+            if (value == null)
+                value = this.value;
+            return value;
         }
         @Override
         public final T getDefault()
@@ -1373,6 +1553,7 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
+    @Deprecated
     class StringArrSetting extends ASetting<String[], JTextArea>
     {
         StringArrSetting(String id, String name, String[] defaultValue, Predicate<String> validator)
@@ -1462,6 +1643,140 @@ public class ScarletUI implements AutoCloseable
                     }
             this.render.setBackground(this.background);
             return true;
+        }
+    }
+
+    class StringArr2Setting extends ASetting<String[], JPanel>
+    {
+        class EntryPanel extends JPanel
+        {
+            private static final long serialVersionUID = -1300111578131336387L;
+            EntryPanel(String value)
+            {
+                super(new BorderLayout());
+                this.button = new JButton("-");
+                this.button.addActionListener($ ->
+                {
+                    StringArr2Setting.this.renderInner.remove(this);
+                    StringArr2Setting.this.entries.remove(this);
+                    StringArr2Setting.this.accept();
+                    StringArr2Setting.this.markDirty();
+                });
+                this.text = new JTextField(32);
+                this.background = this.text.getBackground();
+                JPopupMenu cpm = new JPopupMenu();
+                cpm.add("Paste").addActionListener($ -> {
+                    String cbc = MiscUtils.AWTToolkit.get();
+                    if (cbc != null)
+                    {
+                        this.text.replaceSelection(cbc);
+                        StringArr2Setting.this.accept();
+                        StringArr2Setting.this.markDirty();
+                    }
+                });
+                this.text.setComponentPopupMenu(cpm);
+                this.text.addFocusListener(new FocusAdapter() {
+                    @Override
+                    public void focusLost(FocusEvent e)
+                    {
+                        StringArr2Setting.this.accept();
+                        StringArr2Setting.this.markDirty();
+                    }
+                });
+                this.text.setText(value);
+                this.text.getDocument().addDocumentListener(new DocumentListener() {
+                    @Override
+                    public void removeUpdate(DocumentEvent e)
+                    {
+                        StringArr2Setting.this.accept();
+                    }
+                    @Override
+                    public void insertUpdate(DocumentEvent e)
+                    {
+                        StringArr2Setting.this.accept();
+                    }
+                    @Override
+                    public void changedUpdate(DocumentEvent e)
+                    {
+                        StringArr2Setting.this.accept();
+                    }
+                });
+                this.add(this.button, BorderLayout.WEST);
+                this.add(this.text, BorderLayout.CENTER);
+                List<EntryPanel> entries = StringArr2Setting.this.entries;
+                GridBagConstraints constraints = new GridBagConstraints();
+                this.gridy = entries.isEmpty() ? 0 : entries.get(entries.size() - 1).gridy + 1;
+                constraints.gridx = 0;
+                constraints.gridy = this.gridy;
+                constraints.anchor = GridBagConstraints.WEST;
+                StringArr2Setting.this.renderInner.add(this, constraints);
+                entries.add(this);
+            }
+            final JButton button;
+            final JTextField text;
+            final Color background;
+            final int gridy;
+            boolean validateAndColor()
+            {
+                boolean valid = StringArr2Setting.this.validator.test(this.text.getText());
+                this.text.setBackground(valid ? this.background : MiscUtils.lerp(this.background, Color.PINK, 0.5F));
+                return valid;
+            }
+            String getStringValue()
+            {
+                return this.text.getText();
+            }
+        }
+        StringArr2Setting(String id, String name, String[] defaultValue, Predicate<String> validator)
+        {
+            super(id, name, defaultValue, new JPanel(new BorderLayout()));
+            JButton button = new JButton("+");
+            JPanel panel = new JPanel(new GridBagLayout());
+            this.renderInner = panel;
+            JScrollPane scroll = new JScrollPane(panel);
+            Dimension size = new Dimension(400, 100);
+            scroll.setSize(size);
+            scroll.setPreferredSize(size);
+            scroll.setMaximumSize(size);
+            scroll.setMinimumSize(size);
+            this.entries = new ArrayList<>();
+            this.render.add(scroll, BorderLayout.CENTER);
+            this.render.add(button, BorderLayout.SOUTH);
+            this.validator = validator == null ? $ -> true : validator;
+        }
+        final List<EntryPanel> entries;
+        final Predicate<String> validator;
+        final JPanel renderInner;
+        @Override
+        public JsonElement serialize()
+        {
+            JsonArray array = new JsonArray();
+            for (String line : this.value)
+                array.add(line);
+            return array;
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
+            if (!element.isJsonArray())
+                return;
+            this.set(element.getAsJsonArray().asList().stream().map(JsonElement::getAsString).toArray(String[]::new));
+        }
+        @Override
+        protected void update()
+        {
+            if (this.entries == null)
+                return;
+            this.entries.clear();
+            this.renderInner.removeAll();
+            for (String value : this.value)
+                new EntryPanel(value);
+            this.accept();
+        }
+        void accept()
+        {
+            String[] valuesValidated = this.entries.stream().filter(EntryPanel::validateAndColor).map(EntryPanel::getStringValue).toArray(String[]::new);
+            this.valueFiltered = valuesValidated.length == this.value.length ? null : valuesValidated;
         }
     }
 
@@ -1587,6 +1902,54 @@ public class ScarletUI implements AutoCloseable
         void accept()
         {
             this.value = this.render.isSelected();
+        }
+    }
+
+    class EnumSetting<E extends Enum<E>> extends ASetting<E, JComboBox<E>>
+    {
+        EnumSetting(String id, String name, E defaultValue)
+        {
+            super(id, name, defaultValue, new JComboBox<>(defaultValue.getDeclaringClass().getEnumConstants()));
+            this.render.setSelectedItem(defaultValue);
+            this.render.addItemListener($ -> {
+                if ($.getStateChange() == ItemEvent.SELECTED)
+                {
+                    this.accept();
+                    this.markDirty();
+                }
+            });
+            this.nameMap = new HashMap<>();
+            for (E value : defaultValue.getDeclaringClass().getEnumConstants())
+                this.nameMap.put(value.name(), value);
+        }
+        final Map<String, E> nameMap;
+        @Override
+        public JsonElement serialize()
+        {
+            return new JsonPrimitive(this.value.name());
+        }
+        @Override
+        public void deserialize(JsonElement element)
+        {
+            if (!element.isJsonPrimitive())
+                return;
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (!primitive.isString())
+                return;
+            this.set(this.nameMap.getOrDefault(primitive.getAsString(), this.defaultValue));
+        }
+        @Override
+        protected void update()
+        {
+            this.render.setSelectedItem(this.value);
+        }
+        void accept()
+        {
+            @SuppressWarnings("unchecked")
+            E value = (E)this.render.getSelectedItem();
+            if (value == null)
+                value = this.defaultValue;
+            this.value = value;
         }
     }
 

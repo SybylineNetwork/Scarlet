@@ -31,6 +31,7 @@ import io.github.vrchatapi.model.Print;
 import io.github.vrchatapi.model.Prop;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.ext.AvatarBundleInfo;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.CollectionMap;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -54,7 +55,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.clientLocation_userId2userDisplayName = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2userId = new ConcurrentHashMap<>();
         this.clientLocation_userDisplayName2avatarDisplayName = new ConcurrentHashMap<>();
-        this.clientLocation_userDisplayName2avatarPerformance = new ConcurrentHashMap<>();
+        this.clientLocation_userDisplayName2avatarBundleInfo = new ConcurrentHashMap<>();
         this.clientLocation_avatarDisplayName2userDisplayName = CollectionMap.setsConcurrent();
         this.clientLocation_userId2userJoined = new ConcurrentHashMap<>();
         this.clientLocation_pendingUpdates = Collections.synchronizedList(new ArrayList<>());
@@ -85,8 +86,8 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     Set<String> clientLocation_userIdsJoinOrder;
     final Map<String, String> clientLocation_userId2userDisplayName,
                               clientLocation_userDisplayName2userId,
-                              clientLocation_userDisplayName2avatarDisplayName,
-                              clientLocation_userDisplayName2avatarPerformance;
+                              clientLocation_userDisplayName2avatarDisplayName;
+    final Map<String, AvatarBundleInfo> clientLocation_userDisplayName2avatarBundleInfo;
     final CollectionMap.OfSets<String, String> clientLocation_avatarDisplayName2userDisplayName;
     final Map<String, OffsetDateTime> clientLocation_userId2userJoined;
     final List<Runnable> clientLocation_pendingUpdates;
@@ -577,35 +578,29 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                             {
                                 this.scarlet.discord.tryEmitExtendedAvatarBundles(this.scarlet, timestamp, this.clientLocation, name, file, versionedFile);
                             }
-                            FileAnalysis analysis = this.scarlet.vrc.getFileAnalysis(versionedFile.id, versionedFile.version, System.currentTimeMillis() - 60_000L);
+                            FileAnalysis analysis0 = this.scarlet.vrc.getFileAnalysis(versionedFile, System.currentTimeMillis() - 60_000L);
                             String avatarPerf0 = null;
-                            if (analysis != null)
+                            if (analysis0 != null)
                             {
-                                avatarPerf0 = analysis.getPerformanceRating();
+                                avatarPerf0 = analysis0.getPerformanceRating();
                             }
                             if (avatarPerf0 == null)
                             {
-                                analysis = this.scarlet.vrc.getFileAnalysis(versionedFile.id, versionedFile.version - 1);
-                                if (analysis != null)
-                                {
-                                    avatarPerf0 = analysis.getPerformanceRating();
-                                }
-                                if (avatarPerf0 == null)
-                                {
-                                    Scarlet.LOG.warn("Performance missing for "+versionedFile+": "+analysis);
-                                }
+                                Scarlet.LOG.warn("Performance missing for "+versionedFile+": "+analysis0);
                             }
                             String avatarPerf = avatarPerf0 != null ? avatarPerf0 : "Unknown";
+                            FileAnalysis analysis = analysis0 != null ? analysis0 : new FileAnalysis().performanceRating(avatarPerf);
+                            AvatarBundleInfo bundleInfo = new AvatarBundleInfo(versionedFile, file, analysis);
                             this.clientLocation_avatarDisplayName2userDisplayName
                                 .valuesGetOrEmpty(name)
                                 .forEach(userDisplayName ->
                                 {
                                      Scarlet.LOG.info(userDisplayName+"'s chosen avatar "+name+" is "+avatarPerf);
-                                     this.clientLocation_userDisplayName2avatarPerformance.put(userDisplayName, avatarPerf);
+                                     this.clientLocation_userDisplayName2avatarBundleInfo.put(userDisplayName, bundleInfo);
                                      String userId = this.clientLocation_userDisplayName2userId.get(userDisplayName);
                                      this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> {
-                                         Scarlet.LOG.info(userDisplayName+"'s CHOSEN avatar "+name+" is "+avatarPerf);
-                                         $.avatarPerf = avatarPerf;
+                                         Scarlet.LOG.info("Updating "+userDisplayName+"'s chosen avatar "+name+" performance: "+avatarPerf);
+                                         $.avatarInfo = bundleInfo;
                                      });
                                 });
                         }

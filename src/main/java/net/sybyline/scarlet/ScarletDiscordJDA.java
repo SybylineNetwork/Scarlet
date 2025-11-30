@@ -2116,6 +2116,24 @@ public class ScarletDiscordJDA implements ScarletDiscord
     }
 
     @Override
+    public void emitExtendedInstanceEnforcement(Scarlet scarlet, String location, String worldName, String reason)
+    {
+        this.condEmitEx(GroupAuditTypeEx.INSTANCE_ENFORCE, false, false, location, (channelSf, guild, channel) ->
+        {
+            return channel.sendMessageEmbeds(new EmbedBuilder()
+                .setTitle("Instance Enforcement")
+                .addField("Location", "`"+location+"`", false)
+                .addField("World", MarkdownSanitizer.sanitize(worldName), false)
+                .addField("Reason", reason, false)
+                .setColor(GroupAuditTypeEx.INSTANCE_ENFORCE.color)
+                .setFooter(ScarletDiscord.FOOTER_PREFIX+"Extended event")
+                .setTimestamp(OffsetDateTime.now(ZoneOffset.UTC))
+                .build())
+            .complete();
+        });
+    }
+
+    @Override
     public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay)
     {
         this.condEmitEx(GroupAuditTypeEx.MOD_SUMMARY, true, false, null, (channelSf, guild, channel) -> this.emitModSummary(scarlet, endOfDay, this.scarlet.settings.heuristicPeriodDays.getOrSupply() * 24L, channel::sendMessageEmbeds));

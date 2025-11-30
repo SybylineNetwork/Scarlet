@@ -1,6 +1,7 @@
 package net.sybyline.scarlet;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +30,21 @@ public class ScarletVRChatReportTemplate
     private final File templateFile;
     private long lastModified;
     private String contents;
+
+    public File templateFile()
+    {
+        return this.templateFile;
+    }
+
+    public boolean trySet(String contents) throws IOException
+    {
+        return this.update(contents);
+    }
+
+    public String get()
+    {
+        return this.check();
+    }
 
     private void load()
     {
@@ -62,8 +78,23 @@ public class ScarletVRChatReportTemplate
         return this.contents;
     }
 
+    private synchronized boolean update(String contents) throws IOException
+    {
+        if (contents == null || contents.trim().isEmpty())
+            return false;
+        this.contents = contents;
+        this.templateFile.getParentFile().mkdirs();
+        try (BufferedWriter out = new BufferedWriter(MiscUtils.writer(this.templateFile)))
+        {
+            out.append(contents);
+        }
+        this.lastModified = this.templateFile.lastModified();
+        return true;
+    }
+
     public static final String MISSING = "???????";
     public static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy'-'MM'-'dd HH':'mm':'ss 'UTC'");
+    public static final String HELP = TemplateStrings.of(FormatParams.class).fields().keySet().stream().collect(Collectors.joining("}`\n`{", "### Format parameters:\n`{", "}`"));
     public class FormatParams
     {
         public String groupId = MISSING, groupName = MISSING, groupUrl = MISSING, groupCode = MISSING, groupCodeUrl = MISSING;

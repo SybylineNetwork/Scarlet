@@ -7,6 +7,14 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.15-rc2
+  - Added Instance Enforcement extended event
+  - Added setting to optionally white/blacklist for worlds permissible for group instances
+  - Added setting to optionally require group instances to be always/never age gated
+  - Added `report-template` subcommand to the `config-set` Discord slash command to view and update the report template file
+  - Added button to view user current avatar stats to Instance UI
+  - Fixed user current avatar performance ignoring variants in all cases
+
 ## 0.4.15-rc1
   - Fixed user current avatar performance updating in only one case
 

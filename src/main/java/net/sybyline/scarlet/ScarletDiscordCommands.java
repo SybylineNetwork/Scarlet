@@ -1,5 +1,6 @@
 package net.sybyline.scarlet;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -63,11 +64,13 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
+import net.dv8tion.jda.api.components.ModalTopLevelComponent;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.label.Label;
 import net.dv8tion.jda.api.components.selections.SelectOption;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.modals.Modal;
@@ -1555,7 +1558,7 @@ public class ScarletDiscordCommands
         }
         @SlashCmd("delete")
         @Desc("Removes a user from the staff list")
-        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
+        public void remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
             this._remove(event, hook, vrchatUser, vrchatRoleOpt);
         }
@@ -1734,7 +1737,7 @@ public class ScarletDiscordCommands
         }
         @SlashCmd("delete")
         @Desc("Removes a user from the secret staff list")
-        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
+        public void remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("_vrchatRoleOpt") io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
             this._remove(event, hook, vrchatUser, vrchatRoleOpt);
         }
@@ -2663,6 +2666,91 @@ public class ScarletDiscordCommands
                 ScarletDiscordCommands.this.discord.scarlet.settings.nextOutstandingMod.set(offset);
                 String epochNext = Long.toUnsignedString(offset.plusHours(24L).toEpochSecond());
                 event.replyFormat("Set outstanding mod summary generation time: next summary at <t:%s:f>", epochNext).setEphemeral(true).queue();
+            }
+        }
+        @SlashCmd("report-template")
+        @Desc("Report template settings")
+        public class ReportTemplate
+        {
+            @SlashCmd("view-report-template")
+            @Desc("View the report template")
+            public void viewReportTemplate(SlashCommandInteractionEvent event) throws Exception
+            {
+                String contents = ScarletDiscordCommands.this.discord.scarlet.vrcReport.get();
+                event.reply(MiscUtils.maybeEllipsis(4000, contents))
+                    .setEphemeral(true)
+                    .queue();
+            }
+            @SlashCmd("download-report-template")
+            @Desc("Download the report template")
+            public void downloadReportTemplate(SlashCommandInteractionEvent event) throws Exception
+            {
+                File templateFile = ScarletDiscordCommands.this.discord.scarlet.vrcReport.templateFile();
+                event.replyFiles(FileUpload.fromData(templateFile))
+                    .setEphemeral(true)
+                    .queue();
+            }
+            @SlashCmd("view-report-template-format")
+            @Desc("View the report template format parameters")
+            public void viewReportTemplateFormat(SlashCommandInteractionEvent event) throws Exception
+            {
+                event.reply(MiscUtils.maybeEllipsis(4000, ScarletVRChatReportTemplate.HELP))
+                    .setEphemeral(true)
+                    .queue();
+            }
+            @SlashCmd("edit-report-template")
+            @Desc("Edit the report template")
+            public void editReportTemplate(SlashCommandInteractionEvent event) throws Exception
+            {
+                String content = ScarletDiscordCommands.this.discord.scarlet.vrcReport.get();
+                ModalTopLevelComponent[] modalComponents;
+                if (4000 - content.length() >= ScarletVRChatReportTemplate.HELP.length())
+                {
+                    modalComponents = new ModalTopLevelComponent[2];
+                    modalComponents[1] = TextDisplay.of(ScarletVRChatReportTemplate.HELP);
+                }
+                else
+                {
+                    modalComponents = new ModalTopLevelComponent[1];
+                }
+                modalComponents[0] = Label.of("Report Template", TextInput.create("report-template", TextInputStyle.PARAGRAPH)
+                    .setValue(MiscUtils.blank(content) ? null : MiscUtils.maybeEllipsis(4000, content))
+                    .build());
+                event.replyModal(Modal.create("edit-report-template", "Edit report template")
+                    .addComponents(modalComponents)
+                    .build())
+                .queue();
+            }
+            public final SlashOption<Message.Attachment> reportTemplate = SlashOption.ofAttachment("report-template", "The updated report template", true);
+            @SlashCmd("upload-report-template")
+            @Desc("Upload the report template")
+            public void uploadReportTemplate(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("report-template") Message.Attachment reportTemplate)
+            {
+                String requesterSf = event.getUser().getId(),
+                       requesterDisplayName = event.getUser().getEffectiveName(),
+                       fileName = reportTemplate.getFileName(),
+                       attachmentUrl = reportTemplate.getUrl();
+                
+                LOG.info(String.format("%s (<@%s>) Uploading report template: %s", requesterDisplayName, requesterSf, fileName));
+                try (Reader reader = new InputStreamReader(HttpURLInputStream.get(attachmentUrl)))
+                {
+                    String contents = new BufferedReader(reader).lines().collect(Collectors.joining("\n"));
+                    if (ScarletDiscordCommands.this.discord.scarlet.vrcReport.trySet(contents))
+                    {
+                        LOG.info("Successfully uploaded report template");
+                        hook.sendMessageFormat("Successfully uploaded report template").setEphemeral(true).queue();
+                    }
+                    else
+                    {
+                        LOG.warn("Failed to upload report template: empty content");
+                        hook.sendMessageFormat("Failed to upload report template: empty content").setEphemeral(true).queue();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception uploading report template from attachment: "+fileName, ex);
+                    hook.sendMessageFormat("Exception while uploading %s: %s", fileName, ex).setEphemeral(true).queue();
+                }
             }
         }
     }
