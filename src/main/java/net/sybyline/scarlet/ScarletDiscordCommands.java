@@ -5,8 +5,10 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -36,6 +38,7 @@ import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
+import io.github.vrchatapi.model.CreateCalendarEventRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupLimitedMember;
@@ -88,6 +91,7 @@ import net.sybyline.scarlet.server.discord.DInteractions.SlashCmd;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOpt;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOption;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOptionStrings;
+import net.sybyline.scarlet.server.discord.DOptionEnum;
 import net.sybyline.scarlet.util.Func.F1;
 import net.sybyline.scarlet.util.Gifs;
 import net.sybyline.scarlet.util.HttpURLInputStream;
@@ -2950,7 +2954,7 @@ public class ScarletDiscordCommands
         public void remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("_auxWebhookId") String auxWebhookId)
         {
             String prevWebhookUrl = ScarletDiscordCommands.this.discord.scarletAuxWh2webhookUrl.remove(auxWebhookId);
-            if (prevWebhookUrl != null)
+            if (prevWebhookUrl == null)
             {
                 hook.sendMessage("There is no auxiliary webhook with that id").setEphemeral(true).queue();
                 return;
@@ -3146,6 +3150,285 @@ public class ScarletDiscordCommands
                 hook.sendMessageFormat("Exception generating spritesheet: %s", ex).queue();
             }
         });
+    }
+
+    // schedule
+
+    @SlashCmd("schedule")
+    @Desc("Configures event schedules")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public class Schedule
+    {
+        public final SlashOption<ScarletCalendar.EventSpec> _eventSpec = SlashOption.ofString("scarlet-event-spec", "The VRChat role id (grol_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, this::_scarletEventSpec, true, this::_scarletEventSpec);
+        ScarletCalendar.EventSpec _scarletEventSpec(String id) { return ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.get(id); }
+        void _scarletEventSpec(CommandAutoCompleteInteractionEvent event) {
+            DInteractions.SlashOptionsChoicesUnsanitized.autocomplete(event, ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.values().stream().map($ -> new Command.Choice($.vrcCalendarEventParameters.getTitle(), $.id)).toArray(Command.Choice[]::new), false);
+        }
+        @SlashCmd("list")
+        @Desc("Lists all event schedules")
+        public void list(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("entries-per-page") int entriesPerPage)
+        {
+            MessageEmbed[] embeds = ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs
+                .values()
+                .stream()
+                .map(spec -> new EmbedBuilder()
+                    .setTitle(spec.vrcCalendarEventParameters.getTitle())
+                    .setDescription(spec.vrcCalendarEventParameters.getDescription())
+                    .setThumbnail(spec.vrcCalendarEventParameters.getImageId() == null ? null : ("https://api.vrchat.cloud/api/1/file/"+spec.vrcCalendarEventParameters.getImageId()+"/1/file"))
+                    .addField("ID", spec.id, true)
+                    .addField("Time", String.valueOf(spec.time), true)
+                    .addField("Duration", String.valueOf(MiscUtils.stringify_ymd_hms(spec.duration)), true)
+                    .addField("Category", String.valueOf(spec.vrcCalendarEventParameters.getCategory()), true)
+                    .build())
+                .toArray(MessageEmbed[]::new)
+            ;
+            
+            ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
+        }
+        public final SlashOption<String> _eventId = SlashOption.ofString("event-id", "Event ID", true, "").with(data -> data.setRequiredLength(5, 32));
+        public final SlashOption<String> _eventTitle = SlashOption.ofString("event-title", "Event Title", true, "").with(data -> data.setRequiredLength(5, 100));
+        public final SlashOption<String> _eventDescription = SlashOption.ofString("event-description", "Event Description", true, "").with(data -> data.setRequiredLength(5, 1000));
+        public final SlashOption<ZoneId> _timeZoneId = SlashOption.ofZoneId("time-zone-id", "The time zone", true, null);
+        public final SlashOption<LocalDate> _eventDate = SlashOption.ofLocalDate("event-date", "The date", true, null);
+        public final SlashOption<LocalTime> _timeOfDay = SlashOption.ofLocalTime("time-of-day", "The time of day", true, null);
+        public final SlashOption<ScarletCalendar.Frequency> _eventFrequency = SlashOption.ofEnum("event-frequency", "Event Frequency", true, ScarletCalendar.Frequency.ONE_OFF);
+        public final SlashOption<GroupEventCategory> _eventCategory = SlashOption.ofEnum("event-category", "Event Category", true, GroupEventCategory.OTHER);
+        @SlashCmd("add")
+        @Desc("Adds an event schedule")
+        public void add(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("event-id") String eventId,
+                @SlashOpt("event-title") String eventTitle,
+                @SlashOpt("event-description") String eventDescription,
+                @SlashOpt("event-date") LocalDate eventDate,
+                @SlashOpt("time-zone-id") ZoneId timeZoneId,
+                @SlashOpt("time-of-day") LocalTime timeOfDay,
+                @SlashOpt("event-frequency") ScarletCalendar.Frequency eventFrequency,
+                @SlashOpt("event-category") GroupEventCategory eventCategory)
+        {
+            if (ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.containsKey(eventId))
+            {
+                hook.sendMessage("An event schedule with that id already exists").setEphemeral(true).queue();
+                return;
+            }
+            OffsetTime eventTime = timeOfDay.atOffset(timeZoneId.getRules().getOffset(Instant.now()));
+            ScarletCalendar.EventSpec eventSpec = new ScarletCalendar.EventSpec();
+            eventSpec.id = eventId;
+            eventSpec.vrcCalendarEventParameters.setTitle(eventTitle);
+            eventSpec.vrcCalendarEventParameters.setDescription(eventDescription);
+            eventSpec.date = eventDate;
+            eventSpec.time = eventTime;
+            eventSpec.frequency = eventFrequency;
+            eventSpec.vrcCalendarEventParameters.setCategory(eventCategory.value);
+            eventSpec.vrcCalendarEventParameters.setAccessType(CreateCalendarEventRequest.AccessTypeEnum.PUBLIC);
+            eventSpec.vrcCalendarEventParameters.setSendCreationNotification(Boolean.TRUE);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.put(eventId, eventSpec);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Added event schedule").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-title")
+        @Desc("Set an event schedule's title")
+        public void setTitle(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-title") String eventTitle)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setTitle(eventTitle);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule title").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-description")
+        @Desc("Set an event schedule's description")
+        public void setDescription(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-description") String eventDescription)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setDescription(eventDescription);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule title").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-date")
+        @Desc("Set an event schedule's date")
+        public void setDate(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-date") LocalDate eventDate)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.date = eventDate;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule date").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-time")
+        @Desc("Set an event schedule's time")
+        public void setTime(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("time-zone-id") ZoneId timeZoneId,
+                @SlashOpt("time-of-day") LocalTime timeOfDay)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            OffsetTime eventTime = timeOfDay.atOffset(timeZoneId.getRules().getOffset(Instant.now()));
+            eventSpec.time = eventTime;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule date").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-frequency")
+        @Desc("Set an event schedule's frequency")
+        public void setFrequency(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-frequency") ScarletCalendar.Frequency eventFrequency)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.frequency = eventFrequency;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule frequency").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-category")
+        @Desc("Set an event schedule's category")
+        public void setCategory(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-category") GroupEventCategory eventCategory)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setCategory(eventCategory.value);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule category").setEphemeral(true).queue();
+        }
+        public final SlashOption<CreateCalendarEventRequest.AccessTypeEnum> _eventAccess = SlashOption.ofDOptionEnum(DOptionEnum.of("event-access", "Event Access", CreateCalendarEventRequest.AccessTypeEnum.class, CreateCalendarEventRequest.AccessTypeEnum::getValue, "Public", "Group"), true);
+        @SlashCmd("set-access")
+        @Desc("Set an event schedule's access")
+        public void setAccess(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-access") CreateCalendarEventRequest.AccessTypeEnum eventAccess)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setAccessType(eventAccess);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule access").setEphemeral(true).queue();
+        }
+        public final SlashOption<Boolean> _eventNotify = SlashOption.ofBool("event-notify", "Event Notification upon creation", true, Boolean.TRUE);
+        @SlashCmd("set-notify-create")
+        @Desc("Set an event schedule's notification upon creation")
+        public void setNotifyCreate(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-notify") Boolean eventNotify)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setSendCreationNotification(eventNotify);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule notification usage").setEphemeral(true).queue();
+        }
+        // TODO : tags
+        // TODO : imageId
+        // TODO : roleIds
+        // TODO : platforms
+        // TODO : languages
+        public final SlashOption<Integer> _eventHostEarly = SlashOption.ofInt("event-host-early", "Event host early join minutes", false, null).with(data -> data.setRequiredRange(1L, 60L));
+        @SlashCmd("set-host-join-early")
+        @Desc("Set an event schedule's host early join minutes")
+        public void setHostJoin(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-host-early") Integer eventHostEarly)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setHostEarlyJoinMinutes(eventHostEarly);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event host early join minutes").setEphemeral(true).queue();
+        }
+        public final SlashOption<Integer> _eventGuestEarly = SlashOption.ofInt("event-guest-early", "Event guest early join minutes", false, null).with(data -> data.setRequiredRange(1L, 60L));
+        @SlashCmd("set-guest-join-early")
+        @Desc("Set an event schedule's guest early join minutes")
+        public void setGuestJoin(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-guest-early") Integer eventGuestEarly)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setGuestEarlyJoinMinutes(eventGuestEarly);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event guest early join minutes").setEphemeral(true).queue();
+        }
+        public final SlashOption<Integer> _eventCloseAfter = SlashOption.ofInt("event-close-after", "Event close Instance after end minutes", false, null).with(data -> data.setRequiredRange(1L, 60L));
+        @SlashCmd("set-close-after")
+        @Desc("Set an event schedule's close Instance after end minutes")
+        public void setCloseAfter(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-close-after") Integer eventCloseAfter)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setCloseInstanceAfterEndMinutes(eventCloseAfter);
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event close Instance after end minutes").setEphemeral(true).queue();
+        }
+        public final SlashOption<Boolean> _eventOverflow = SlashOption.ofBool("event-overflow", "Event uses Instance Overflow", false, Boolean.TRUE);
+        @SlashCmd("set-overflow")
+        @Desc("Set an event schedule's overflow usage")
+        public void setOverflow(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-overflow") Boolean eventOverflow)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setUsesInstanceOverflow(eventOverflow);;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule overflow usage").setEphemeral(true).queue();
+        }
+        @SlashCmd("remove")
+        @Desc("Removes an event schedule")
+        public void remove(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec)
+        {
+            if (eventSpec == null || !ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.remove(eventSpec.id, eventSpec))
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            hook.sendMessage("Removed event schedule").setEphemeral(true).queue();
+        }
     }
 
 }

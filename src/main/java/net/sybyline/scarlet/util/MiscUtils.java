@@ -25,6 +25,10 @@ import java.time.OffsetDateTime;
 import java.time.Period;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.TextStyle;
+import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAmount;
 import java.time.zone.ZoneRules;
 import java.util.ArrayList;
@@ -78,6 +82,21 @@ public interface MiscUtils
     static OffsetDateTime odt2utc(LocalDateTime ldt)
     {
         return OffsetDateTime.of(ldt, DEFAULT_ZONE_RULES.getOffset(ldt)).withOffsetSameInstant(ZoneOffset.UTC);
+    }
+
+    static final DateTimeFormatter
+        DAY_NAME_FULL = new DateTimeFormatterBuilder().appendText(ChronoField.DAY_OF_WEEK, TextStyle.FULL).toFormatter(),
+        MONTH_NAME_FULL = new DateTimeFormatterBuilder().appendText(ChronoField.MONTH_OF_YEAR, TextStyle.FULL).toFormatter();
+
+    static String ordinalSuffix(long ordinal)
+    {
+        switch ((int)Math.abs(ordinal % 10L))
+        {
+        default: return "th";
+        case  1: return "st";
+        case  2: return "nd";
+        case  3: return "rd";
+        }
     }
 
     @SafeVarargs

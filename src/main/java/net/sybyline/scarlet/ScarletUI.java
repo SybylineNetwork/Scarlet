@@ -1731,6 +1731,7 @@ public class ScarletUI implements AutoCloseable
         {
             super(id, name, defaultValue, new JPanel(new BorderLayout()));
             JButton button = new JButton("+");
+            button.addActionListener($ -> Swing.invokeLater(() -> new EntryPanel("")));
             JPanel panel = new JPanel(new GridBagLayout());
             this.renderInner = panel;
             JScrollPane scroll = new JScrollPane(panel);

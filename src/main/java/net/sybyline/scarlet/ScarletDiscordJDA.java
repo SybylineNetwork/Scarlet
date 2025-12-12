@@ -302,6 +302,20 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.audio.init();
         this.scarlet.exec.scheduleAtFixedRate(this::clearDeadPagination, 30_000L, 30_000L, TimeUnit.MILLISECONDS);
     }
+    @Deprecated
+    void scheduledEventsTest()
+    {
+        ScarletDiscordJDA
+            .this
+            .jda
+            .getGuildById(this.guildSf)
+//            .getScheduledEvents()
+//            .stream()
+//            .findFirst()
+//            .get()
+            .createScheduledEvent("name", "location", null, null)
+            ;
+    }
 
     @Override
     public void updateCommandList()

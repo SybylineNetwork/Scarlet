@@ -39,6 +39,7 @@ import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.ProgressResponseBody;
 import io.github.vrchatapi.api.AuthenticationApi;
 import io.github.vrchatapi.api.AvatarsApi;
+import io.github.vrchatapi.api.CalendarApi;
 import io.github.vrchatapi.api.FilesApi;
 import io.github.vrchatapi.api.GroupsApi;
 import io.github.vrchatapi.api.InstancesApi;
@@ -49,7 +50,10 @@ import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.BanGroupMemberRequest;
+import io.github.vrchatapi.model.CalendarEvent;
+import io.github.vrchatapi.model.CreateCalendarEventRequest;
 import io.github.vrchatapi.model.CreateGroupInviteRequest;
+import io.github.vrchatapi.model.CreateInstanceRequest;
 import io.github.vrchatapi.model.CurrentUser;
 import io.github.vrchatapi.model.FileAnalysis;
 import io.github.vrchatapi.model.Group;
@@ -1107,6 +1111,16 @@ public class ScarletVRChat implements Closeable
         okhttp3.Call localVarCall = this.client.buildCall(null, "/instances", "POST", new ArrayList<>(), new ArrayList<>(), createInstanceRequest, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
         ApiResponse<Instance> localVarResp = this.client.execute(localVarCall, Instance.class);
         return localVarResp.getData();
+    }
+
+    public Instance createInstance(CreateInstanceRequest createInstanceRequest) throws ApiException
+    {
+        return new InstancesApi(this.client).createInstance(createInstanceRequest);
+    }
+
+    public CalendarEvent createCalendarEvent(String groupId, CreateCalendarEventRequest createCalendarEventRequest) throws ApiException
+    {
+        return new CalendarApi(this.client).createGroupCalendarEvent(groupId, createCalendarEventRequest);
     }
 
     public String getStickerFileId(String userId, String stickerId) throws ApiException

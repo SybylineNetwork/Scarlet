@@ -12,6 +12,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -25,7 +31,9 @@ import java.util.function.Function;
 import java.util.function.ObjIntConsumer;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -36,6 +44,11 @@ import org.slf4j.LoggerFactory;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.IMentionable;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
@@ -69,13 +82,8 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import net.dv8tion.jda.api.interactions.components.ComponentInteraction;
-import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.components.buttons.Button;
-import net.dv8tion.jda.api.components.label.Label;
-import net.dv8tion.jda.api.components.textinput.TextInput;
-import net.dv8tion.jda.api.components.textinput.TextInputStyle;
-import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.interactions.modals.ModalInteraction;
+import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.requests.restaction.WebhookMessageEditAction;
 import net.sybyline.scarlet.util.Func;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -546,6 +554,91 @@ public class DInteractions
     {
         return Comparator.comparingInt($ -> Math.min(LD.apply(typing, $.getName()), LD.apply(typing, $.getAsString())));
     }
+    public static enum SlashOptionLocalTime implements SlashCompleteHandler
+    {
+        INSTANCE;
+        @Override
+        public void autocomplete(CommandAutoCompleteInteractionEvent event)
+        {
+            String value = event.getFocusedOption().getValue().trim();
+            if (value.isEmpty())
+            {
+                event.replyChoiceStrings(IntStream.range(0, 24).mapToObj($ -> String.format("%02d:00", $)).toArray(String[]::new)).queue();
+                return;
+            }
+            Matcher m = Pattern.compile("(?<h>\\d\\d)(:(?<m>\\d\\d)?)?").matcher(value);
+            if (m.matches())
+            {
+                String h = m.group("h");
+                List<String> strings = IntStream.range(0, 12).mapToObj($ -> String.format("%s:%02d", h, $*5)).collect(Collectors.toList());
+                if (!strings.contains(value))
+                    strings.add(0, value);
+                event.replyChoiceStrings(strings).queue();
+                return;
+            }
+            event.replyChoiceStrings().queue();
+        }
+        public static LocalTime localTime(CharSequence charSequence)
+        {
+            return LocalTime.parse(charSequence);
+        }
+        public static Duration duration(CharSequence charSequence)
+        {
+            LocalTime time = localTime(charSequence);
+            return Duration.ofHours(time.getHour()).plusMinutes(time.getMinute());
+        }
+    }
+    public static enum SlashOptionLocalDate implements SlashCompleteHandler
+    {
+        INSTANCE;
+        @Override
+        public void autocomplete(CommandAutoCompleteInteractionEvent event)
+        {
+            LocalDate nowDate = LocalDate.now(ZoneOffset.UTC);
+            String value = event.getFocusedOption().getValue().trim();
+            if (value.isEmpty())
+            {
+                event.replyChoiceStrings(IntStream.range(1, 25).mapToObj($ -> nowDate.plusDays($).toString()).toArray(String[]::new)).queue();
+                return;
+            }
+            Matcher m = Pattern.compile("(?<y>+?\\d\\d\\d\\d+)(-(?<m>\\d\\d?)?(-(?<d>\\d\\d?))?)?").matcher(value);
+            if (m.matches())
+            {
+                String y = m.group("y"),
+                       M = m.group("m"),
+                       d = m.group("d");
+                if (M == null)
+                {
+                    List<String> strings = IntStream.range(1, 13).mapToObj($ -> String.format("%s:%02d", y, $*5)).collect(Collectors.toList());
+                    if (!strings.contains(value))
+                        strings.add(0, value);
+                    event.replyChoiceStrings(strings).queue();
+                }
+                else if (d == null)
+                {
+                    YearMonth ym = YearMonth.of(Integer.parseUnsignedInt(y, 10), Integer.parseUnsignedInt(M, 10));
+                    if (nowDate.getYear() == ym.getYear() && nowDate.getMonthValue() == ym.getMonthValue())
+                    {
+                        event.replyChoiceStrings(IntStream.range(1, 25).mapToObj($ -> nowDate.plusDays($).toString()).toArray(String[]::new)).queue();
+                    }
+                    else
+                    {
+                        event.replyChoiceStrings(IntStream.range(1, 25).mapToObj($ -> ym.atDay($).toString()).toArray(String[]::new)).queue();
+                    }
+                }
+                else
+                {
+                    event.replyChoiceStrings(value).queue();
+                }
+                return;
+            }
+            event.replyChoiceStrings().queue();
+        }
+        public static LocalDate localDate(CharSequence charSequence)
+        {
+            return LocalDate.parse(charSequence);
+        }
+    }
     public static class SlashOptionStrings implements SlashCompleteHandler
     {
         static final Pattern namer = Pattern.compile("[^0-9a-z]");
@@ -743,6 +836,22 @@ public class DInteractions
         {
             return new SlashOption<E>(OptionType.STRING, dOptionEnum.name, dOptionEnum.description, required, null, dOptionEnum::getAsEnum, dOptionEnum.choices);
         }
+        public static SlashOption<ZoneId> ofZoneId(String name, String desc, boolean required, ZoneId fallback)
+        {
+            return SlashOption.ofString(name, desc, true, fallback, ZoneId::of, true, new SlashOptionStrings(ZoneId.getAvailableZoneIds().stream().sorted(), true));
+        }
+        public static SlashOption<LocalDate> ofLocalDate(String name, String desc, boolean required, LocalDate fallback)
+        {
+            return ofString(name, desc, required, fallback, SlashOptionLocalDate::localDate, false, SlashOptionLocalDate.INSTANCE);
+        }
+        public static SlashOption<LocalTime> ofLocalTime(String name, String desc, boolean required, LocalTime fallback)
+        {
+            return ofString(name, desc, required, fallback, SlashOptionLocalTime::localTime, false, SlashOptionLocalTime.INSTANCE);
+        }
+        public static SlashOption<Duration> ofDuration(String name, String desc, boolean required, Duration fallback)
+        {
+            return ofString(name, desc, required, fallback, SlashOptionLocalTime::duration, false, SlashOptionLocalTime.INSTANCE);
+        }
         SlashOption(OptionType type, String name, String desc, boolean required, T fallback, Function<? super OptionMapping, ? extends T> resolver)
         {
             this(type, name, desc, required, fallback, resolver, (SlashCompleteHandler)null);
@@ -764,8 +873,8 @@ public class DInteractions
         }
         SlashOption(OptionData data, T fallback, Function<? super OptionMapping, ? extends T> resolver, Command.Choice[] choices)
         {
-            this(data, fallback, resolver, (SlashCompleteHandler)null);
-            if (choices != null)
+            this(data.setAutoComplete(choices != null && choices.length > 25), fallback, resolver, choices == null || choices.length <= 25 ? (SlashCompleteHandler)null : new SlashOptionsChoicesUnsanitized(() -> choices, true));
+            if (choices != null && choices.length <= 25)
                 this.data.addChoices(choices);
         }
         final OptionData data;

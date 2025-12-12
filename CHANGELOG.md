@@ -7,6 +7,12 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.15-rc3
+  - Added (very WIP) event scheduling
+  - Added `/schedule` Discord slash command to view and modify scheduled events
+  - Fixed bug preventing new entries in string list settings
+  - Fixed bug displaying incorrect feedback when removing aux webhooks via Discord slash command
+
 ## 0.4.15-rc2
   - Added Instance Enforcement extended event
   - Added setting to optionally white/blacklist for worlds permissible for group instances

@@ -23,31 +23,36 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
 //    INSTANCE_MUTE       ("group.instance.mute"       , "Instance Mute"       , 0x00_FF007F), // ? LocationComponent
     INSTANCE_WARN       ("group.instance.warn"       , "Instance Warn"       , 0x00_FFFF00), // LocationComponent
     INVITE_CREATE       ("group.invite.create"       , "Invite Create"       , 0x00_00FF00), // <empty object>
-//    INVITE_CANCEL       ("group.invite.cancel"       , "Invite Cancel"       , 0x00_000000), // ?
+    INVITE_CANCEL       ("group.invite.cancel"       , "Invite Cancel"       , 0x00_000000), // <empty object>
     MEMBER_JOIN         ("group.member.join"         , "Member Join"         , 0x00_00FF00), // <empty object>
     MEMBER_LEAVE        ("group.member.leave"        , "Member Leave"        , 0x00_FF007F), // <empty object>
     MEMBER_REMOVE       ("group.member.remove"       , "Member Remove"       , 0x00_FF0000), // <empty object>
     /** If the role is assigned via economy purchase: actorId:"vrc_system", actorDisplayName:"VRChat System" **/
     MEMBER_ROLE_ASSIGN  ("group.member.role.assign"  , "Member Role Assign"  , 0x00_00FF7F), // RoleRefComponent
     MEMBER_ROLE_UNASSIGN("group.member.role.unassign", "Member Role Unassign", 0x00_FF007F), // RoleRefComponent
-//    MEMBER_UPDATE       ("group.member.update"       , "Member Update"       , 0x00_007F7F), // ? Map<String, UpdateSubComponent>
+//    MEMBER_UPDATE       ("group.member.update"       , "Member Update"       , 0x00_007F7F), // Map<String, UpdateSubComponent>
     MEMBER_USER_UPDATE  ("group.member.user.update"  , "Member User Update"  , 0x00_007F7F), // Map<String, UpdateSubComponent>
-//    ANNOUNCEMENT        ("group.announcement"        , "Announcement"        , 0x00_000000), // ?
+    ANNOUNCEMENT        ("group.announcement"        , "Announcement"        , 0x00_00FF7F), // AnnouncementComponent
     POST_CREATE         ("group.post.create"         , "Post Create"         , 0x00_00FF7F), // PostCreateComponent
-    POST_DELETE         ("group.post.delete"         , "Post Delete"         , 0x00_FF0000), // PostDeleteComponent
-//    POST_UPDATE         ("group.post.update"         , "Post Update"         , 0x00_FF0000), // ? Map<String, UpdateSubComponent>
+    POST_DELETE         ("group.post.delete"         , "Post Delete"         , 0x00_7FFF7F), // PostDeleteComponent
+    POST_UPDATE         ("group.post.update"         , "Post Update"         , 0x00_00FF7F), // Map<String, UpdateSubComponent>
+    EVENT_CREATE        ("group.calendarEvent.create", "Event Create"        , 0x00_00FF7F), // EventCreateComponent
+    EVENT_DELETE        ("group.calendarEvent.delete", "Event Delete"        , 0x00_FF0000), // EventDeleteComponent
+//    EVENT_UPDATE        ("group.calendarEvent.update", "Event Update"        , 0x00_FF0000), // Map<String, UpdateSubComponent>
     REQUEST_BLOCK       ("group.request.block"       , "Request Block"       , 0x00_FF0000), // <empty object>
     REQUEST_CREATE      ("group.request.create"      , "Request Create"      , 0x00_007F00), // <empty object>
     REQUEST_REJECT      ("group.request.reject"      , "Request Reject"      , 0x00_FF007F), // <empty object>
     ROLE_CREATE         ("group.role.create"         , "Role Create"         , 0x00_00FF00), // RoleCreateComponent
     ROLE_DELETE         ("group.role.delete"         , "Role Delete"         , 0x00_FF0000), // RoleDeleteComponent
     ROLE_UPDATE         ("group.role.update"         , "Role Update"         , 0x00_007F7F), // Map<String, UpdateSubComponent>
-//    GALLERY_CREATE      ("group.gallery.create"      , "Gallery Create"      , 0x00_000000), // ?
-//    GALLERY_DELETE      ("group.gallery.delete"      , "Gallery Delete"      , 0x00_000000), // ?
-//    GALLERY_UPDATE      ("group.gallery.update"      , "Gallery Update"      , 0x00_000000), // ?
+    GALLERY_CREATE      ("group.gallery.create"      , "Gallery Create"      , 0x00_000000), // GalleryCreateComponent
+    GALLERY_DELETE      ("group.gallery.delete"      , "Gallery Delete"      , 0x00_000000), // GalleryDeleteComponent
+    GALLERY_UPDATE      ("group.gallery.update"      , "Gallery Update"      , 0x00_000000), // Map<String, UpdateSubComponent>
     TRANSFER_ACCEPT     ("group.transfer.accept"     , "Transfer Accept"     , 0x00_0000FF), // TransferAcceptComponent
+    TRANSFER_CANCEL     ("group.transfer.start"      , "Transfer Start"      , 0x00_00FF00), // <empty object>
     TRANSFER_START      ("group.transfer.start"      , "Transfer Start"      , 0x00_00FF00), // TransferStartComponent
-//    CREATE              ("group.create"              , "Create"              , 0x00_000000), // ?
+    CREATE              ("group.create"              , "Create"              , 0x00_000000), // CreateComponent
+//    DELETE              ("group.delete"              , "Delete"              , 0x00_FF0000), // DeleteComponent
     UPDATE              ("group.update"              , "Update"              , 0x00_007F7F), // Map<String, UpdateSubComponent>
     USER_BAN            ("group.user.ban"            , "User Ban"            , 0x00_FF0000), // <empty object>
     USER_UNBAN          ("group.user.unban"          , "User Unban"          , 0x00_007F00), // <empty object>
@@ -144,6 +149,14 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
         public String roleId;
         public String roleName;
     }
+    public static class AnnouncementComponent
+    {
+        public String authorId;
+        public String imageId;
+        public boolean sendNotification;
+        public String text;
+        public String title;
+    }
     public static class PostBaseComponent
     {
         public String authorId;
@@ -163,6 +176,43 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
         public String editorId;
         public String imageUrl;
         public OffsetDateTime updatedAt;
+    }
+    public static class EventCreateComponent
+    {
+        public String accessType;
+        public String description;
+        public String imageId;
+        public String title;
+        public String type;
+    }
+    public static class EventDeleteComponent
+    {
+        public String accessType;
+        public String category;
+        public int closeInstanceAfterEndMinutes;
+        public OffsetDateTime createdAt;
+        public OffsetDateTime deletedAt;
+        public String description;
+        public int durationInMs;
+        public OffsetDateTime endsAt;
+        public boolean featured;
+        public int guestEarlyJoinMinutes;
+        public int hostEarlyJoinMinutes;
+        public String imageId;
+        public String imageUrl;
+        public int interestedUserCount;
+        public boolean isDraft;
+        public String[] languages;
+        public String ownerId;
+        public String[] platforms;
+        public String[] roleIds; // nullable
+        public String shortCode;// nullable
+        public OffsetDateTime startsAt;
+        public String[] tags;
+        public String title;
+        public String type;
+        public OffsetDateTime updatedAt;
+        public boolean usesInstanceOverflow;
     }
     public static class RoleBaseComponent
     {
@@ -184,6 +234,24 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
         public boolean isManagementRole;
         public int order;
     }
+    public static class GalleryBaseComponent
+    {
+        public String description;
+        public boolean membersOnly;
+        public String name;
+        public String[] roleIdsToAutoApprove;
+        public String[] roleIdsToManage;
+        public String[] roleIdsToSubmit;
+        public String[] roleIdsToView; // nullable
+    }
+    public static class GalleryCreateComponent extends GalleryBaseComponent
+    {
+    }
+    public static class GalleryDeleteComponent extends GalleryBaseComponent
+    {
+        public OffsetDateTime createdAt;
+        public OffsetDateTime updatedAt;
+    }
     public static class TransferStartComponent
     {
         public String transferTargetId;
@@ -191,6 +259,29 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
     public static class TransferAcceptComponent
     {
         public String oldOwnerId;
+    }
+    public static class CreateComponent
+    {
+        public String bannerId;
+        public int bannerVersion;
+        public String description;
+        public Discoverability discoverability;
+        public static class Discoverability
+        {
+            public Boolean isDiscoverableComputed;
+            public Boolean isModerationDiscoverable;
+            public Boolean isModerationDiscoverableReason;
+            public Boolean isOverrideDiscoverable;
+            public Boolean isOverrideDiscoverableReason;
+        }
+        public String iconId;
+        public int iconVersion;
+        public String joinState;
+        public String name;
+        public String ownerId;
+        public String privacy;
+        public String rules;
+        public String shortCode;
     }
     public static class UpdateSubComponent
     {

@@ -88,7 +88,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.15-rc2",
+        VERSION = "0.4.15-rc3",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -339,6 +339,7 @@ public class Scarlet implements Closeable
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
+    final ScarletCalendar calendar = new ScarletCalendar(this, new File(dir, "event_schedule.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
     final ScarletUI.Setting<Boolean> confirmGroupInvite = this.ui.settingBool("ui_confirm_group_invite", "Confirmation dialog for group invites", false),
@@ -429,6 +430,7 @@ public class Scarlet implements Closeable
                 {
                     this.maybeCheckInstances();
                     this.maybeEnforceInstances();
+                    this.maybeUpdateCalendar();
                 }
                 catch (Exception ex)
                 {
@@ -742,6 +744,17 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         {
             this.lastInstanceEnforce = now;
             this.enforceInstances();
+        }
+    }
+
+    OffsetDateTime lastCalendarUpdate = OffsetDateTime.now(ZoneOffset.UTC);
+    void maybeUpdateCalendar()
+    {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        if (now.isAfter(this.lastCalendarUpdate.plusMinutes(1L)))
+        {
+            this.lastCalendarUpdate = now;
+            this.calendar.update();;
         }
     }
 
