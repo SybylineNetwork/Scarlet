@@ -49,7 +49,7 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
     GALLERY_DELETE      ("group.gallery.delete"      , "Gallery Delete"      , 0x00_000000), // GalleryDeleteComponent
     GALLERY_UPDATE      ("group.gallery.update"      , "Gallery Update"      , 0x00_000000), // Map<String, UpdateSubComponent>
     TRANSFER_ACCEPT     ("group.transfer.accept"     , "Transfer Accept"     , 0x00_0000FF), // TransferAcceptComponent
-    TRANSFER_CANCEL     ("group.transfer.start"      , "Transfer Start"      , 0x00_00FF00), // <empty object>
+    TRANSFER_CANCEL     ("group.transfer.cancel"     , "Transfer Cancel"     , 0x00_00FF00), // <empty object>
     TRANSFER_START      ("group.transfer.start"      , "Transfer Start"      , 0x00_00FF00), // TransferStartComponent
     CREATE              ("group.create"              , "Create"              , 0x00_000000), // CreateComponent
 //    DELETE              ("group.delete"              , "Delete"              , 0x00_FF0000), // DeleteComponent

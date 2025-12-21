@@ -70,6 +70,13 @@ public class Swing
     {
         SwingUtilities.invokeLater(func);
     }
+    public static void invokeOrLater(Runnable func)
+    {
+        if (SwingUtilities.isEventDispatchThread())
+            func.run();
+        else
+            SwingUtilities.invokeLater(func);
+    }
     public static void invoke(Runnable func) throws InterruptedException
     {
         if (SwingUtilities.isEventDispatchThread())

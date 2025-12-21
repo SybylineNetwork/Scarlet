@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -29,6 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,8 @@ import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.CreateCalendarEventRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.GroupGallery;
+import io.github.vrchatapi.model.GroupGalleryImage;
 import io.github.vrchatapi.model.GroupLimitedMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
@@ -79,18 +83,23 @@ import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
 import net.dv8tion.jda.api.utils.FileUpload;
+import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.log.ScarletLogger;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DInteractions.DefaultPerms;
 import net.sybyline.scarlet.server.discord.DInteractions.Desc;
+import net.sybyline.scarlet.server.discord.DInteractions.Ephemeral;
+import net.sybyline.scarlet.server.discord.DInteractions.ModalFlowOption;
+import net.sybyline.scarlet.server.discord.DInteractions.ModalSub;
 import net.sybyline.scarlet.server.discord.DInteractions.MsgCmd;
 import net.sybyline.scarlet.server.discord.DInteractions.Required;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashCmd;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOpt;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOption;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOptionStrings;
+import net.sybyline.scarlet.server.discord.DInteractions.StringSel;
 import net.sybyline.scarlet.server.discord.DOptionEnum;
 import net.sybyline.scarlet.util.Func.F1;
 import net.sybyline.scarlet.util.Gifs;
@@ -100,6 +109,7 @@ import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VrcIds;
+import net.sybyline.scarlet.util.VrcWeb;
 
 public class ScarletDiscordCommands
 {
@@ -110,9 +120,22 @@ public class ScarletDiscordCommands
     {
         this.discord = discord;
         discord.interactions.register(this);
+        Map<String, String> languages = discord.scarlet.vrc.getConfigLanguageOptions();
+        this.languages = languages == null || languages.isEmpty() ? new HashMap<>() : languages;
+        this.spokenLanguages = languages == null || languages.isEmpty()
+            ? new Command.Choice[0] 
+            : languages
+                .entrySet()
+                .stream()
+                .sequential()
+                .sorted(Map.Entry.comparingByKey())
+                .map($ -> new Command.Choice($.getValue(), $.getKey()))
+                .toArray(Command.Choice[]::new);
     }
 
     final ScarletDiscordJDA discord;
+    Map<String, String> languages;
+    Command.Choice[] spokenLanguages;
 
     // Commands
 
@@ -210,8 +233,8 @@ public class ScarletDiscordCommands
                 .searchWorlds(null, null, null, null, 50, null, 0, searchQuery, null, null, null, null, null, null, null)
                 .stream()
                 .map($ -> new EmbedBuilder()
-                    .setAuthor($.getAuthorName(), "https://vrchat.com/home/user/"+$.getAuthorId(), null)
-                    .setTitle(MiscUtils.maybeEllipsis(256, $.getName()), "https://vrchat.com/home/world/"+$.getId())
+                    .setAuthor($.getAuthorName(), VrcWeb.Home.user($.getAuthorId()), null)
+                    .setTitle(MiscUtils.maybeEllipsis(256, $.getName()), VrcWeb.Home.world($.getId()))
                     .setThumbnail($.getThumbnailImageUrl() == null || $.getThumbnailImageUrl().isEmpty() ? null : $.getThumbnailImageUrl())
                     .addField("Report world", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_world(ScarletDiscordCommands.this.discord.requestingEmail.get(), $.getId(), "World", null)), false)
                     .build())
@@ -226,8 +249,7 @@ public class ScarletDiscordCommands
                 .searchUsers(searchQuery, null, 50, 0)
                 .stream()
                 .map($ -> new EmbedBuilder()
-//                    .setAuthor($.getAuthorName(), "https://vrchat.com/home/user/"+$.getAuthorId(), null)
-                    .setTitle(MiscUtils.maybeEllipsis(256, $.getDisplayName()), "https://vrchat.com/home/user/"+$.getId())
+                    .setTitle(MiscUtils.maybeEllipsis(256, $.getDisplayName()), VrcWeb.Home.user($.getId()))
                     .setThumbnail($.getProfilePicOverride() == null || $.getProfilePicOverride().isEmpty() ? ($.getCurrentAvatarImageUrl() == null || $.getCurrentAvatarImageUrl().isEmpty() ? null : $.getCurrentAvatarImageUrl()) : $.getProfilePicOverride())
                     .addField("Report account", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_account(ScarletDiscordCommands.this.discord.requestingEmail.get(), null, $.getId(), "Account", null)), false)
                     .build())
@@ -243,7 +265,7 @@ public class ScarletDiscordCommands
                 .stream()
                 .map($ -> new EmbedBuilder()
                     .setAuthor($.getShortCode()+"."+$.getDiscriminator(), null, $.getIconUrl())
-                    .setTitle(MiscUtils.maybeEllipsis(256, $.getName()), "https://vrchat.com/home/group/"+$.getId())
+                    .setTitle(MiscUtils.maybeEllipsis(256, $.getName()), VrcWeb.Home.group($.getId()))
                     .setThumbnail($.getBannerUrl() == null || $.getBannerUrl().isEmpty() ? null : $.getBannerUrl())
                     .setDescription($.getDescription() == null || $.getDescription().isEmpty() ? null : $.getDescription())
                     .addField("Report group", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_group(ScarletDiscordCommands.this.discord.requestingEmail.get(), $.getId(), "Group", null)), false)
@@ -257,8 +279,8 @@ public class ScarletDiscordCommands
         {
             MessageEmbed[] embeds = AvatarSearch.vrcxSearchAllCached(ScarletDiscordCommands.this.discord.getAvatarSearchProviders(), searchQuery)
                 .map($ -> new EmbedBuilder()
-                    .setAuthor($.authorName, "https://vrchat.com/home/user/"+$.authorId, null)
-                    .setTitle(MiscUtils.maybeEllipsis(256, $.name), "https://vrchat.com/home/avatar/"+$.id)
+                    .setAuthor($.authorName, VrcWeb.Home.user($.authorId), null)
+                    .setTitle(MiscUtils.maybeEllipsis(256, $.name), VrcWeb.Home.avatar($.id))
                     .setThumbnail($.imageUrl == null || $.imageUrl.isEmpty() ? null : $.imageUrl)
                     .setDescription($.description == null || $.description.isEmpty() ? null : $.description)
                     .addField("Report avatar", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_avatar(ScarletDiscordCommands.this.discord.requestingEmail.get(), $.id, "Avatar", null)), false)
@@ -540,7 +562,7 @@ public class ScarletDiscordCommands
                 watchedGroup.message = message;
             watchedGroup.priority = groupPriority;
             ScarletDiscordCommands.this.discord.scarlet.watchedGroups.addWatchedGroup(groupId, watchedGroup);
-            hook.sendMessageFormat("Added group [%s](https://vrchat.com/home/group/%s)", group.getName(), group.getId()).setEphemeral(true).queue();
+            hook.sendMessageFormat("Added group [%s](%s)", group.getName(), VrcWeb.Home.group(group.getId())).setEphemeral(true).queue();
         }
         @SlashCmd("delete-watched-group")
         @Desc("Removes a watched group")
@@ -549,7 +571,7 @@ public class ScarletDiscordCommands
             if (ScarletDiscordCommands.this.discord.scarlet.watchedGroups.removeWatchedGroup(groupId))
             {
                 Group group = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroup(groupId);
-                hook.sendMessageFormat("Removed group [%s](https://vrchat.com/home/group/%s)", group == null ? groupId : group.getName(), groupId).setEphemeral(true).queue();
+                hook.sendMessageFormat("Removed group [%s](%s)", group == null ? groupId : group.getName(), VrcWeb.Home.group(groupId)).setEphemeral(true).queue();
             }
             else
             {
@@ -1032,7 +1054,7 @@ public class ScarletDiscordCommands
                 watchedEntity.message = message;
             watchedEntity.priority = entityPriority;
             this._watchedEntities().addWatchedEntity(entityId, watchedEntity);
-            hook.sendMessageFormat("Added %s [%s](https://vrchat.com/home/%s/%s)", this._singular(), this._getEntityName(entity), this._singular(), entityId).setEphemeral(true).queue();
+            hook.sendMessageFormat("Added %s [%s]("+VrcWeb.Home.HOME+"/%s/%s)", this._singular(), this._getEntityName(entity), this._singular(), entityId).setEphemeral(true).queue();
         }
 //        @SlashCmd("remove")
 //        @Desc("Removes a watched group")
@@ -1041,7 +1063,7 @@ public class ScarletDiscordCommands
             if (this._watchedEntities().removeWatchedEntity(entityId))
             {
                 E entity = this._getEntity(entityId, ScarletJsonCache.ALWAYS_PREFER_CACHED);
-                hook.sendMessageFormat("Removed %s [%s](https://vrchat.com/home/%s/%s)", this._singular(), entity == null ? entityId : this._getEntityName(entity), this._singular(), entityId).setEphemeral(true).queue();
+                hook.sendMessageFormat("Removed %s [%s]("+VrcWeb.Home.HOME+"/%s/%s)", this._singular(), entity == null ? entityId : this._getEntityName(entity), this._singular(), entityId).setEphemeral(true).queue();
             }
             else
             {
@@ -1585,7 +1607,7 @@ public class ScarletDiscordCommands
                     GroupLimitedMember member = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, $);
                     ScarletData.UserMetadata userMeta = ScarletDiscordCommands.this.discord.scarlet.data.userMetadata($);
                     EmbedBuilder builder = new EmbedBuilder();
-                    builder.setTitle(sc == null ? $ : sc.getDisplayName(), "https://vrchat.com/home/user/"+$);
+                    builder.setTitle(sc == null ? $ : sc.getDisplayName(), VrcWeb.Home.user($));
                     if (sc != null)
                     {
                         String thumb = sc.getProfilePicOverrideThumbnail();
@@ -1637,17 +1659,17 @@ public class ScarletDiscordCommands
             {
                 ScarletDiscordCommands.this.discord.scarlet.data.linkIdToSnowflake(vrcId, discordUser.getId());
                 LOG.info(String.format("Linking VRChat user %s (%s) to Discord user %s (<@%s>)", vrchatUser.getDisplayName(), vrcId, discordUser.getEffectiveName(), discordUser.getId()));
-                hook.sendMessageFormat("Associating %s with VRChat user [%s](https://vrchat.com/home/user/%s)", discordUser.getEffectiveName(), vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+                hook.sendMessageFormat("Associating %s with VRChat user [%s](%s)", discordUser.getEffectiveName(), vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
             }
             
             if (!this._addId(vrcId))
             {
-                hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already on the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+                hook.sendMessageFormat("VRChat user [%s](%s) is already on the "+this._infoName()+" list", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
             }
             else
             {
                 LOG.info(String.format("Adding VRChat user %s (%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId));
-                hook.sendMessageFormat("Adding VRChat user [%s](https://vrchat.com/home/user/%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+                hook.sendMessageFormat("Adding VRChat user [%s](%s) to the "+this._infoName()+" list", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
             }
             
             if (vrchatRoleOpt == null)
@@ -1658,13 +1680,13 @@ public class ScarletDiscordCommands
                 List<String> roleIds = glm.getRoleIds();
                 if (roleIds != null && roleIds.contains(vrchatRoleOpt.getId()))
                 {
-                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already has the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrcId, vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId()).setEphemeral(true).queue();
+                    hook.sendMessageFormat("VRChat user [%s](%s) is already has the role [%s](%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId), vrchatRoleOpt.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId())).setEphemeral(true).queue();
                     return;
                 }
             }
             
             ScarletDiscordCommands.this.discord.scarlet.vrc.addGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId, vrchatRoleOpt.getId());
-            hook.sendMessageFormat("Adding the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) to [%s](https://vrchat.com/home/user/%s)", vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId(), vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("Adding the role [%s](%s) to [%s](%s)", vrchatRoleOpt.getName(), VrcWeb.Home.user(vrcId), vrchatRoleOpt.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId()), vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
         }
         protected void _remove(SlashCommandInteractionEvent event, InteractionHook hook, io.github.vrchatapi.model.User vrchatUser, io.github.vrchatapi.model.GroupRole vrchatRoleOpt)
         {
@@ -1674,12 +1696,12 @@ public class ScarletDiscordCommands
             
             if (!this._removeId(vrcId))
             {
-                hook.sendMessageFormat("%sVRChat user [%s](https://vrchat.com/home/user/%s) is not on the "+this._infoName()+" list", prefix, displayName, vrcId).setEphemeral(true).queue();
+                hook.sendMessageFormat("%sVRChat user [%s](%s) is not on the "+this._infoName()+" list", prefix, displayName, VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
             }
             else
             {
                 LOG.info(String.format("Removing VRChat user %s (%s) from the "+this._infoName()+" list", displayName, vrcId));
-                hook.sendMessageFormat("Removing VRChat user [%s](https://vrchat.com/home/user/%s) from the "+this._infoName()+" list", displayName, vrcId).setEphemeral(true).queue();
+                hook.sendMessageFormat("Removing VRChat user [%s](%s) from the "+this._infoName()+" list", displayName, VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
             }
 
             if (vrchatRoleOpt == null)
@@ -1690,13 +1712,13 @@ public class ScarletDiscordCommands
                 List<String> roleIds = glm.getRoleIds();
                 if (roleIds != null && !roleIds.contains(vrchatRoleOpt.getId()))
                 {
-                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already lacks the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrcId, vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId()).setEphemeral(true).queue();
+                    hook.sendMessageFormat("VRChat user [%s](%s) is already lacks the role [%s](%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId), vrchatRoleOpt.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId())).setEphemeral(true).queue();
                     return;
                 }
             }
             
             ScarletDiscordCommands.this.discord.scarlet.vrc.removeGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId, vrchatRoleOpt.getId());
-            hook.sendMessageFormat("Removing the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) from [%s](https://vrchat.com/home/user/%s)", vrchatRoleOpt.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId(), vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("Removing the role [%s](%s) from [%s](%s)", vrchatRoleOpt.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRoleOpt.getId()), vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
         }
     }
 
@@ -1764,12 +1786,12 @@ public class ScarletDiscordCommands
         ScarletData.UserMetadata userMeta = this.discord.scarlet.data.userMetadata(vrcId);
         if (userMeta == null)
         {
-            hook.sendMessageFormat("No VRChat user metadata found for [%s](https://vrchat.com/home/user/%s)", vrchatUser.getDisplayName(), vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("No VRChat user metadata found for [%s](%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId)).setEphemeral(true).queue();
             return;
         }
         
         StringBuilder sb = new StringBuilder();
-        sb.append("VRChat user metadata for [").append(vrchatUser.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
+        sb.append("VRChat user metadata for [").append(vrchatUser.getDisplayName()).append("](<").append(VrcWeb.Home.user).append(vrcId).append(">):");
         
         if (userMeta.auditEntryIds != null && userMeta.auditEntryIds.length > 0)
         {
@@ -1855,6 +1877,8 @@ public class ScarletDiscordCommands
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, hook))
+            return;
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
         if (status == GroupMemberStatus.BANNED)
@@ -1940,6 +1964,8 @@ public class ScarletDiscordCommands
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, event))
+            return;
         
         event.replyModal(Modal.create("vrchat-user-ban-multi", "Ban Multiple VRChat Users")
             .addComponents(Label.of("Target VRChat User IDs", TextInput.create("target-ids", TextInputStyle.PARAGRAPH)
@@ -1979,6 +2005,8 @@ public class ScarletDiscordCommands
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, hook))
+            return;
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
         if (status != GroupMemberStatus.BANNED)
@@ -2023,6 +2051,8 @@ public class ScarletDiscordCommands
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, event))
+            return;
         
         event.replyModal(Modal.create("vrchat-user-unban-multi", "Unban Multiple VRChat Users")
             .addComponents(Label.of("Target VRChat User IDs", TextInput.create("target-ids", TextInputStyle.PARAGRAPH)
@@ -2075,11 +2105,11 @@ public class ScarletDiscordCommands
             
             String ictoken;
             do ictoken = UUID.randomUUID().toString();
-            while (ScarletDiscordCommands.this.discord.instanceCreation.putIfAbsent(ictoken, ScarletDiscordCommands.this.discord.new InstanceCreation(ictoken, vrchatWorld.getId(), groupId)) != null);
+            while (ScarletDiscordCommands.this.discord.instanceCreation.putIfAbsent(ictoken, new ScarletDiscordJDA.InstanceCreation(ictoken, vrchatWorld.getId(), groupId)) != null);
             
             List<GroupRole> roles = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupRoles(groupId);
             
-            hook.sendMessageFormat("Create a new [%s](https://vrchat.com/home/world/%s) instance:", vrchatWorld.getName(), vrchatWorld.getId())
+            hook.sendMessageFormat("Create a new [%s](%s) instance:", vrchatWorld.getName(), VrcWeb.Home.world(vrchatWorld.getId()))
                 .addComponents(ActionRow.of(StringSelectMenu.create("new-instance-access-type:"+ictoken)
                     .addOption("Group Public", "public")
                     .addOption("Group Plus", "plus")
@@ -2103,6 +2133,8 @@ public class ScarletDiscordCommands
                     .addOption("Join queue (users wait to connect when full)", "queueEnabled")
                     .addOption("Hard close (kick connected users on close)", "hardClose")
                     .addOption("Age gate (Age Verified 18+ users only)", "ageGate")
+                    .addOption("Invite Only", "inviteOnly")
+                    .addOption("Invite Requests", "canRequestInvite")
 //                    .addOption("Player persistence (data persists between instances)", "playerPersistenceEnabled")
 //                    .addOption("Instance persistence (state persists when empty)", "instancePersistenceEnabled")
                     .addOption("Content: drones", "contentSettings.drones")
@@ -2111,7 +2143,7 @@ public class ScarletDiscordCommands
                     .addOption("Content: pedestals", "contentSettings.pedestals")
                     .addOption("Content: prints", "contentSettings.prints")
                     .addOption("Content: stickers", "contentSettings.stickers")
-                    .setRequiredRange(0, 9)
+                    .setRequiredRange(0, 11)
                     .setDefaultValues("queueEnabled", "contentSettings.drones", "contentSettings.emoji", "contentSettings.items", "contentSettings.pedestals", "contentSettings.prints", "contentSettings.stickers")
                     .build()))
                 .addComponents(ActionRow.of(
@@ -2158,13 +2190,13 @@ public class ScarletDiscordCommands
                 List<String> roleIds = glm.getRoleIds();
                 if (roleIds != null && roleIds.contains(vrchatRole.getId()))
                 {
-                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already has the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrchatUser.getId(), vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId()).setEphemeral(true).queue();
+                    hook.sendMessageFormat("VRChat user [%s](%s) is already has the role [%s](%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrchatUser.getId()), vrchatRole.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId())).setEphemeral(true).queue();
                     return;
                 }
             }
             
             ScarletDiscordCommands.this.discord.scarlet.vrc.addGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId(), vrchatRole.getId());
-            hook.sendMessageFormat("Adding the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) to [%s](https://vrchat.com/home/user/%s)", vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId(), vrchatUser.getDisplayName(), vrchatUser.getId()).setEphemeral(true).queue();
+            hook.sendMessageFormat("Adding the role [%s](%s) to [%s](%s)", vrchatRole.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId()), vrchatUser.getDisplayName(), VrcWeb.Home.user(vrchatUser.getId())).setEphemeral(true).queue();
         }
         @SlashCmd("remove-role")
         @Desc("Removes a VRChat Group Role")
@@ -2176,13 +2208,13 @@ public class ScarletDiscordCommands
                 List<String> roleIds = glm.getRoleIds();
                 if (roleIds != null && !roleIds.contains(vrchatRole.getId()))
                 {
-                    hook.sendMessageFormat("VRChat user [%s](https://vrchat.com/home/user/%s) is already lacks the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s)", vrchatUser.getDisplayName(), vrchatUser.getId(), vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId()).setEphemeral(true).queue();
+                    hook.sendMessageFormat("VRChat user [%s](%s) is already lacks the role [%s](%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrchatUser.getId()), vrchatRole.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId())).setEphemeral(true).queue();
                     return;
                 }
             }
             
             ScarletDiscordCommands.this.discord.scarlet.vrc.removeGroupRole(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId(), vrchatRole.getId());
-            hook.sendMessageFormat("Removing the role [%s](https://vrchat.com/home/group/%s/settings/roles/%s) from [%s](https://vrchat.com/home/user/%s)", vrchatRole.getName(), ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId(), vrchatUser.getDisplayName(), vrchatUser.getId()).setEphemeral(true).queue();
+            hook.sendMessageFormat("Removing the role [%s](%s) from [%s](%s)", vrchatRole.getName(), VrcWeb.Home.groupSettingsRoles(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatRole.getId()), vrchatUser.getDisplayName(), VrcWeb.Home.user(vrchatUser.getId())).setEphemeral(true).queue();
         }
     }
 
@@ -2202,7 +2234,7 @@ public class ScarletDiscordCommands
             User sc = this.discord.scarlet.vrc.getUser(vrcId, within1day);
             if (sc != null && !this.discord.shouldRedact(vrcId, event.getMember().getId()))
             {
-                sb.append(String.format("### Linked VRChat user:\n[%s](https://vrchat.com/home/user/%s) `%s`\n", sc.getDisplayName(), vrcId, vrcId));
+                sb.append(String.format("### Linked VRChat user:\n[%s](%s) `%s`\n", sc.getDisplayName(), VrcWeb.Home.user(vrcId), vrcId));
             }
         }
         
@@ -2256,17 +2288,17 @@ public class ScarletDiscordCommands
         List<GroupAuditLogEntry> entries = this.discord.scarlet.vrc.auditQueryTargeting(vrcId, daysBack);
         if (entries == null)
         {
-            hook.sendMessageFormat("Error querying audit target history for [%s](<https://vrchat.com/home/user/%s>) (%s)", vrchatUser.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("Error querying audit target history for [%s](<%s>) (%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId), vrcId).setEphemeral(true).queue();
             return;
         }
         else if (entries.isEmpty())
         {
-            hook.sendMessageFormat("No audit target history for [%s](<https://vrchat.com/home/user/%s>) (%s)", vrchatUser.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("No audit target history for [%s](<%s>) (%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId), vrcId).setEphemeral(true).queue();
             return;
         }
         
         StringBuilder sb = new StringBuilder();
-        sb.append("VRChat audit target history for [").append(vrchatUser.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
+        sb.append("VRChat audit target history for [").append(vrchatUser.getDisplayName()).append("](<").append(VrcWeb.Home.user).append(vrcId).append(">):");
         
         ScarletData.UserMetadata userMeta = this.discord.scarlet.data.userMetadata(vrcId);
         if (userMeta != null && userMeta.userSnowflake != null && !this.discord.shouldRedact(vrcId, event.getMember().getId()))
@@ -2319,19 +2351,19 @@ public class ScarletDiscordCommands
         
         if (entries == null)
         {
-            hook.sendMessageFormat("Error querying audit actor history for [%s](<https://vrchat.com/home/user/%s>) (%s)", vrchatUser.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("Error querying audit actor history for [%s](<%s>) (%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId), vrcId).setEphemeral(true).queue();
             return;
         }
         else if (entries.isEmpty()
             // Check is here to avoid side chain vulnerabilities
             || this.discord.shouldRedact(vrcId, event.getMember().getId()))
         {
-            hook.sendMessageFormat("No audit actor history for [%s](<https://vrchat.com/home/user/%s>) (%s)", vrchatUser.getDisplayName(), vrcId, vrcId).setEphemeral(true).queue();
+            hook.sendMessageFormat("No audit actor history for [%s](<%s>) (%s)", vrchatUser.getDisplayName(), VrcWeb.Home.user(vrcId), vrcId).setEphemeral(true).queue();
             return;
         }
         
         StringBuilder sb = new StringBuilder();
-        sb.append("VRChat audit actor history for [").append(vrchatUser.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
+        sb.append("VRChat audit actor history for [").append(vrchatUser.getDisplayName()).append("](<").append(VrcWeb.Home.user).append(vrcId).append(">):");
         
         ScarletData.UserMetadata userMeta = this.discord.scarlet.data.userMetadata(vrcId);
         if (userMeta != null && userMeta.userSnowflake != null)
@@ -2369,7 +2401,7 @@ public class ScarletDiscordCommands
                 bans = this.discord.scarlet.vrc.auditQueryCount(from, to, vrcId, "group.user.ban", null);
         
         StringBuilder sb = new StringBuilder();
-        sb.append("VRChat audit actor summary for [").append(vrchatUser.getDisplayName()).append("](<https://vrchat.com/home/user/").append(vrcId).append(">):");
+        sb.append("VRChat audit actor summary for [").append(vrchatUser.getDisplayName()).append("](<").append(VrcWeb.Home.user).append(vrcId).append(">):");
         
         ScarletData.UserMetadata userMeta = this.discord.scarlet.data.userMetadata(vrcId);
         if (userMeta != null && userMeta.userSnowflake != null)
@@ -3159,7 +3191,7 @@ public class ScarletDiscordCommands
     @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public class Schedule
     {
-        public final SlashOption<ScarletCalendar.EventSpec> _eventSpec = SlashOption.ofString("scarlet-event-spec", "The VRChat role id (grol_XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)", true, null, this::_scarletEventSpec, true, this::_scarletEventSpec);
+        public final SlashOption<ScarletCalendar.EventSpec> _eventSpec = SlashOption.ofString("scarlet-event-spec", "The scheduled event", true, null, this::_scarletEventSpec, true, this::_scarletEventSpec);
         ScarletCalendar.EventSpec _scarletEventSpec(String id) { return ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.get(id); }
         void _scarletEventSpec(CommandAutoCompleteInteractionEvent event) {
             DInteractions.SlashOptionsChoicesUnsanitized.autocomplete(event, ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.values().stream().map($ -> new Command.Choice($.vrcCalendarEventParameters.getTitle(), $.id)).toArray(Command.Choice[]::new), false);
@@ -3171,26 +3203,22 @@ public class ScarletDiscordCommands
             MessageEmbed[] embeds = ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs
                 .values()
                 .stream()
-                .map(spec -> new EmbedBuilder()
-                    .setTitle(spec.vrcCalendarEventParameters.getTitle())
-                    .setDescription(spec.vrcCalendarEventParameters.getDescription())
-                    .setThumbnail(spec.vrcCalendarEventParameters.getImageId() == null ? null : ("https://api.vrchat.cloud/api/1/file/"+spec.vrcCalendarEventParameters.getImageId()+"/1/file"))
-                    .addField("ID", spec.id, true)
-                    .addField("Time", String.valueOf(spec.time), true)
-                    .addField("Duration", String.valueOf(MiscUtils.stringify_ymd_hms(spec.duration)), true)
-                    .addField("Category", String.valueOf(spec.vrcCalendarEventParameters.getCategory()), true)
-                    .build())
+                .map(spec -> spec.embed(new EmbedBuilder()).build())
                 .toArray(MessageEmbed[]::new)
             ;
             
             ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, entriesPerPage).queue(hook);
         }
+        public final SlashOption<Boolean> _eventActive = SlashOption.ofBool("event-active", "Whether this event should actively be scheduled", true, false);
+        public final SlashOption<Boolean> _eventMirrorOnDiscord = SlashOption.ofBool("event-mirror-on-discord", "Whether this event should mirror the VRChat Event with a Discord Event", true, false);
+        public final SlashOption<Integer> _eventMaxPending = SlashOption.ofInt("event-max-pending", "The maximum number of future events to post", true, 3, 1, 30);
         public final SlashOption<String> _eventId = SlashOption.ofString("event-id", "Event ID", true, "").with(data -> data.setRequiredLength(5, 32));
         public final SlashOption<String> _eventTitle = SlashOption.ofString("event-title", "Event Title", true, "").with(data -> data.setRequiredLength(5, 100));
         public final SlashOption<String> _eventDescription = SlashOption.ofString("event-description", "Event Description", true, "").with(data -> data.setRequiredLength(5, 1000));
-        public final SlashOption<ZoneId> _timeZoneId = SlashOption.ofZoneId("time-zone-id", "The time zone", true, null);
-        public final SlashOption<LocalDate> _eventDate = SlashOption.ofLocalDate("event-date", "The date", true, null);
-        public final SlashOption<LocalTime> _timeOfDay = SlashOption.ofLocalTime("time-of-day", "The time of day", true, null);
+        public final SlashOption<ZoneId> _timeZoneId = SlashOption.ofZoneId("time-zone-id", "Event time zone", true, null);
+        public final SlashOption<LocalDate> _eventDate = SlashOption.ofLocalDate("event-date", "Event date", true, null);
+        public final SlashOption<LocalTime> _timeOfDay = SlashOption.ofLocalTime("time-of-day", "Event time of day", true, null);
+        public final SlashOption<Duration> _eventDuration = SlashOption.ofDuration("event-duration", "Event Duration", true, Duration.ofHours(1L));
         public final SlashOption<ScarletCalendar.Frequency> _eventFrequency = SlashOption.ofEnum("event-frequency", "Event Frequency", true, ScarletCalendar.Frequency.ONE_OFF);
         public final SlashOption<GroupEventCategory> _eventCategory = SlashOption.ofEnum("event-category", "Event Category", true, GroupEventCategory.OTHER);
         @SlashCmd("add")
@@ -3202,9 +3230,12 @@ public class ScarletDiscordCommands
                 @SlashOpt("event-date") LocalDate eventDate,
                 @SlashOpt("time-zone-id") ZoneId timeZoneId,
                 @SlashOpt("time-of-day") LocalTime timeOfDay,
+                @SlashOpt("event-duration") Duration eventDuration,
                 @SlashOpt("event-frequency") ScarletCalendar.Frequency eventFrequency,
                 @SlashOpt("event-category") GroupEventCategory eventCategory)
         {
+            if (!ScarletDiscordCommands.this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_calendar_manage, hook))
+                return;
             if (ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.containsKey(eventId))
             {
                 hook.sendMessage("An event schedule with that id already exists").setEphemeral(true).queue();
@@ -3217,6 +3248,7 @@ public class ScarletDiscordCommands
             eventSpec.vrcCalendarEventParameters.setDescription(eventDescription);
             eventSpec.date = eventDate;
             eventSpec.time = eventTime;
+            eventSpec.duration = eventDuration;
             eventSpec.frequency = eventFrequency;
             eventSpec.vrcCalendarEventParameters.setCategory(eventCategory.value);
             eventSpec.vrcCalendarEventParameters.setAccessType(CreateCalendarEventRequest.AccessTypeEnum.PUBLIC);
@@ -3224,6 +3256,51 @@ public class ScarletDiscordCommands
             ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.put(eventId, eventSpec);
             ScarletDiscordCommands.this.discord.scarlet.calendar.save();
             hook.sendMessage("Added event schedule").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-active")
+        @Desc("Activate or deactivate an event schedule")
+        public void setActive(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-active") boolean eventActive)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.active = eventActive;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule active to "+eventActive).setEphemeral(true).queue();
+        }
+        @SlashCmd("set-mirror-on-discord")
+        @Desc("Set whether a complementary Discord Event should be created")
+        public void setMirrorOnDiscord(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-mirror-on-discord") boolean eventMirrorOnDiscord)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.mirrorOnDiscord = eventMirrorOnDiscord;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule mirror on discord to "+eventMirrorOnDiscord).setEphemeral(true).queue();
+        }
+        @SlashCmd("set-max-pending")
+        @Desc("Set the maximum number of future events to post")
+        public void setMaxPending(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-max-pending") int eventMaxPending)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.maxPending = eventMaxPending;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule maximum pending to "+eventMaxPending).setEphemeral(true).queue();
         }
         @SlashCmd("set-title")
         @Desc("Set an event schedule's title")
@@ -3285,7 +3362,22 @@ public class ScarletDiscordCommands
             OffsetTime eventTime = timeOfDay.atOffset(timeZoneId.getRules().getOffset(Instant.now()));
             eventSpec.time = eventTime;
             ScarletDiscordCommands.this.discord.scarlet.calendar.save();
-            hook.sendMessage("Set event schedule date").setEphemeral(true).queue();
+            hook.sendMessage("Set event schedule time").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-duration")
+        @Desc("Set an event schedule's duration")
+        public void setDuration(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-duration") Duration eventDuration)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.duration = eventDuration;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule duration").setEphemeral(true).queue();
         }
         @SlashCmd("set-frequency")
         @Desc("Set an event schedule's frequency")
@@ -3349,11 +3441,265 @@ public class ScarletDiscordCommands
             ScarletDiscordCommands.this.discord.scarlet.calendar.save();
             hook.sendMessage("Set event schedule notification usage").setEphemeral(true).queue();
         }
-        // TODO : tags
-        // TODO : imageId
-        // TODO : roleIds
-        // TODO : platforms
-        // TODO : languages
+        public final SlashOption<String> _eventTag1 = SlashOption.ofString("event-tag-1", "Event tag 1", false, null),
+                                         _eventTag2 = SlashOption.ofString("event-tag-2", "Event tag 2", false, null),
+                                         _eventTag3 = SlashOption.ofString("event-tag-3", "Event tag 3", false, null),
+                                         _eventTag4 = SlashOption.ofString("event-tag-4", "Event tag 4", false, null),
+                                         _eventTag5 = SlashOption.ofString("event-tag-5", "Event tag 5", false, null);
+        @SlashCmd("set-tags")
+        @Desc("Set an event schedule's tags")
+        public void setTags(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-tag-1") String eventTag1,
+                @SlashOpt("event-tag-2") String eventTag2,
+                @SlashOpt("event-tag-3") String eventTag3,
+                @SlashOpt("event-tag-4") String eventTag4,
+                @SlashOpt("event-tag-5") String eventTag5)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            List<String> eventTagsa = Stream
+                .of(eventTag1, eventTag2, eventTag3, eventTag4, eventTag5)
+                .filter(Objects::nonNull)
+                .filter($->!$.isEmpty())
+                .collect(Collectors.toList());
+            if (eventTagsa.isEmpty())
+            {
+                eventSpec.vrcCalendarEventParameters.setTags(null);
+                ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                event.reply("Cleared event schedule tags").setEphemeral(true).queue();
+                return;
+            }
+            if (eventTagsa.contains(GroupAdminTag.VRC_EVENT_GROUP_FAIR_TAG) && !ScarletDiscordCommands.this.discord.scarlet.vrc.checkGroupHasAdminTag(GroupAdminTag.VRC_EVENT_GROUP_FAIR_ENABLED))
+            {
+                event.reply("This group does not have Event Group Fair enabled, so you may not use that tag").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setTags(new ArrayList<>(eventTagsa));
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule tags").setEphemeral(true).queue();
+        }
+        @SlashCmd("set-image")
+        @Desc("Set an event schedule's image")
+        @Ephemeral
+        public void setImage(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec, @SlashOpt("entries-per-page") int entriesPerPage)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            class GalleryImageInfo
+            {
+                GalleryImageInfo(GroupGalleryImage image, GroupGallery gallery, int index)
+                {
+                    this.image = image;
+                    this.gallery = gallery;
+                    this.index = index;
+                    this.submittingUserDisplayName = ScarletDiscordCommands.this.discord.scarlet.vrc.getUserDisplayName(image.getSubmittedByUserId());
+                }
+                final GroupGalleryImage image;
+                final GroupGallery gallery;
+                final int index;
+                final String submittingUserDisplayName;
+                MessageEmbed embed()
+                {
+                    return new EmbedBuilder()
+                        .setAuthor(MarkdownSanitizer.escape(this.submittingUserDisplayName), VrcWeb.Home.user(this.image.getSubmittedByUserId()))
+                        .setTitle(MiscUtils.maybeEllipsis(MessageEmbed.TITLE_MAX_LENGTH, MarkdownSanitizer.escape(this.gallery.getName())+" image #"+(this.index+1)),
+                                  VrcWeb.Home.groupGalleries(this.image.getGroupId())+"#"+this.gallery.getId()+"["+this.index+"]"
+                        )                                                      // Give embeds different URLs so they don't combine
+                        .setImage(this.image.getImageUrl().toString())
+                        .setTimestamp(this.image.getCreatedAt())
+                        .build();
+                }
+                SelectOption option()
+                {
+                    return SelectOption.of(MiscUtils.maybeEllipsis(SelectOption.LABEL_MAX_LENGTH, MarkdownSanitizer.escape(this.gallery.getName())+" image #"+(this.index+1)), this.image.getFileId());
+                }
+            }
+            List<GalleryImageInfo> images = new ArrayList<>();
+            try
+            {
+                List<GroupGallery> galleries = ScarletDiscordCommands.this.discord.scarlet.vrc.group.getGalleries();
+//                LOG.info("Galleries for "+ScarletDiscordCommands.this.discord.scarlet.vrc.groupId+": "+galleries);
+                if (galleries != null)
+                    for (GroupGallery gallery : galleries)
+                    {
+                        List<GroupGalleryImage> inGallery = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupGalleryImages(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, gallery.getId(), null);
+//                        LOG.info("Images for "+gallery.getId()+": "+inGallery);
+                        if (inGallery != null && !inGallery.isEmpty())
+                        {
+                            int index = 0;
+                            for (GroupGalleryImage image : inGallery)
+                                images.add(new GalleryImageInfo(image, gallery, index++));
+                        }
+                    }
+            }
+            catch (Exception ex)
+            {
+                LOG.error("Exception listing gallery", ex);
+            }
+            ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), images, GalleryImageInfo::embed, GalleryImageInfo::option, entriesPerPage, (submitEvent, fileId) ->
+            {
+                if (eventSpec != null)
+                {
+                    eventSpec.vrcCalendarEventParameters.setImageId(fileId);
+                    ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                }
+                hook.sendMessageEmbeds(new EmbedBuilder().setTitle(fileId).setImage(VrcWeb.file1Data(fileId)).build()).setContent("Set the scheduled event image").setEphemeral(true).queue();
+            }).queue(hook);
+        }
+        public final ModalFlowOption<GroupRole[]> _eventRolesModal1 = ModalFlowOption.ofUniqueGroupRoles("event-roles-1-25", "Roles 1-25", null, false, "<event roles>", 0, 25, ScarletDiscordCommands.this.discord.scarlet.vrc.groupRoles);
+        public final ModalFlowOption<GroupRole[]> _eventRolesModal2 = ModalFlowOption.ofUniqueGroupRolesNext25("event-roles-26-50", "Roles 26-50", null, false, "<event roles>", 0, 25, ScarletDiscordCommands.this.discord.scarlet.vrc.groupRoles);
+        @ModalSub("schedule-set-roles")
+        @Desc("Set Event roles")
+        public class SetRolesModal implements DInteractions.ModalFlow<SetRolesModal>
+        {
+            SetRolesModal(ScarletCalendar.EventSpec eventSpec)
+            {
+                this.eventSpec = eventSpec;
+                List<String> roleIds = eventSpec.vrcCalendarEventParameters.getRoleIds();
+                if (roleIds != null && !roleIds.isEmpty())
+                {
+                    GroupRole[] eventRoles = roleIds.stream().map(ScarletDiscordCommands.this.discord.scarlet.vrc.groupRoles::get).filter(Objects::nonNull).toArray(GroupRole[]::new);
+                    if (eventRoles.length != 0)
+                    {
+                        this.eventRoles_1_25 = eventRoles;
+                        this.eventRoles_26_50 = eventRoles;
+                    }
+                }
+            }
+            final ScarletCalendar.EventSpec eventSpec;
+            @StringSel("event-roles-1-25")
+            public GroupRole[] eventRoles_1_25;
+            @StringSel("event-roles-26-50")
+            public GroupRole[] eventRoles_26_50;
+            @Override
+            public void handle(ModalInteractionEvent event)
+            {
+                GroupRole[] eventRoles = MiscUtils.append(this.eventRoles_1_25, this.eventRoles_26_50);
+                if (eventRoles == null || eventRoles.length == 0)
+                {
+                    this.eventSpec.vrcCalendarEventParameters.setRoleIds(null);
+                    ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                    event.reply("Cleared event roles").setEphemeral(true).queue();
+                    return;
+                }
+                
+                this.eventSpec.vrcCalendarEventParameters.setRoleIds(new ArrayList<>(Arrays.stream(eventRoles).filter(Objects::nonNull).map(GroupRole::getId).collect(Collectors.toList())));
+                ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                event.reply("Set event roles").setEphemeral(true).queue();
+            }
+        }
+        @SlashCmd("set-roles")
+        @Desc("Set an event schedule's roles")
+        public void setRoles(SlashCommandInteractionEvent event, @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec)
+        {
+            if (eventSpec == null)
+            {
+                event.reply("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, new SetRolesModal(eventSpec)).queue();
+        }
+        public final ModalFlowOption<GroupEventPlatform[]> _eventPlatformsModal = ModalFlowOption.ofUniqueEnums("event-platforms", "Event platforms", null, false, "<none>", 0, 3, GroupEventPlatform.class, new GroupEventPlatform[]{GroupEventPlatform.WINDOWS});
+        @ModalSub("schedule-set-platforms")
+        @Desc("Set Event platforms")
+        public class SetPlatformsModal implements DInteractions.ModalFlow<SetPlatformsModal>
+        {
+            SetPlatformsModal(ScarletCalendar.EventSpec eventSpec)
+            {
+                this.eventSpec = eventSpec;
+                List<String> platforms = eventSpec.vrcCalendarEventParameters.getPlatforms();
+                if (platforms != null && !platforms.isEmpty())
+                {
+                    GroupEventPlatform[] eventPlatforms = platforms.stream().map(GroupEventPlatform::of).filter(Objects::nonNull).toArray(GroupEventPlatform[]::new);
+                    if (eventPlatforms.length != 0)
+                        this.eventPlatforms = eventPlatforms;
+                }
+            }
+            final ScarletCalendar.EventSpec eventSpec;
+            @StringSel("event-platforms")
+            public GroupEventPlatform[] eventPlatforms;
+            @Override
+            public void handle(ModalInteractionEvent event)
+            {
+                if (this.eventPlatforms == null || this.eventPlatforms.length == 0)
+                {
+                    this.eventSpec.vrcCalendarEventParameters.setPlatforms(null);
+                    ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                    event.reply("Cleared event platforms").setEphemeral(true).queue();
+                    return;
+                }
+                
+                this.eventSpec.vrcCalendarEventParameters.setPlatforms(new ArrayList<>(Arrays.stream(this.eventPlatforms).filter(Objects::nonNull).map(GroupEventPlatform::value).collect(Collectors.toList())));
+                ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                event.reply("Set event platforms").setEphemeral(true).queue();
+            }
+        }
+        @SlashCmd("set-platforms")
+        @Desc("Set an event schedule's platforms")
+        public void setPlatforms(SlashCommandInteractionEvent event, @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec)
+        {
+            if (eventSpec == null)
+            {
+                event.reply("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, new SetPlatformsModal(eventSpec)).queue();
+        }
+        public final SlashOption<String> _eventLanguage1 = SlashOption.ofString("event-language-1", "Event language 1", false, null, this::_eventLanguage),
+                                         _eventLanguage2 = SlashOption.ofString("event-language-2", "Event language 2", false, null, this::_eventLanguage),
+                                         _eventLanguage3 = SlashOption.ofString("event-language-3", "Event language 3", false, null, this::_eventLanguage);
+        void _eventLanguage(CommandAutoCompleteInteractionEvent event) {
+            String value = event.getFocusedOption().getValue();
+            if (value.isEmpty())
+            {
+                event.replyChoices(Arrays.stream(ScarletDiscordCommands.this.spokenLanguages).limit(25L).collect(Collectors.toList())).queue();
+                return;
+            }
+            event.replyChoices(Arrays.stream(ScarletDiscordCommands.this.spokenLanguages).sorted(DInteractions.choicesByLevenshtein(value)).limit(25L).collect(Collectors.toList())).queue();
+        }
+        @SlashCmd("set-languages")
+        @Desc("Set an event schedule's languages")
+        public void setLanguages(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-language-1") String eventLanguage1,
+                @SlashOpt("event-language-2") String eventLanguage2,
+                @SlashOpt("event-language-3") String eventLanguage3)
+        {
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            List<String> eventLanguagesa = Stream
+                .of(eventLanguage1, eventLanguage2, eventLanguage3)
+                .filter(Objects::nonNull)
+                .filter($->!$.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+            if (eventLanguagesa.isEmpty())
+            {
+                eventSpec.vrcCalendarEventParameters.setLanguages(null);
+                ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+                event.reply("Cleared event schedule languages").setEphemeral(true).queue();
+                return;
+            }
+            List<String> eventLanguagesa_invalid = eventLanguagesa.stream().filter($->!ScarletDiscordCommands.this.languages.containsKey($)).collect(Collectors.toList());
+            if (!eventLanguagesa_invalid.isEmpty())
+            {
+                event.reply("Invalid or unknown languages: "+eventLanguagesa_invalid).setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setLanguages(new ArrayList<>(eventLanguagesa));
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule languages").setEphemeral(true).queue();
+        }
         public final SlashOption<Integer> _eventHostEarly = SlashOption.ofInt("event-host-early", "Event host early join minutes", false, null).with(data -> data.setRequiredRange(1L, 60L));
         @SlashCmd("set-host-join-early")
         @Desc("Set an event schedule's host early join minutes")
@@ -3415,6 +3761,27 @@ public class ScarletDiscordCommands
                 return;
             }
             eventSpec.vrcCalendarEventParameters.setUsesInstanceOverflow(eventOverflow);;
+            ScarletDiscordCommands.this.discord.scarlet.calendar.save();
+            hook.sendMessage("Set event schedule overflow usage").setEphemeral(true).queue();
+        }
+        public final SlashOption<Boolean> _eventFeatured = SlashOption.ofBool("event-featured", "Event has featured", false, null);
+        @SlashCmd("set-featured")
+        @Desc("Set an event schedule's featured status")
+        public void setFeatured(SlashCommandInteractionEvent event, InteractionHook hook,
+                @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
+                @SlashOpt("event-featured") Boolean eventFeatured)
+        {
+            if (!ScarletDiscordCommands.this.discord.scarlet.vrc.checkGroupHasAdminTag(GroupAdminTag.FEATURED_EVENTS_ENABLED))
+            {
+                hook.sendMessage("The group does not have Featured Events enabled by VRChat, this is not something you can simply change yourself").setEphemeral(true).queue();
+                return;
+            }
+            if (eventSpec == null)
+            {
+                hook.sendMessage("There is no event schedule with that id").setEphemeral(true).queue();
+                return;
+            }
+            eventSpec.vrcCalendarEventParameters.setFeatured(eventFeatured);
             ScarletDiscordCommands.this.discord.scarlet.calendar.save();
             hook.sendMessage("Set event schedule overflow usage").setEphemeral(true).queue();
         }

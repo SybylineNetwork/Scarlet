@@ -29,5 +29,10 @@ public interface Proxied<O>
         {
             return this.proxied.hashCode();
         }
+        @Override
+        public String toString()
+        {
+            return this.proxied.toString();
+        }
     }
 }

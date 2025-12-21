@@ -88,7 +88,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.15-rc3",
+        VERSION = "0.4.15-rc4",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -101,6 +101,9 @@ public class Scarlet implements Closeable
         USER_AGENT = USER_AGENT_NAME+"/"+VERSION+" "+DEV_DISCORD+"; "+SCARLET_DISCORD_URL+"; "+GITHUB_URL,
         LICENSE_URL = GITHUB_URL+"?tab=MIT-1-ov-file",
         META_URL = GITHUB_URL+"/blob/main/meta.json?raw=true",
+        
+        COMMUNITY_URL = "https://vrchat.community/",
+        COMMUNITY_GITHUB_URL = "https://github.com/vrchatapi",
         
         API_VERSION = "api/1",
         API_HOST_0 = "vrchat.com",
@@ -337,7 +340,7 @@ public class Scarlet implements Closeable
     final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(new File(dir, "report_template.txt"));
     final ScarletData data = new ScarletData(new File(dir, "data"));
     final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
-    final ScarletVRChat vrc = new ScarletVRChat(this, new File(dir, "store.bin"));
+    final ScarletVRChat vrc = new ScarletVRChat(this, "global", new File(dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
     final ScarletCalendar calendar = new ScarletCalendar(this, new File(dir, "event_schedule.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
@@ -350,7 +353,10 @@ public class Scarlet implements Closeable
     final ScarletUI.Setting<EnforcementListState> enforceInstancesWorlds = this.ui.settingEnum("enforce_instances_worlds", "Instances: enforce worlds", EnforcementListState.DISABLED);
     final ScarletUI.Setting<String[]> enforceInstancesWorldList = this.ui.settingStringArr("enforce_instances_world_list", "Instances: enforce world list", new String[0]);
     final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
-    final ScarletUI.Setting<Void> uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
+    final ScarletUI.Setting<Void> addAltCreds = this.ui.settingVoid("Add alternate credentials", "Add", this.vrc::addAlternateCredentials),
+                                  removeAltCreds = this.ui.settingVoid("Remove alternate credentials", "Remove", this.vrc::removeAlternateCredentials),
+                                  listAltCreds = this.ui.settingVoid("List alternate credentials", "List", this.vrc::listAlternateCredentials),
+                                  uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
 
     public void run()
     {
@@ -430,11 +436,19 @@ public class Scarlet implements Closeable
                 {
                     this.maybeCheckInstances();
                     this.maybeEnforceInstances();
-                    this.maybeUpdateCalendar();
                 }
                 catch (Exception ex)
                 {
                     LOG.error("Exception maybe checking instances", ex);
+                }
+                // maybe update calendar
+                if (!this.staffMode) try
+                {
+                    this.maybeUpdateCalendar();
+                }
+                catch (Exception ex)
+                {
+                    LOG.error("Exception maybe updating calendar", ex);
                 }
                 // maybe mod summary
                 if (!this.staffMode) try
@@ -754,7 +768,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         if (now.isAfter(this.lastCalendarUpdate.plusMinutes(1L)))
         {
             this.lastCalendarUpdate = now;
-            this.calendar.update();;
+            this.calendar.update();
         }
     }
 
@@ -1000,7 +1014,17 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         
         for (GroupAuditLogEntry entry : entries) try
         {
-            this.discord.process(this, entry);
+            switch (entry.getEventType())
+            {
+            case "group.update": // GroupAuditType.UPDATE
+            case "group.transfer.accept": // GroupAuditType.TRANSFER_ACCEPT
+            case "group.role.create": // GroupAuditType.ROLE_CREATE
+            case "group.role.delete": // GroupAuditType.ROLE_DELETE
+            case "group.role.update": // GroupAuditType.ROLE_UPDATE
+                this.vrc.updateGroupInfo();
+            default:
+                this.discord.process(this, entry);
+            }
         }
         catch (Exception ex)
         {

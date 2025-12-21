@@ -93,7 +93,7 @@ import net.sybyline.scarlet.util.Func;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.PropsTable;
-import net.sybyline.scarlet.util.VRChatWebPageURLs;
+import net.sybyline.scarlet.util.VrcWeb;
 import net.sybyline.scarlet.util.VersionedFile;
 
 public class ScarletUI implements AutoCloseable
@@ -669,12 +669,16 @@ public class ScarletUI implements AutoCloseable
             {
                 JMenu jmenu_help = new JMenu("Help");
                 {
-                    jmenu_help.add("Scarlet VRChat Group").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.SCARLET_VRCHAT_GROUP_URL)));
-                    jmenu_help.add("Scarlet Github").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.GITHUB_URL)));
-                    jmenu_help.add("Scarlet License").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.LICENSE_URL)));
+                    jmenu_help.add("Scarlet: VRChat Group").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.SCARLET_VRCHAT_GROUP_URL)));
+                    jmenu_help.add("Scarlet: Github").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.GITHUB_URL)));
+                    jmenu_help.add("Scarlet: License").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.LICENSE_URL)));
                     jmenu_help.addSeparator();
-                    jmenu_help.add("VRChat Terms of Service").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VRChatWebPageURLs.VRCHAT_TOS_URL)));
-                    jmenu_help.add("VRChat Community Guidelines").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VRChatWebPageURLs.VRCHAT_CG_URL)));
+                    jmenu_help.add("VRChat: Terms of Service").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.TERMS_OF_SERVICE)));
+                    jmenu_help.add("VRChat: Privacy Policy").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.PRIVACY_POLICY+"#7")));
+                    jmenu_help.add("VRChat: Community Guidelines").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.Community.GUIDELINES)));
+                    jmenu_help.addSeparator();
+                    jmenu_help.add("VRChat Community (unofficial): API Documentation").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.COMMUNITY_URL)));
+                    jmenu_help.add("VRChat Community (unofficial): API Documentation Github").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.COMMUNITY_GITHUB_URL)));
                 }
                 jmenubar.add(jmenu_help);
             }
@@ -1300,10 +1304,10 @@ public class ScarletUI implements AutoCloseable
         }
         if (showTimeSaved)
         {
-            String savedAtText = "Saved settings: " + DateTimeFormatter.ISO_LOCAL_TIME.format(LocalTime.now());
-            this.jlabel_lastSavedAt.setText(savedAtText);
+            String savedText = "Saved settings: " + DateTimeFormatter.ISO_LOCAL_TIME.format(LocalTime.now());
+            this.jlabel_lastSavedAt.setText(savedText);
             this.scarlet.exec.schedule(() -> {
-                if (Objects.equals(savedAtText, this.jlabel_lastSavedAt.getText()))
+                if (Objects.equals(savedText, this.jlabel_lastSavedAt.getText()))
                     this.jlabel_lastSavedAt.setText("");
             }, 5_000L, TimeUnit.MILLISECONDS);
         }

@@ -7,6 +7,13 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.15-rc4
+  - Added optional use of alternate credentials for checking watched groups
+  - Added check to eliminate unnecessary avatar file analysis data retrieval on initial startup
+  - Added encryption for certain sensitive data, such as passwords and tokens. Specify the encrypt/decrypt password by either setting the environment variable `SCARLET_GLOBAL_PW` or the Java system property `scarlet.global.pw`.
+  - Added more abilities and subcommands for scheduling events
+  - Fixed obtrusive problems with events being scheduled
+
 ## 0.4.15-rc3
   - Added (very WIP) event scheduling
   - Added `/schedule` Discord slash command to view and modify scheduled events

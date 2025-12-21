@@ -7,6 +7,7 @@ import java.io.File;
 import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.Type;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -29,12 +30,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
+import net.sybyline.scarlet.util.EncryptedPrefs;
 import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletSettings
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/Settings");
+    private static final String globalPW = Optional.ofNullable(System.getenv("SCARLET_GLOBAL_PW")).orElseGet(()->System.getProperty("scarlet.global.pw", "ZaxzVNStRpG1DU9dLVE"));
 
     public ScarletSettings(File settingsFile)
     {
@@ -42,7 +45,9 @@ public class ScarletSettings
         this.settingsFileLastModified = settingsFile.lastModified();
         this.hasVersionChangedSinceLastRun = null;
         this.globalPreferences = Preferences.userNodeForPackage(Scarlet.class);
+        this.globalEncrypted = new EncryptedPrefs(this.globalPreferences, globalPW);
         this.preferences = this.globalPreferences;
+        this.encrypted = this.globalEncrypted;
         this.json = null;
         this.lastRunVersion = new RegistryString("lastRunVersion");
         this.lastRunTime = new RegistryOffsetDateTime("lastRunTime");
@@ -53,6 +58,7 @@ public class ScarletSettings
         this.nextPollAction = new RegistryOffsetDateTime("nextPollAction");
         this.nextModSummary = new RegistryOffsetDateTime("nextModSummary");
         this.nextOutstandingMod = new RegistryOffsetDateTime("nextOutstandingMod");
+        this.lastInstanceJoined = new RegistryLocalDateTime("lastInstanceJoined");
         this.uiBounds = new RegistryRectangle("uiBounds");
         this.heuristicKickCount = new FileValued<>("heuristicKickCount", Integer.class, 3);
         this.heuristicPeriodDays = new FileValued<>("heuristicPeriodDays", Integer.class, 3);
@@ -62,16 +68,20 @@ public class ScarletSettings
     public void setNamespace(String namespace)
     {
         this.preferences = this.globalPreferences.node(namespace);
+        this.encrypted = new EncryptedPrefs(this.preferences, globalPW);
     }
 
     final File settingsFile;
     final long settingsFileLastModified;
     Boolean hasVersionChangedSinceLastRun;
     final Preferences globalPreferences;
+    final EncryptedPrefs globalEncrypted;
     Preferences preferences;
+    EncryptedPrefs encrypted;
     private JsonObject json;
     public final RegistryString lastRunVersion;
     public final RegistryOffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck, nextPollAction, nextModSummary, nextOutstandingMod;
+    public final RegistryLocalDateTime lastInstanceJoined;
     public final RegistryRectangle uiBounds;
     public final FileValued<Integer> heuristicKickCount, heuristicPeriodDays, outstandingPeriodDays;
 
@@ -185,13 +195,12 @@ public class ScarletSettings
                 return cached_;
             synchronized (ScarletSettings.this)
             {
-                String string = ScarletSettings.this.preferences.get(this.name, null);
-                if (string == null) string = ScarletSettings.this.globalPreferences.get(this.name, null);
+                String string = this.read();
                 if (string != null) try
                 {
                     cached_ = this.parse.apply(string);
                     this.cached = cached_;
-                    ScarletSettings.this.preferences.put(this.name, string);
+                    this.write(string);
                     return cached_;
                 }
                 catch (RuntimeException ex)
@@ -201,10 +210,20 @@ public class ScarletSettings
                 {
                     cached_ = this.ifNull.get();
                     this.cached = cached_;
-                    ScarletSettings.this.preferences.put(this.name, this.stringify.apply(cached_));
+                    this.write(this.stringify.apply(cached_));
                 }
                 return cached_;
             }
+        }
+        protected String read()
+        {
+            String string = ScarletSettings.this.preferences.get(this.name, null);
+            if (string == null) string = ScarletSettings.this.globalPreferences.get(this.name, null);
+            return string;
+        }
+        protected void write(String string)
+        {
+            ScarletSettings.this.preferences.put(this.name, string);
         }
         public void set(T value_)
         {
@@ -213,8 +232,29 @@ public class ScarletSettings
             this.cached = value_;
             synchronized (ScarletSettings.this)
             {
-                ScarletSettings.this.preferences.put(this.name, this.stringify.apply(value_));
+                this.write(this.stringify.apply(value_));
             }
+        }
+    }
+    public class RegistryStringValuedEncrypted<T> extends RegistryStringValued<T>
+    {
+        RegistryStringValuedEncrypted(String name, boolean globalOnly, Supplier<T> ifNull, Function<String, T> parse, Function<T, String> stringify)
+        {
+            super(name, ifNull, parse, stringify);
+            this.globalOnly = globalOnly;
+        }
+        protected final boolean globalOnly;
+        @Override
+        protected String read()
+        {
+            String string = this.globalOnly ? null : ScarletSettings.this.encrypted.get(this.name);
+            if (string == null) string = ScarletSettings.this.globalEncrypted.get(this.name);
+            return string;
+        }
+        @Override
+        protected void write(String string)
+        {
+            (this.globalOnly ? ScarletSettings.this.globalEncrypted : ScarletSettings.this.encrypted).put(this.name, string);
         }
     }
 
@@ -226,6 +266,17 @@ public class ScarletSettings
                 () -> OffsetDateTime.now(ZoneOffset.UTC),
                 string -> OffsetDateTime.parse(string, DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                 DateTimeFormatter.ISO_OFFSET_DATE_TIME::format);
+        }
+    }
+
+    public class RegistryLocalDateTime extends RegistryStringValued<LocalDateTime>
+    {
+        RegistryLocalDateTime(String name)
+        {
+            super(name,
+                () -> LocalDateTime.now(),
+                string -> LocalDateTime.parse(string, DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                DateTimeFormatter.ISO_LOCAL_DATE_TIME::format);
         }
     }
 
@@ -252,6 +303,20 @@ public class ScarletSettings
         RegistryString(String name)
         {
             super(name, null, Function.identity(), Function.identity());
+        }
+    }
+    public class RegistryStringEncrypted extends RegistryStringValuedEncrypted<String>
+    {
+        RegistryStringEncrypted(String name, boolean globalOnly)
+        {
+            super(name, globalOnly, null, Function.identity(), Function.identity());
+        }
+    }
+    public class RegistryJsonEncrypted<T> extends RegistryStringValuedEncrypted<T>
+    {
+        RegistryJsonEncrypted(String name, boolean globalOnly, Supplier<T> ifNull, Type type)
+        {
+            super(name, globalOnly, ifNull, $->Scarlet.GSON.fromJson($, type), $->Scarlet.GSON.toJson($, type));
         }
     }
 

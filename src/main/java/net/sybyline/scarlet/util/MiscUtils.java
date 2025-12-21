@@ -77,6 +77,10 @@ public interface MiscUtils
     {
         return string == null || string.length() <= maxLength ? string : (string.substring(0, maxLength - 1) + '\u2026');
     }
+    static String maybeEllipsisReverse(int maxLength, String string)
+    {
+        return string == null || string.length() <= maxLength ? string : ('\u2026' + string.substring(maxLength - 1));
+    }
 
     static final ZoneRules DEFAULT_ZONE_RULES = ZoneId.systemDefault().getRules();
     static OffsetDateTime odt2utc(LocalDateTime ldt)
@@ -195,6 +199,20 @@ public interface MiscUtils
         for (int idx = 0; idx < len; idx++)
             ret[idx] = map.apply(arr[idx]);
         return ret;
+    }
+
+    @SafeVarargs
+    static <T> T[] append(T[] arr, T... vals)
+    {
+        if (arr == null || arr.length == 0)
+            return vals;
+        if (vals == null || vals.length == 0)
+            return arr;
+        int off = arr.length,
+            len = vals.length;
+        arr = Arrays.copyOf(arr, off + len);
+        System.arraycopy(vals, 0, arr, off, len);
+        return arr;
     }
 
     static String extractTypedUuid(String type, String fallback, String idContaining)

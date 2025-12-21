@@ -64,6 +64,7 @@ import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VrcIds;
+import net.sybyline.scarlet.util.VrcWeb;
 
 public class ScarletDiscordUI
 {
@@ -308,6 +309,8 @@ public class ScarletDiscordUI
                 return false;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, hook))
+            return false;
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
         
@@ -416,6 +419,8 @@ public class ScarletDiscordUI
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, event))
+            return;
         
         List<ScarletDiscordJDA.Action> banActions = new ArrayList<>();
         
@@ -464,6 +469,8 @@ public class ScarletDiscordUI
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, hook))
+            return;
         
         GroupMemberStatus status = this.discord.scarlet.vrc.getGroupMembershipStatus(this.discord.scarlet.vrc.groupId, vrcTargetId);
         
@@ -507,6 +514,8 @@ public class ScarletDiscordUI
                 return;
             }
         }
+        if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_bans_manage, event))
+            return;
         
         List<ScarletDiscordJDA.Action> unbanActions = new ArrayList<>();
         
@@ -636,71 +645,46 @@ public class ScarletDiscordUI
         switch (ic.groupAccessType)
         {
         case PUBLIC: {
-            if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_instance_public_create, event.getMember()))
-            {
-                hook.sendMessage("You do not have permission to create group public instances.").setEphemeral(true).queue();
+            if (!this.discord.checkMemberRespondVrcPerms(GroupPermissions.group_instance_public_create, hook, event.getMember()))
                 return;
-            }
         } break;
         case PLUS: {
-            if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_instance_plus_create, event.getMember()))
-            {
-                hook.sendMessage("You do not have permission to create group plus instances.").setEphemeral(true).queue();
+            if (!this.discord.checkMemberRespondVrcPerms(GroupPermissions.group_instance_plus_create, hook, event.getMember()))
                 return;
-            }
         } break;
         case MEMBERS: {
-            if (!this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_instance_open_create, event.getMember()))
-            {
-                hook.sendMessage("You do not have permission to create group member-only instances.").setEphemeral(true).queue();
+            if (!this.discord.checkMemberRespondVrcPerms(GroupPermissions.group_instance_open_create, hook, event.getMember()))
                 return;
-            }
-            if (ic.roleIds != null && !this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_instance_restricted_create, event.getMember()))
-            {
-                hook.sendMessage("You do not have permission to create role-restricted instances.").setEphemeral(true).queue();
+            if (ic.roleIds != null && !this.discord.checkMemberRespondVrcPerms(GroupPermissions.group_instance_restricted_create, hook, event.getMember()))
                 return;
-            }
         } break;
         }
 
-        if (ic.ageGate != null && ic.ageGate.booleanValue() && !this.discord.checkMemberHasVRChatPermission(GroupPermissions.group_instance_age_gated_create, event.getMember()))
-        {
+        if (ic.ageGate != null && ic.ageGate.booleanValue() && !this.discord.checkMemberRespondVrcPerms(GroupPermissions.group_instance_age_gated_create, hook, event.getMember()))
             hook.sendMessage("You do not have permission to create age gated instances.").setEphemeral(true).queue();
-            return;
-        }
         
         hook.deleteMessageById(event.getMessageId()).queue();
 
         switch (ic.groupAccessType)
         {
         case PUBLIC: {
-            if (!this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_public_create))
-            {
-                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_public_create)).setEphemeral(true).queue();
-            }
+            if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_instance_public_create, hook))
+                return;
         } break;
         case PLUS: {
-            if (!this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_plus_create))
-            {
-                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_plus_create)).setEphemeral(true).queue();
-            }
+            if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_instance_plus_create, hook))
+                return;
         } break;
         case MEMBERS: {
-            if (!this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_open_create))
-            {
-                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_open_create)).setEphemeral(true).queue();
-            }
-            if (ic.roleIds != null && !this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_restricted_create))
-            {
-                hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_restricted_create)).setEphemeral(true).queue();
-            }
+            if (!this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_instance_open_create, hook))
+                return;
+            if (ic.roleIds != null && !this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_instance_restricted_create, hook))
+                return;
         } break;
         }
         
-        if (ic.ageGate != null && ic.ageGate.booleanValue() && !this.discord.scarlet.vrc.checkSelfUserHasVRChatPermission(GroupPermissions.group_instance_age_gated_create))
-        {
-            hook.sendMessage(this.discord.scarlet.vrc.messageNeedPerms(GroupPermissions.group_instance_age_gated_create)).setEphemeral(true).queue();
-        }
+        if (ic.ageGate != null && ic.ageGate.booleanValue() && !this.discord.checkSelfRespondVrcPerms(GroupPermissions.group_instance_age_gated_create, hook))
+            return;
         
         Instance instance;
         try
@@ -726,7 +710,7 @@ public class ScarletDiscordUI
         String worldName = this.discord.getLocationName(instance.getWorldId());
         
         LOG.info(String.format("%s (%s) opened an instance of %s: %s", vrcActorDisplayName, vrcActorId, worldName, instance.getId()));
-        hook.sendMessageFormat("Created [new %s instance](https://vrchat.com/home/launch?worldId=%s&instanceId=%s)", worldName, instance.getWorldId(), instance.getInstanceId()).setEphemeral(true).queue();
+        hook.sendMessageFormat("Created [new %s instance](%s)", worldName, VrcWeb.Home.instance(instance.getWorldId(), instance.getInstanceId())).setEphemeral(true).queue();
         
     }
 
@@ -836,11 +820,13 @@ public class ScarletDiscordUI
             ic.queueEnabled = event.getValues().contains("queueEnabled");
             ic.hardClose = event.getValues().contains("hardClose");
             ic.ageGate = event.getValues().contains("ageGate");
+            ic.inviteOnly = event.getValues().contains("inviteOnly");
+            ic.canRequestInvite = event.getValues().contains("canRequestInvite");
 //            ic.playerPersistenceEnabled = event.getValues().contains("playerPersistenceEnabled");
 //            ic.instancePersistenceEnabled = event.getValues().contains("instancePersistenceEnabled");
             ic.contentSettings_drones = event.getValues().contains("contentSettings.drones");
             ic.contentSettings_emoji = event.getValues().contains("contentSettings.emoji");
-            ic.contentSettings_items = event.getValues().contains("contentSettings.items");
+            ic.contentSettings_props = event.getValues().contains("contentSettings.props");
             ic.contentSettings_pedestals = event.getValues().contains("contentSettings.pedestals");
             ic.contentSettings_prints = event.getValues().contains("contentSettings.prints");
             ic.contentSettings_stickers = event.getValues().contains("contentSettings.stickers");
@@ -1035,8 +1021,8 @@ public class ScarletDiscordUI
             .filter(Objects::nonNull)
             .map($ -> 
                 new EmbedBuilder()
-                .setAuthor($.getAuthorName(), "https://vrchat.com/home/user/"+$.getAuthorId(), null)
-                .setTitle($.getName(), "https://vrchat.com/home/avatar/"+$.getId())
+                .setAuthor($.getAuthorName(), VrcWeb.Home.user($.getAuthorId()), null)
+                .setTitle($.getName(), VrcWeb.Home.avatar($.getId()))
                 .setThumbnail($.getImageUrl() == null || $.getImageUrl().isEmpty() ? null : $.getImageUrl())
                 .setDescription($.getDescription() == null || $.getDescription().isEmpty() ? null : $.getDescription())
                 .addField("Report avatar", MarkdownUtil.maskedLink("link", VRChatHelpDeskURLs.newModerationRequest_content_avatar(this.discord.requestingEmail.get(), $.getId(), null, null)), false)
@@ -1107,7 +1093,7 @@ public class ScarletDiscordUI
             JsonObject object = $.getAsJsonObject();
             EmbedBuilder embed = new EmbedBuilder();
             embed.setAuthor(object.get(LimitedUserGroups.SERIALIZED_NAME_SHORT_CODE).getAsString()+"."+object.get(LimitedUserGroups.SERIALIZED_NAME_DISCRIMINATOR).getAsString(), null, object.get(LimitedUserGroups.SERIALIZED_NAME_ICON_URL).getAsString());
-            embed.setTitle(MarkdownSanitizer.escape(object.get(LimitedUserGroups.SERIALIZED_NAME_NAME).getAsString()), "https://vrchat.com/home/groups/"+object.get(LimitedUserGroups.SERIALIZED_NAME_GROUP_ID).getAsString());
+            embed.setTitle(MarkdownSanitizer.escape(object.get(LimitedUserGroups.SERIALIZED_NAME_NAME).getAsString()), VrcWeb.Home.group(object.get(LimitedUserGroups.SERIALIZED_NAME_GROUP_ID).getAsString()));
             embed.setDescription(object.get(LimitedUserGroups.SERIALIZED_NAME_DESCRIPTION).getAsString());
             embed.setThumbnail(object.get(LimitedUserGroups.SERIALIZED_NAME_BANNER_URL).getAsString());
             return embed.build();

@@ -94,6 +94,7 @@ import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.Interaction;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.ICommandReference;
@@ -135,6 +136,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         scarlet.splash.splashSubtext("Configuring Discord");
         this.scarlet = scarlet;
+        this.token = scarlet.settings.new RegistryStringEncrypted("discord.token", true);
         this.discordBotFile = discordBotFile;
         this.audio = new JDAAudioSendingHandler();
         this.requestingEmail = scarlet.ui.settingString("vrchat_report_email", "VRChat Help Desk report email", "");
@@ -160,10 +162,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.resetAvatarSearchProviders = scarlet.ui.settingVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
         this.load();
         JDA jda = null;
-        if (this.token != null && !this.token.trim().isEmpty()) try
+        String token0 = this.token.getOrNull();
+        if (token0 != null && !token0.isEmpty()) try
         {
             jda = JDABuilder
-            .createDefault(this.token)
+            .createDefault(token0)
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
             .enableCache(CacheFlag.VOICE_STATE)
@@ -207,7 +210,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     final File discordBotFile;
     final JDAAudioSendingHandler audio;
     final JDA jda;
-    String token, guildSf, audioChannelSf, evidenceRoot;
+    final ScarletSettings.RegistryStringEncrypted token;
+    String guildSf, audioChannelSf, evidenceRoot;
     final ScarletUI.Setting<String> requestingEmail,
                                     evidenceFilePathFormat;
     final ScarletUI.Setting<Boolean> appendTemplateFooter,
@@ -271,7 +275,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         catch (Exception ex)
         {
-            if (ex instanceof IllegalStateException && JDA.Status.FAILED_TO_LOGIN == this.jda.getStatus() && "".equals(ScarletDiscordJDA.this.token))
+            if (ex instanceof IllegalStateException && JDA.Status.FAILED_TO_LOGIN == this.jda.getStatus() && "".equals(ScarletDiscordJDA.this.token.getOrNull()))
             {
                 this.setStaffMode();
                 return;
@@ -651,8 +655,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     public static class JDASettingsSpec
     {
-        public String token = null,
-                      guildSf = null,
+        @Deprecated
+        public String token = null;
+        public String guildSf = null,
                       audioChannelSf = null,
                       evidenceRoot = null;
         public Map<String, UniqueStrings> scarletPermission2roleSf = new HashMap<>();
@@ -684,16 +689,25 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
         boolean save = false;
         
-        if (spec.token == null)
+        String token0 = spec.token;
+        if (token0 == null)
         {
-            spec.token = this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true);
-            save = true;
+            token0 = this.token.getOrNull();
+            if (token0 == null)
+            {
+                token0 = this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true);
+            }
+            else
+            {
+                spec.token = null;
+                save = true;
+            }
         }
         this.scarlet.ui.settingVoid("Discord bot token", "Reset", () -> this.scarlet.execModal.execute(() ->
         {
             if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the bot token?", "Reset bot token"))
                 return;
-            this.token = this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true);
+            this.token.set(this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true));
             this.save();
         }));
         
@@ -712,7 +726,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
         
         if (save) this.save(spec);
         
-        this.token = spec.token;
+        this.token.set(token0);
+//        this.token = spec.token;
         this.guildSf = spec.guildSf;
         this.audioChannelSf = spec.audioChannelSf;
         this.evidenceRoot = spec.evidenceRoot;
@@ -743,7 +758,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         this.perms.save();
         JDASettingsSpec spec = new JDASettingsSpec();
-        spec.token = this.token;
+//        spec.token = this.token;
         spec.guildSf = this.guildSf;
         spec.audioChannelSf = this.audioChannelSf;
         spec.evidenceRoot = this.evidenceRoot;
@@ -778,7 +793,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.interactions.clearDeadPagination();
     }
 
-    class InstanceCreation
+    static class InstanceCreation
     {
         InstanceCreation(String ictoken, String worldId, String groupId)
         {
@@ -794,13 +809,16 @@ public class ScarletDiscordJDA implements ScarletDiscord
         Boolean queueEnabled = Boolean.TRUE;
         Boolean hardClose = Boolean.FALSE;
         Boolean ageGate = Boolean.FALSE;
+        Boolean inviteOnly = null;
+        Boolean canRequestInvite = null;
         Boolean playerPersistenceEnabled = null;
         Boolean instancePersistenceEnabled = null;
         String displayName = null;
+        String calendarEntryId = null;
         
         boolean contentSettings_drones = true;
         boolean contentSettings_emoji = true;
-        boolean contentSettings_items = true;
+        boolean contentSettings_props = true;
         boolean contentSettings_pedestals = true;
         boolean contentSettings_prints = true;
         boolean contentSettings_stickers = true;
@@ -816,13 +834,17 @@ public class ScarletDiscordJDA implements ScarletDiscord
             cir.setClosedAt(this.closedAt);
             cir.setQueueEnabled(this.queueEnabled);
             cir.setHardClose(this.hardClose);
+//            cir.setPlayerPersistenceEnabled(this.playerPersistenceEnabled);
             cir.setInstancePersistenceEnabled(this.instancePersistenceEnabled);
             cir.setDisplayName(this.displayName);
+//            cir.setCalendarEntryId(this.calendarEntryId);
             cir.setAgeGate(this.ageGate);
+            cir.setInviteOnly(this.inviteOnly);
+            cir.setCanRequestInvite(this.canRequestInvite);
             InstanceContentSettings contentSettings = new InstanceContentSettings();
             contentSettings.setDrones(this.contentSettings_drones);
             contentSettings.setEmoji(this.contentSettings_emoji);
-//            contentSettings.setItems(this.contentSettings_items);
+            contentSettings.setProps(this.contentSettings_props);
             contentSettings.setPedestals(this.contentSettings_pedestals);
             contentSettings.setPrints(this.contentSettings_prints);
             contentSettings.setStickers(this.contentSettings_stickers);
@@ -833,7 +855,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             JsonObject cir = JSON.getGson().toJsonTree(this.createRequest()).getAsJsonObject();
             if (this.playerPersistenceEnabled != null) cir.addProperty("playerPersistenceEnabled", this.playerPersistenceEnabled);
-            cir.getAsJsonObject("contentSettings").addProperty("items", this.contentSettings_items);
+            if (this.calendarEntryId != null) cir.addProperty("calendarEntryId", this.calendarEntryId);
             return cir;
         }
     }
@@ -1070,11 +1092,32 @@ public class ScarletDiscordJDA implements ScarletDiscord
         String userId = this.scarlet.data.globalMetadata_getSnowflakeId(member.getId());
         return this.scarlet.vrc.checkUserHasVRChatPermission(vrchatPermission, userId);
     }
+    public boolean checkMemberRespondVrcPerms(GroupPermissions perms, InteractionHook hook, Member member)
+    {
+        if (this.checkMemberHasVRChatPermission(perms, member))
+            return true;
+        hook.sendMessage(this.scarlet.vrc.messageNeedPerms(perms)).setEphemeral(true).queue();
+        return false;
+    }
+    public boolean checkSelfRespondVrcPerms(GroupPermissions perms, InteractionHook hook)
+    {
+        if (this.scarlet.vrc.checkSelfUserHasVRChatPermission(perms))
+            return true;
+        hook.sendMessage(this.scarlet.vrc.messageNeedPerms(perms)).setEphemeral(true).queue();
+        return false;
+    }
+    public boolean checkSelfRespondVrcPerms(GroupPermissions perms, IReplyCallback event)
+    {
+        if (this.scarlet.vrc.checkSelfUserHasVRChatPermission(perms))
+            return true;
+        event.reply(this.scarlet.vrc.messageNeedPerms(perms)).setEphemeral(true).queue();
+        return false;
+    }
 
     public boolean checkMemberHasScarletPermission(ScarletPermission scarletPermission, Member member, boolean fallback)
     {
         if (scarletPermission == null)
-            return true;
+            return fallback;
         return this.perms.check(member, scarletPermission.id, fallback);
     }
 

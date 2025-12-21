@@ -31,7 +31,8 @@ Settings for the Discord bot account
 ```json
 {
     // The Discord bot token
-    "token": "MTIzNDU2Nzg5MTIzNDU2Nzg5.3q2-7w.VGhpcyB0ZXh0IGhhcyAyOCBjaGFyYWN0ZXJzLg", 
+    "token": "MTIzNDU2Nzg5MTIzNDU2Nzg5.3q2-7w.VGhpcyB0ZXh0IGhhcyAyOCBjaGFyYWN0ZXJzLg",
+    // DEPRECATED: this value is read, but is no longer written. This value now persists in the encrypted store.
     
     // The Discord server snowflake id
     "guildSf": "123456789123456789",
@@ -173,6 +174,84 @@ Array of watched entities (groups, users, avatars)
 ]
 ```
 
+## file `event_schedule.json`
+
+Specification for scheduled events
+```json
+{
+    // Map of scheduled event ids to their specification
+    "eventSpecs": {
+        "<spec id>": {
+            "id": "<spec id>",
+            
+            // Whether the event should be scheduled
+            "active": true,
+            
+            // Whether a mirror event should be scheduled on Discord
+            "mirrorOnDiscord": true,
+            
+            // The maximum number of this event to have scheduled at once
+            "maxPending": 3,
+            
+            // The frequency with which an event is scheduled
+            "frequency": "EVERY_DAY",
+            
+            // The next date for which the event will be scheduled
+            "date": "2025-12-19",
+            
+            // The time, with offset from UTC, at which the event should occur
+            "time": "22:15:00-06:00",
+            
+            // The frequency with which an event is scheduled
+            "duration": "PT1H",
+            
+            // Certain template attributes of the event
+            "vrcCalendarEventParameters": {
+                // see <https://vrchat.community/reference/create-group-calendar-event>
+            },
+            
+            // Certain template attributes for event instances
+            "vrcInstanceParameters": {
+                // see <https://vrchat.community/reference/create-instance>
+            },
+            
+            // Map of upcoming dates to specifics about scheduled events
+            "pending": {
+                "2025-12-18": {
+                    
+                    // When an instance should be created for the event
+                    "needsCreate": "2025-12-18T22:14:30-06:00",
+                    
+                    // When the event is to begin
+                    "start": "2025-12-18T22:15:00-06:00",
+                    
+                    // When the event is to end
+                    "end": "2025-12-18T23:15:00-06:00",
+                    
+                    // When the instance should be closed
+                    "needsClose": "2025-12-18T23:15:30-06:00",
+                    
+                    // The owning group of the event
+                    "vrchatGroupId": "grp_00000000-0000-0000-0000-000000000000",
+                    
+                    // The id of the event
+                    "vrchatEventId": "cal_00000000-0000-0000-0000-000000000000",
+                    
+                    // The discord server in which a mirror event was posted
+                    "discordGuildSf": "1234567890123456789",
+                    
+                    // The snowflake of the mirror event
+                    "discordEventSf": "1234567890123456789"
+                }
+            }
+        }
+    }
+    
+    // An alternate Discord server snowflake id in which to post the Discord events
+    "alternateGuildSf": "123456789123456789"
+}
+```
+
 ## file `moderation_tags.json`
 
 Array of custom moderation tags
@@ -269,12 +348,15 @@ General settings for Scarlet:
 {
     // The username used to authenticate with VRChat
     "vrc_username": "DefinitelyNOTtupper",
+    // DEPRECATED: this value is read, but is no longer written. This value now persists in the encrypted store.
     
     // The password used to authenticate with VRChat
     "vrc_password": "password_cute_robot",
+    // DEPRECATED: this value is read, but is no longer written. This value now persists in the encrypted store.
     
     // Optional. The TOTP secret used to two-factor authenticate with VRChat
     "vrc_secret": "abcd efgh ijkl mnop qrst uvxx yz23 4567",
+    // DEPRECATED: this value is read, but is no longer written. This value now persists in the encrypted store.
     
     // The VRChat groupId of the relevant group
     "vrchat_group_id": "grp_00000000-0000-0000-0000-000000000000",
@@ -364,6 +446,7 @@ Saved pending moderation actions:
 
 ## file `store.bin`
 
+DEPRECATED: this value is read, but is no longer written. This value now persists in the encrypted store.
 Saved cookies for authentication with VRChat, one cookie per line:
 ```txt
 auth=authcookie_00000000-0000-0000-0000-000000000000; expires=Sun, 31 Feb 2069 12:34:56 GMT; path=/; httponly
@@ -580,3 +663,10 @@ Volatile data:
 "ui/Bounds"="979,603,846,400"
 ```
 As the Windows implementation of the `java.util.prefs` package uses the Windows registry, which is case-insensitive, `/` characters are used to "escape" uppercase characters to avoid clashes.
+
+### Encrypted Store
+
+Particular sensitive values are no longer stored in plain text, but instead are encrypted and stored in prefs.
+You may specify the password used to encrypt/decrypt by either setting the environment variable `SCARLET_GLOBAL_PW` or the Java system property `scarlet.global.pw`.
+It is highly recommended that you use a custom password instead of the default.
+

@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import com.google.gson.JsonObject;
 
 import io.github.vrchatapi.JSON;
+import io.github.vrchatapi.model.CalendarEvent;
 import io.github.vrchatapi.model.FileVersion;
 import io.github.vrchatapi.model.ModelFile;
 
@@ -45,6 +46,17 @@ public interface VrcApiStatic
     static VersionedFile fileVersionObject(String fileId)
     {
         return VersionedFile.of(fileId, latestVersion(file(fileId)));
+    }
+    static CalendarEvent event(String groupId, String eventId)
+    {
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/api/1/calendar/"+groupId+"/"+eventId))
+        {
+            return in.readAsJson(null, JSON.getGson(), CalendarEvent.class);
+        }
+        catch (Exception ex)
+        {
+        }
+        return null;
     }
     class StaticContent
     {

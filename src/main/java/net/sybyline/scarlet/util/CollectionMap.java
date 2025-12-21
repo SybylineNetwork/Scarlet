@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -34,6 +35,11 @@ public interface CollectionMap<K, V, C extends Collection<V>> extends Map<K, C>
     public static <K, V> OfSets<K, V> setsConcurrent()
     {
         return new ConcurrentSetMap<>();
+    }
+
+    public static <K, V extends Enum<V>> OfSets<K, V> setsEnum(Class<V> enumClass)
+    {
+        return new EnumSetMap<>(enumClass);
     }
 
     public static <K, V> OfSets<K, V> setsProxied(Map<K, Set<V>> proxied, Supplier<Set<V>> newSet)
@@ -296,6 +302,21 @@ class DefaultSetMap<K, V> extends ProxiedMap.Impl<K, Set<V>> implements Collecti
     public Set<V> valuesProvideNew()
     {
         return new HashSet<>();
+    }
+}
+
+class EnumSetMap<K, V extends Enum<V>> extends ProxiedMap.Impl<K, Set<V>> implements CollectionMap.OfSets<K, V>
+{
+    public EnumSetMap(Class<V> enumClass)
+    {
+        super(new HashMap<>());
+        this.enumClass = enumClass;
+    }
+    final Class<V> enumClass;
+    @Override
+    public Set<V> valuesProvideNew()
+    {
+        return EnumSet.noneOf(this.enumClass);
     }
 }
 

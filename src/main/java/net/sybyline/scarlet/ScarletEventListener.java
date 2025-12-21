@@ -182,6 +182,13 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         {
             this.scarlet.splash.splashText("Preamble...");
             this.scarlet.splash.splashSubtext(location);
+            LocalDateTime lIJ = this.scarlet.settings.lastInstanceJoined.getOrNull();
+            if (lIJ == null || lIJ.isBefore(timestamp))
+                this.scarlet.settings.lastInstanceJoined.set(timestamp);
+        }
+        else
+        {
+            this.scarlet.settings.lastInstanceJoined.set(timestamp);
         }
         this.clientLocation = location;
         this.isInGroupInstance = location.contains("~group("+this.scarlet.vrc.groupId+")");
@@ -380,11 +387,19 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         }
         
         User user = this.scarlet.vrc.getUser(userId);
-        List<LimitedUserGroups> lugs = this.scarlet.vrc.getUserGroups(userId);
+        List<LimitedUserGroups> lugs0 = this.scarlet.vrc.getUserGroups(userId);
+        Stream<LimitedUserGroups> lugs = lugs0 == null || lugs0.isEmpty() ? null : lugs0.stream();
+        for (String alt : this.scarlet.vrc.cookies.alts())
+        {
+//            List<LimitedUserGroups> lugs1 = ScarletVRChatCookieJar.contextGet(alt, () -> this.scarlet.vrc.getMutualsGroups(userId));
+            List<LimitedUserGroups> lugs1 = ScarletVRChatCookieJar.contextGet(alt, () -> this.scarlet.vrc.getUserGroups(userId));
+            if (lugs1 != null && !lugs1.isEmpty())
+                lugs = lugs == null ? lugs1.stream() : Stream.concat(lugs, lugs0.stream());
+        }
         // check groups
         if (lugs != null)
         {
-            List<ScarletWatchedGroups.WatchedGroup> wgs = lugs.stream()
+            List<ScarletWatchedGroups.WatchedGroup> wgs = lugs
                 .map(LimitedUserGroups::getGroupId)
                 .map(this.scarlet.watchedGroups::getWatchedGroup)
                 .filter(Objects::nonNull)
@@ -566,12 +581,22 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             case "get": {
                 if (url.startsWith("analysis/file_", pathIdx))
                 {
+                    if (preamble)
+                    {
+                        LocalDateTime lIJ = this.scarlet.settings.lastInstanceJoined.getOrNull();
+                        if (lIJ != null && lIJ.minusMinutes(1L).isAfter(timestamp))
+                            break;
+                    }
                     VersionedFile versionedFile = VersionedFile.parse(url.substring(pathIdx + 9));
                     if (versionedFile != null)
                     {
                         ModelFile file = this.scarlet.vrc.getModelFile(versionedFile.id);
                         int cidx;
-                        if (file.getName().startsWith("Avatar - ") && (cidx = file.getName().lastIndexOf(" - Asset bundle - ")) != -1)
+                        if (file == null)
+                            Scarlet.LOG.warn("Analysis: file was null for "+versionedFile);
+                        else if (file.getName() == null)
+                            Scarlet.LOG.warn("Analysis: file.name was null for "+versionedFile);
+                        else if (file.getName().startsWith("Avatar - ") && (cidx = file.getName().lastIndexOf(" - Asset bundle - ")) != -1)
                         {
                             String name = file.getName().substring(9, cidx);
                             if (this.isInGroupInstance && !preamble)

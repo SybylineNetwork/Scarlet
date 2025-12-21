@@ -1,18 +1,31 @@
 package net.sybyline.scarlet;
 
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +71,7 @@ import io.github.vrchatapi.model.CurrentUser;
 import io.github.vrchatapi.model.FileAnalysis;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
+import io.github.vrchatapi.model.GroupGalleryImage;
 import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupJoinRequestAction;
 import io.github.vrchatapi.model.GroupLimitedMember;
@@ -85,6 +99,8 @@ import io.github.vrchatapi.model.World;
 import net.sybyline.scarlet.util.EnumHelper;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.VersionedFile;
+import net.sybyline.scarlet.util.VrcAllGroupPermissions;
+import net.sybyline.scarlet.util.VrcWeb;
 
 import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
@@ -167,7 +183,7 @@ public class ScarletVRChat implements Closeable
         }).create());
     }
 
-    public ScarletVRChat(Scarlet scarlet, File cookieFile)
+    public ScarletVRChat(Scarlet scarlet, String domain, File cookieFile)
     {
         scarlet.splash.splashSubtext("Configuring VRChat Api");
         // ensure default ApiClient initialized
@@ -175,7 +191,10 @@ public class ScarletVRChat implements Closeable
         Configuration.getDefaultApiClient();
         
         this.scarlet = scarlet;
-        this.cookies = new ScarletVRChatCookieJar(cookieFile);
+        this.username = scarlet.settings.new RegistryStringEncrypted(domain+":username", true);
+        this.password = scarlet.settings.new RegistryStringEncrypted(domain+":password", true);
+        this.totpsecret = scarlet.settings.new RegistryStringEncrypted(domain+":totpsecret", true);
+        this.cookies = new ScarletVRChatCookieJar(scarlet, domain, cookieFile);
         this.client = new ApiClient(new OkHttpClient.Builder()
                 .addNetworkInterceptor(this::intercept)
                 .cookieJar(this.cookies)
@@ -192,6 +211,8 @@ public class ScarletVRChat implements Closeable
         this.groupOwnerId = null;
         this.group = null;
         this.groupLimitedMember = null;
+        this.groupRoles = Collections.synchronizedMap(new LinkedHashMap<>());
+        this.allGroupPermissions = new VrcAllGroupPermissions(null);
         this.currentUser = null;
         this.currentUserId = null;
         scarlet.settings.setNamespace(this.groupId);
@@ -208,12 +229,15 @@ public class ScarletVRChat implements Closeable
     }
 
     final Scarlet scarlet;
+    final ScarletSettings.RegistryStringEncrypted username, password, totpsecret;
     final ScarletVRChatCookieJar cookies;
     final ApiClient client;
     final String groupId;
     String groupOwnerId;
     Group group;
     GroupLimitedMember groupLimitedMember;
+    final Map<String, GroupRole> groupRoles;
+    VrcAllGroupPermissions allGroupPermissions;
     CurrentUser currentUser;
     String currentUserId;
     final ScarletJsonCache<User> cachedUsers;
@@ -226,7 +250,8 @@ public class ScarletVRChat implements Closeable
     final ScarletJsonCache<InventoryItem> cachedInventoryItems;
     final ScarletJsonCache<ModelFile> cachedModelFiles;
     final ScarletJsonCache<FileAnalysis> cachedFileAnalyses;
-    long localDriftMillis = 0L;
+    long localDriftMillis = 0L,
+         latencyMillis = 0L;
 
     public ApiClient getClient()
     {
@@ -251,6 +276,8 @@ public class ScarletVRChat implements Closeable
     public void login()
     {
         this.login(false);
+        for (String alt : this.cookies.alts())
+            this.loginAlt(alt, false);
     }
 
     private void login(boolean isRefresh)
@@ -261,16 +288,32 @@ public class ScarletVRChat implements Closeable
                  timeServer = new MiscellaneousApi(this.client).getSystemTime().toInstant().toEpochMilli(),
                  timePost = System.currentTimeMillis(),
                  drift = (timePre + timePost) / 2 - timeServer,
+                 latency = Math.max(timePost - timePre, 0L) / 2,
                  driftAbs = Math.abs(drift);
             if (driftAbs >= 1_000L)
             {
                 LOG.warn("Local system time is "+driftAbs+(drift > 0 ? "ms ahead of VRChat servers" : "ms behind VRChat servers"));
             }
             this.localDriftMillis = drift;
+            this.latencyMillis = latency;
         }
         catch (ApiException apiex)
         {
             LOG.error("Exception calculating drift", apiex);
+        }
+        {
+            String username = this.scarlet.settings.getString("vrc_username"),
+                   password = this.scarlet.settings.getString("vrc_password");
+            if (username != null)
+            {
+                this.username.set(username);
+                this.scarlet.settings.getJson().remove("vrc_username");
+            }
+            if (password != null)
+            {
+                this.password.set(password);
+                this.scarlet.settings.getJson().remove("vrc_password");
+            }
         }
         try
         {
@@ -315,8 +358,22 @@ public class ScarletVRChat implements Closeable
                 if (!isRefresh) LOG.info("Cached auth not valid", ex);
                 do try
                 {
-                    this.client.setUsername(this.scarlet.settings.getStringOrRequireInput("vrc_username", "VRChat Username", false));
-                    this.client.setPassword(this.scarlet.settings.getStringOrRequireInput("vrc_password", "VRChat Password", true));
+                    String username = this.username.getOrNull(),
+                           password = this.password.getOrNull();
+                    if (username == null)
+                    {
+                        username = this.scarlet.settings.getStringOrRequireInput("vrc_username", "VRChat Username", false);
+                        this.scarlet.settings.getJson().remove("vrc_username");
+                        this.username.set(username);
+                    }
+                    if (password == null)
+                    {
+                        password = this.scarlet.settings.getStringOrRequireInput("vrc_password", "VRChat Password", true);
+                        this.scarlet.settings.getJson().remove("vrc_password");
+                        this.password.set(password);
+                    }
+                    this.client.setUsername(username);
+                    this.client.setPassword(password);
                     data = this.client.<JsonObject>execute(auth.getCurrentUserCall(null), JsonObject.class).getData();
                     if (data.has("id"))
                     {
@@ -327,8 +384,8 @@ public class ScarletVRChat implements Closeable
                 }
                 catch (ApiException apiex)
                 {
-                    this.scarlet.settings.getJson().remove("vrc_username");
-                    this.scarlet.settings.getJson().remove("vrc_password");
+                    this.username.set(null);
+                    this.password.set(null);
                     LOG.error("Invalid credentials");
                     data = null;
                 }
@@ -346,11 +403,17 @@ public class ScarletVRChat implements Closeable
                     .stream()
                     .map(JsonElement::getAsJsonPrimitive)
                     .map(JsonPrimitive::getAsString)
-                    .map(String::toLowerCase)
                     .collect(Collectors.toList());
             if (twoFactorMethods.contains("totp"))
             {
                 String secret = this.scarlet.settings.getString("vrc_secret");
+                if (secret == null)
+                    secret = this.totpsecret.getOrNull();
+                else
+                {
+                    this.totpsecret.set(secret);
+                    this.scarlet.settings.getJson().remove("vrc_secret");
+                }
                 if (secret != null && (secret = secret.replaceAll("[^A-Za-z2-7=]", "")).length() == 32)
                 {
                     boolean authed = false;
@@ -383,19 +446,19 @@ public class ScarletVRChat implements Closeable
                 
                 LOG.info("Logged in (2fa-totp)");
             }
-            else if (twoFactorMethods.contains("emailotp"))
+            else if (twoFactorMethods.contains("emailOtp"))
             {
                 for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
                 {
-                    if (needsTotp = !auth.verify2FAEmailCode(new TwoFactorEmailCode().code(this.scarlet.settings.requireInput("Emailotp code", true))).getVerified().booleanValue())
-                        LOG.error("Invalid emailotp code");
+                    if (needsTotp = !auth.verify2FAEmailCode(new TwoFactorEmailCode().code(this.scarlet.settings.requireInput("EmailOtp code", true))).getVerified().booleanValue())
+                        LOG.error("Invalid emailOtp code");
                 }
                 catch (ApiException apiex)
                 {
-                    LOG.error("Exception using emailotp", apiex);
+                    LOG.error("Exception using emailOtp", apiex);
                 }
                 
-                LOG.info("Logged in (2fa-emailotp)");
+                LOG.info("Logged in (2fa-emailOtp)");
             }
             else
             {
@@ -418,20 +481,294 @@ public class ScarletVRChat implements Closeable
         finally
         {
             this.save();
+            this.updateGroupInfo();
+        }
+    }
+
+    class AltCred extends ScarletVRChatCookieJar.AltCredContext
+    {
+        final boolean isNew;
+        ScarletSettings.RegistryStringEncrypted altUsername, altPassword, altSecret;
+        public AltCred(String altUserId)
+        {
+            ScarletVRChat.this.cookies.super(altUserId);
+            this.isNew = altUserId == null;
+            this.init(altUserId);
+        }
+        boolean init(String altUserId)
+        {
+            if (altUserId == null)
+                return false;
+            if (!this.isNew)
+                return false;
+            if (this.altUsername == null)
+                this.altUsername = ScarletVRChat.this.scarlet.settings.new RegistryStringEncrypted("alt:"+altUserId+":username", true);
+            if (this.altPassword == null)
+                this.altPassword = ScarletVRChat.this.scarlet.settings.new RegistryStringEncrypted("alt:"+altUserId+":password", true);
+            if (this.altSecret == null)
+                this.altSecret = ScarletVRChat.this.scarlet.settings.new RegistryStringEncrypted("alt:"+altUserId+":totpsecret", true);
+            return true;
+        }
+        void updateUP(String altUserId, String username, String password)
+        {
+            if (!this.init(altUserId))
+                return;
+            this.altUsername.set(username);
+            this.altPassword.set(password);
+        }
+        void updateS(String altUserId, String totpsecret)
+        {
+            if (!this.init(altUserId))
+                return;
+            this.altSecret.set(totpsecret);
+        }
+        String getU() { return this.altUsername == null ? null : this.altUsername.getOrNull(); }
+        String getP() { return this.altPassword == null ? null : this.altPassword.getOrNull(); }
+        String getS() { return this.altSecret == null ? null : this.altSecret.getOrNull(); }
+    }
+    private String loginAlt(String context, boolean isRefresh)
+    {
+        try (AltCred alt = new AltCred(context))
+        {
+            try
             {
-                Group group = this.getGroup(this.groupId, Boolean.TRUE);
-                if (group != null)
+                AuthenticationApi auth = new AuthenticationApi(this.client);
+                if (!alt.isNew) try
                 {
-                    this.groupOwnerId = group.getOwnerId();
-                    this.group = group;
-                    this.groupLimitedMember = this.getGroupMembership(this.groupId, this.currentUserId);
-                    if (group.getRoles() == null)
+                    if (auth.verifyAuthToken().getOk().booleanValue())
                     {
-                        group.setRoles(this.getGroupRoles(this.groupId));
+                        LOG.info("Logged in (cached-verified); alt: "+context);
+                        String altUserId = null;
+                        try
+                        {
+                            altUserId = this.getCurrentUser(auth).getId();
+                        }
+                        catch (ApiException apiex)
+                        {
+                            LOG.info("Exception getting current user even though cached auth should be valid; alt: "+context+"/"+altUserId, apiex);
+                        }
+                        return altUserId;
+                    }
+                    else
+                    {
+                        if (!isRefresh) LOG.info("Auth declared invalid; alt: "+context);
                     }
                 }
+                catch (ApiException apiex)
+                {
+                    if (!isRefresh) LOG.info("Auth discovered invalid; alt: "+context, apiex);
+                }
+                JsonObject data;
+                String username = null, password = null;
+                try
+                {
+                    data = this.client.<JsonObject>execute(auth.getCurrentUserCall(null), JsonObject.class).getData();
+                    if (data.has("id"))
+                    {
+                        String altUserId = data.getAsJsonPrimitive("id").getAsString();
+                        LOG.info("Logged in (cached); alt: "+altUserId);
+                        if (alt.isNew)
+                            alt.transferTo(altUserId);
+                        return altUserId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (!isRefresh) LOG.info("Cached auth not valid: "+context, ex);
+                    do try
+                    {
+                        username = alt.altUsername == null ? null : alt.altUsername.getOrNull();
+                        password = alt.altPassword == null ? null : alt.altPassword.getOrNull();
+                        if (username == null)
+                        {
+                            username = this.scarlet.settings.requireInput("Alternate VRChat Username", false);
+                            if (alt.altUsername != null)
+                                alt.altUsername.set(username);
+                        }
+                        if (password == null)
+                        {
+                            password = this.scarlet.settings.requireInput("Alternate VRChat Password", true);
+                            if (alt.altPassword != null)
+                                alt.altPassword.set(password);
+                        }
+                        this.client.setUsername(username);
+                        this.client.setPassword(password);
+                        data = this.client.<JsonObject>execute(auth.getCurrentUserCall(null), JsonObject.class).getData();
+                        if (data.has("id"))
+                        {
+                            String altUserId = data.getAsJsonPrimitive("id").getAsString();
+                            LOG.info("Logged in (credentials); alt: "+altUserId);
+                            alt.updateUP(altUserId, username, password);
+                            if (alt.isNew)
+                                alt.transferTo(altUserId);
+                            return altUserId;
+                        }
+                    }
+                    catch (ApiException apiex)
+                    {
+                        if (alt.altUsername != null)
+                            alt.altUsername.set(null);
+                        if (alt.altPassword != null)
+                            alt.altPassword.set(null);
+                        data = null;
+                        if ((username == null || username.isEmpty()) && (password == null || password.isEmpty()))
+                        {
+                            LOG.info("Canceling credentials; alt: "+context);
+                            return null;
+                        }
+                        LOG.error("Invalid credentials; alt: "+context);
+                    }
+                    finally
+                    {
+                        this.client.setUsername(null);
+                        this.client.setPassword(null);
+                    }
+                    while (data == null);
+                }
+                
+                List<String> twoFactorMethods = data.get("requiresTwoFactorAuth")
+                        .getAsJsonArray()
+                        .asList()
+                        .stream()
+                        .map(JsonElement::getAsJsonPrimitive)
+                        .map(JsonPrimitive::getAsString)
+                        .collect(Collectors.toList());
+                String code = null;
+                if (twoFactorMethods.contains("totp"))
+                {
+                    String secret = alt.altSecret == null ? null : alt.altSecret.getOrNull();
+                    if (secret != null && (secret = secret.replaceAll("[^A-Za-z2-7=]", "")).length() == 32)
+                    {
+                        boolean authed = false;
+                        for (int tries = 2; !authed && tries --> 0; MiscUtils.sleep(3_000L)) try
+                        {
+                            // use VRChatAPI time to work around potential local system time drift
+                            long now = new MiscellaneousApi(this.client).getSystemTime().toInstant().toEpochMilli();
+                            code = TimeBasedOneTimePasswordUtil.generateNumberString(secret, now, TimeBasedOneTimePasswordUtil.DEFAULT_TIME_STEP_SECONDS, TimeBasedOneTimePasswordUtil.DEFAULT_OTP_LENGTH);
+                            authed = auth.verify2FA(new TwoFactorAuthCode().code(code)).getVerified().booleanValue();
+                        }
+                        catch (GeneralSecurityException gsex)
+                        {
+                            LOG.error("Exception generating totp secret; alt: "+context, gsex);
+                        }
+                        catch (ApiException apiex)
+                        {
+                            LOG.error("Exception using totp secret; alt: "+context, apiex);
+                        }
+                    }
+                    
+                    for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
+                    {
+                        if (needsTotp = !auth.verify2FA(new TwoFactorAuthCode().code(code = this.scarlet.settings.requireInput("Totp code", true))).getVerified().booleanValue())
+                            LOG.error("Invalid totp code; alt: "+context);
+                    }
+                    catch (ApiException apiex)
+                    {
+                        if (code == null || code.isEmpty())
+                        {
+                            LOG.info("Canceling using totp; alt: "+context);
+                            return null;
+                        }
+                        LOG.error("Exception using totp; alt: "+context, apiex);
+                    }
+                    
+                    LOG.info("Logged in (2fa-totp); alt: "+context);
+                }
+                else if (twoFactorMethods.contains("emailOtp"))
+                {
+                    for (boolean needsTotp = true; needsTotp && this.scarlet.running;) try
+                    {
+                        if (needsTotp = !auth.verify2FAEmailCode(new TwoFactorEmailCode().code(code = this.scarlet.settings.requireInput("EmailOtp code", true))).getVerified().booleanValue())
+                            LOG.error("Invalid emailOtp code; alt: "+context);
+                    }
+                    catch (ApiException apiex)
+                    {
+                        if (code == null || code.isEmpty())
+                        {
+                            LOG.info("Canceling using emailOtp; alt: "+context);
+                            return null;
+                        }
+                        LOG.error("Exception using emailOtp; alt: "+context, apiex);
+                    }
+                    
+                    LOG.info("Logged in (2fa-emailOtp); alt: "+context);
+                }
+                else
+                {
+                    String message = "Unsupported 2fa methods: "+twoFactorMethods+"; alt: "+context;
+                    LOG.error(message);
+                    throw new UnsupportedOperationException(message);
+                }
+    
+                String altUserId = null;
+                try
+                {
+                    altUserId = this.getCurrentUser(auth).getId();
+                    alt.updateUP(altUserId, username, password);
+                    if (alt.isNew)
+                        alt.transferTo(altUserId);
+                }
+                catch (ApiException apiex)
+                {
+                    LOG.info("Exception getting current user even though current auth should be valid; alt: "+context+"/"+altUserId, apiex);
+                }
+    
+                return altUserId;
+            }
+            finally
+            {
+                this.save();
             }
         }
+    }
+    void updateGroupInfo()
+    {
+        Group group = this.getGroup(this.groupId, Boolean.TRUE);
+        if (group != null)
+        {
+            this.groupOwnerId = group.getOwnerId();
+            this.group = group;
+            this.groupLimitedMember = this.getGroupMembership(this.groupId, this.currentUserId);
+            if (this.groupLimitedMember == null)
+            {
+                if (this.scarlet.ui.confirmModal(null, "The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
+                {
+                    this.cookies.clear();
+                    this.cookies.save();
+                    throw new IllegalStateException();
+                }
+            }
+            if (group.getRoles() == null)
+            {
+                group.setRoles(this.getGroupRoles(this.groupId));
+                this.groupRoles.clear();
+                group.getRoles().forEach(role -> this.groupRoles.put(role.getId(), role));
+            }
+        }
+        try
+        {
+            Map<String, String> localVarHeaderParams = new HashMap<>();
+            localVarHeaderParams.put("Accept", "application/json");
+            okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+this.currentUserId+"/groups/permissions", "GET", new ArrayList<>(), new ArrayList<>(), null, localVarHeaderParams, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
+            JsonObject json = this.client.<JsonObject>execute(localVarCall, JsonObject.class).getData();
+            this.allGroupPermissions = new VrcAllGroupPermissions(json);
+        }
+        catch (Exception ex)
+        {
+            
+        }
+    }
+    public boolean checkGroupHasAdminTag(GroupAdminTag adminTag)
+    {
+        if (adminTag == null)
+            return false;
+        Group group = this.group;
+        if (group == null)
+            return false;
+        List<String> tags = group.getTags();
+        if (tags == null || tags.isEmpty())
+            return false;
+        return tags.contains(adminTag.value);
     }
     /**
      * <u><i><b>REMOVE AFTER API SDK UPDATE</b></i></u>
@@ -467,11 +804,46 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    private boolean logoutAlt(String context, boolean isRefresh)
+    {
+        try (ScarletVRChatCookieJar.AltCredContext alt = this.cookies.new AltCredContext(context))
+        {
+            AuthenticationApi auth = new AuthenticationApi(this.client);
+            if (!isRefresh) LOG.info("Log out: "+auth.logout().getSuccess().getMessage()+": "+context);
+            return true;
+        }
+        catch (ApiException apiex)
+        {
+            LOG.error("Error logging out: "+context, apiex);
+            return false;
+        }
+    }
+
     public void refresh()
     {
         LOG.info("Refreshing auth");
         this.logout(true);
         this.login(true);
+        for (String alt : this.cookies.alts())
+        {
+            this.logoutAlt(alt, true);
+            this.loginAlt(alt, true);
+        }
+    }
+
+    Map<String, String> getConfigLanguageOptions()
+    {
+        MiscellaneousApi misc = new MiscellaneousApi(this.client);
+        try
+        {
+            return misc.getConfig().getConstants().getLANGUAGE().getSPOKENLANGUAGEOPTIONS();
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error during audit query: "+apiex.getMessage());
+            return null;
+        }
     }
 
     public List<GroupAuditLogEntry> auditQuery(OffsetDateTime from, OffsetDateTime to)
@@ -753,6 +1125,28 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    static final Type _LimitedUserGroups_Array = new TypeToken<List<LimitedUserGroups>>(){}.getType();
+    public List<LimitedUserGroups> getMutualsGroups(String userId)
+    {
+        if (this.cachedUserGroups.is404(userId))
+            return null;
+        try
+        {
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Accept", "application/json");
+            return this.client.<List<LimitedUserGroups>>execute(this.client.buildCall(null, "/users/"+userId+"/mutuals/groups", "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null), _LimitedUserGroups_Array).getData();
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            if (apiex.getMessage().contains("HTTP response code: 404"))
+                this.cachedUserGroups.add404(userId);
+            else
+                LOG.error("Error during get user mutual groups: "+apiex.getMessage());
+            return null;
+        }
+    }
+
     public GroupMemberStatus getGroupMembershipStatus(String groupId, String targetUserId)
     {
         GroupLimitedMember member = this.getGroupMembership(groupId, targetUserId);
@@ -829,6 +1223,32 @@ public class ScarletVRChat implements Closeable
         }
     }
 
+    public List<GroupGalleryImage> getGroupGalleryImages(String groupId, String galleryId, Boolean approved)
+    {
+        GroupsApi groups = new GroupsApi(this.client);
+        try
+        {
+            List<GroupGalleryImage> images = new ArrayList<>();
+            int offset = 0, batchSize = 100;
+            List<GroupGalleryImage> ggil;
+            ggil = groups.getGroupGalleryImages(groupId, galleryId, batchSize, offset, approved);
+            while (ggil != null && !ggil.isEmpty())
+            {
+                images.addAll(ggil);
+                offset += ggil.size();
+                MiscUtils.sleep(250L);
+                ggil = groups.getGroupGalleryImages(groupId, galleryId, batchSize, offset, approved);
+            }
+            return images;
+        }
+        catch (ApiException apiex)
+        {
+            this.scarlet.checkVrcRefresh(apiex);
+            LOG.error("Error getting group gallery images: "+apiex.getMessage());
+            return null;
+        }
+    }
+
     public boolean banFromGroup(String targetUserId)
     {
         GroupsApi groups = new GroupsApi(this.client);
@@ -895,8 +1315,7 @@ public class ScarletVRChat implements Closeable
 
     public boolean checkSelfUserHasVRChatPermission(GroupPermissions vrchatPermission)
     {
-        GroupLimitedMember glm = this.groupLimitedMember;
-        return this.checkUserHasVRChatPermission(glm, vrchatPermission);
+        return this.allGroupPermissions.has(this.groupId, vrchatPermission);
     }
     public boolean checkUserHasVRChatPermission(GroupPermissions vrchatPermission, String userId)
     {
@@ -1185,18 +1604,96 @@ public class ScarletVRChat implements Closeable
         return lugs;
     }
 
+    public void addAlternateCredentials()
+    {
+        this.scarlet.execModal.submit(() ->
+        {
+            String altUserId = this.loginAlt(null, false);
+            if (altUserId == null)
+                this.scarlet.splash.queueFeedbackPopup(null, 5_000L, "Canceed", "alt credentials", Color.PINK);
+            else
+                this.scarlet.splash.queueFeedbackPopup(null, 5_000L, "Added: "+this.getUserDisplayName(altUserId), altUserId);
+        });
+    }
+
+    public void removeAlternateCredentials()
+    {
+        this.scarlet.execModal.submit(() ->
+        {
+            class AltDisplay
+            {
+                AltDisplay(String id)
+                {
+                    this.id = id;
+                    this.name = ScarletVRChat.this.getUserDisplayName(id);
+                    this.display = this.name+" ("+this.id+")";
+                }
+                final String id, name, display;
+                @Override
+                public String toString()
+                {
+                    return this.display;
+                }
+            }
+            AltDisplay[] alts = this.cookies.alts().stream().map(AltDisplay::new).toArray(AltDisplay[]::new);
+            AltDisplay selected = (AltDisplay)JOptionPane.showInputDialog(this.scarlet.ui.jframe, "Select the credentials to remove", "Remove alternate credentials", JOptionPane.WARNING_MESSAGE, null, alts, null);
+            if (selected == null)
+                return;
+            boolean loggedOut = this.logoutAlt(selected.id, false);
+            boolean removed = this.cookies.removeAlt(selected.id);
+            this.scarlet.splash.queueFeedbackPopup(null, 5_000L, "Removed "+selected.name, selected.id, removed ? loggedOut ? Color.WHITE : Color.YELLOW : loggedOut ? Color.ORANGE : Color.RED);
+        });
+    }
+
+    public void listAlternateCredentials()
+    {
+        JPanel panel = new JPanel(new GridBagLayout());
+        {
+            GridBagConstraints constraints = new GridBagConstraints();
+            constraints.gridheight = 1;
+            constraints.gridwidth = 1;
+            constraints.gridx = 0;
+            constraints.gridy = 0;
+            constraints.insets = new Insets(1, 1, 1, 1);
+            constraints.weightx = 0.0D;
+            constraints.weighty = 0.0D;
+            for (String alt : this.cookies.alts())
+            {
+                constraints.gridx = 0;
+                constraints.anchor = GridBagConstraints.EAST;
+                panel.add(new JLabel(this.getUserDisplayName(alt)+":", JLabel.RIGHT), constraints);
+                constraints.gridx = 1;
+                constraints.anchor = GridBagConstraints.WEST;
+                panel.add(new JLabel(alt, JLabel.LEFT), constraints);
+                constraints.gridy++;
+            }
+        }
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setSize(new Dimension(500, 300));
+        scroll.setPreferredSize(new Dimension(500, 300));
+        scroll.setMaximumSize(new Dimension(500, 300));
+        this.scarlet.ui.messageModalAsyncInfo(null, scroll, "Alternate credentials");
+    }
+
     public void modalNeedPerms(GroupPermissions perms)
     {
         this.scarlet.ui.submitModalAsync(
             null,
             "The bot VRChat account `"+this.currentUserId+"` is missing the necessary permission `"+perms.getValue()+"`",
             "Missing permissions",
-            () -> MiscUtils.AWTDesktop.browse(URI.create("https://vrchat.com/home/group/"+this.groupId+"/settings")),
+            () -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.Home.groupSettings(this.groupId))),
             null);
     }
     public String messageNeedPerms(GroupPermissions perms)
     {
-        return String.format("The [bot VRChat account](<https://vrchat.com/home/user/%s>) is missing the [necessary permission `%s`](<https://vrchat.com/home/group/%s/settings>)", this.currentUserId, perms.getValue(), this.groupId);
+        return String.format("The [bot VRChat account](<%s>) is missing the [necessary permission `%s`](<%s>)", VrcWeb.Home.user(this.currentUserId), perms.getValue(), VrcWeb.Home.groupSettings(this.groupId));
+    }
+    public boolean checkLogNeedPerms(GroupPermissions perms)
+    {
+        if (this.checkSelfUserHasVRChatPermission(perms))
+            return true;
+        LOG.error(String.format("The bot VRChat account `%s` is missing the necessary permission `%s`", this.currentUserId, perms.getValue()));
+        return false;
     }
 
     public void save()

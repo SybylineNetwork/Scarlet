@@ -10,6 +10,7 @@ import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,9 +19,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonObject;
+
+import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.CalendarEvent;
 import io.github.vrchatapi.model.CreateCalendarEventRequest;
 import io.github.vrchatapi.model.CreateInstanceRequest;
+import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.Instance;
 import io.github.vrchatapi.model.InstanceType;
 import io.github.vrchatapi.model.ModelFile;
@@ -33,6 +38,7 @@ import net.sybyline.scarlet.server.discord.DEnum;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.ScarletURLs;
+import net.sybyline.scarlet.util.VrcWeb;
 
 public class ScarletCalendar
 {
@@ -45,27 +51,31 @@ public class ScarletCalendar
         this.calendarFile = calendarFile;
         this.alternateGuildSf = null;
         this.eventSpecs = new ConcurrentHashMap<>();
-        this.maxDaysAhead = scarlet.ui.settingInt("calendar_max_days_ahead", "Calendar: max days ahead", 30, 2, 90);
-        this.maxEventsAhead = scarlet.ui.settingInt("calendar_max_events_ahead", "Calendar: max events ahead", 3, 1, 30);
         this.load();
     }
 
     public void update()
     {
-        int maxDaysAhead = this.maxDaysAhead.get(),
-            maxEventsAhead = this.maxEventsAhead.get();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        this.eventSpecs.values().forEach(spec -> spec.update(this, this.scarlet.vrc, (ScarletDiscordJDA)this.scarlet.discord, now, maxDaysAhead, maxEventsAhead));
+        if (!this.eventSpecs.isEmpty())
+        {
+            if (!this.scarlet.vrc.checkLogNeedPerms(GroupPermissions.group_calendar_manage))
+                return;
+            this.eventSpecs.values().forEach(spec -> spec.update(this, this.scarlet.vrc, this.scarlet.vrc.groupId, (ScarletDiscordJDA)this.scarlet.discord, now.withOffsetSameInstant(spec.time.getOffset())));
+        }
     }
 
     public static class EventSpec
     {
         public String id;
+        public boolean active = false;
+        public boolean mirrorOnDiscord = false;
+        public int maxPending = 3;
         
         public Frequency frequency = Frequency.ONE_OFF;
         public LocalDate date;
         public OffsetTime time;
-        public Duration duration;
+        public Duration duration = Duration.ofHours(1L);
         
         public CreateCalendarEventRequest vrcCalendarEventParameters = new CreateCalendarEventRequest();
         public CreateInstanceRequest vrcInstanceParameters = new CreateInstanceRequest();
@@ -74,33 +84,61 @@ public class ScarletCalendar
         
         public synchronized EmbedBuilder embed(EmbedBuilder builder)
         {
-            return builder
+            builder
                 .setTitle(this.vrcCalendarEventParameters.getTitle())
                 .setDescription(this.vrcCalendarEventParameters.getDescription())
-                .setThumbnail(this.vrcCalendarEventParameters.getImageId() == null ? null : ("https://api.vrchat.cloud/api/1/file/"+this.vrcCalendarEventParameters.getImageId()+"/1/file"))
-                .addField("ID", this.id, true)
+                .setThumbnail(this.vrcCalendarEventParameters.getImageId() == null ? null : (VrcWeb.file1Data(this.vrcCalendarEventParameters.getImageId())))
+                .addField("ID", this.id, false)
+                .addField("Scheduling", this.active?"Active":"Inactive", true)
                 .addField("Time", String.valueOf(this.time), true)
                 .addField("Duration", String.valueOf(MiscUtils.stringify_ymd_hms(this.duration)), true)
-                .addField("Category", String.valueOf(this.vrcCalendarEventParameters.getCategory()), true)
+                .addField("Category", GroupEventCategory.of(this.vrcCalendarEventParameters.getCategory()).display(), true)
             ;
+            Scheduled scheduled = this.pending.values().stream().min(Comparator.comparing($->$.start)).orElse(null);
+            String epochStarting = Long.toUnsignedString((scheduled == null ? this.date.atTime(this.time) : scheduled.start).toEpochSecond());
+            builder.addField("Next event", "<t:"+epochStarting+":D> (<t:"+epochStarting+":R>)", false);
+            if (scheduled != null)
+            {
+                if (scheduled.vrchatGroupId != null && scheduled.vrchatEventId != null)
+                {
+                    builder.addField("VRChat Event", "["+scheduled.vrchatEventId+"](<"+VrcWeb.Home.groupCalendar(scheduled.vrchatGroupId, scheduled.vrchatEventId)+">)", false);
+                }
+                if (scheduled.discordGuildSf != null && scheduled.discordEventSf != null)
+                {
+                    builder.addField("Discord Event", "["+scheduled.discordEventSf+"](<https://discord.com/events/"+scheduled.discordGuildSf+"/"+scheduled.discordEventSf+">)", false);
+                }
+            }
+            return builder;
         }
         
-        public synchronized void update(ScarletCalendar calendar, ScarletVRChat vrc, ScarletDiscordJDA discord, OffsetDateTime now, int maxDaysAhead, int maxEventsAhead)
+        public synchronized void update(ScarletCalendar calendar, ScarletVRChat vrc, String groupId, ScarletDiscordJDA discord, OffsetDateTime now)
         {
+groupId = "grp_c19f568a-d105-442d-b82a-b5a2e103d13d";
+            if (!this.active)
+                return;
             LocalDate nowDate = now.toLocalDate();
-            LocalDate nextDate = this.frequency.next(this.date);
+            LocalDate nextDate = this.date;
             if (nextDate != null)
             {
-                while (nextDate != null && nextDate.atTime(this.time).isBefore(now))
-                    nextDate = this.frequency.next(nextDate);
-                if (nextDate != null)
+                int diff = this.maxPending - this.pending.size();
+                if (diff > 0)
                 {
-                    this.date = nextDate;
-                    if (!nowDate.plusDays(maxDaysAhead).isBefore(nextDate) && this.pending.size() < maxEventsAhead)
+                    while (nextDate != null && nextDate.atTime(this.time).isBefore(now))
                     {
-                        if (!this.hasPending(nextDate))
+                        nextDate = this.frequency.next(nextDate);
+                    }
+                    if (nextDate != null)
+                    {
+                        for (int i = 0; i < diff && nextDate != null; i++)
                         {
-                            this.makeEvent(calendar, vrc, discord, nextDate);
+                            if (this.hasPending(nextDate))
+                            {
+                                nextDate = this.frequency.next(nextDate);
+                            }
+                        }
+                        if (nextDate != null && !this.hasPending(nextDate))
+                        {
+                            this.makeEvent(calendar, vrc, groupId, discord, nextDate);
                         }
                     }
                 }
@@ -110,7 +148,12 @@ public class ScarletCalendar
             List<LocalDate> removed = new ArrayList<>();
             this.pending.forEach((date, scheduled) ->
             {
-                if ((scheduled.start != now && scheduled.start.isBefore(now)) || date.isBefore(nowDate))
+                if (((scheduled.needsCreate != null && scheduled.needsCreate.isAfter(now))
+                 || ((scheduled.start != null && scheduled.start.isAfter(now)))))
+                {
+                    this.makeInstance(calendar, vrc, scheduled);
+                }
+                if ((scheduled.end != null && scheduled.end.isBefore(now)) || date.isBefore(nowDate))
                 {
                     removed.add(date);
                 }
@@ -118,114 +161,159 @@ public class ScarletCalendar
             for (LocalDate dateRemoved : removed)
             {
                 this.pending.remove(dateRemoved);
+                LOG.error("Removing transpired event for `"+this.id+"` on "+dateRemoved);
             }
+            if (!removed.isEmpty())
+                calendar.save();
         }
-        public synchronized void makeEvent(ScarletCalendar calendar, ScarletVRChat vrc, ScarletDiscordJDA discord, LocalDate futureDate)
+        public synchronized void makeEvent(ScarletCalendar calendar, ScarletVRChat vrc, String groupId, ScarletDiscordJDA discord, LocalDate futureDate)
         {
             OffsetDateTime start = futureDate.atTime(this.time),
                     end = start.plus(this.duration);
             Scheduled scheduled = this.getOrCreatePending(futureDate, start, end);
-            String fileId = null;
             
             CreateCalendarEventRequest request = this.vrcCalendarEventParameters;
             CalendarEvent vrcEvent;
+            if (scheduled.vrchatEventId != null)
+            {
+                LOG.error("Internal error: tried to schedule duplicate event for `"+this.id+"` on "+futureDate);
+                return;
+            }
             try
             {
-                request.setStartsAt(start);
-                request.setEndsAt(end);
-                vrcEvent = vrc.createCalendarEvent(vrc.groupId, request);
+                request.setStartsAt(start.withOffsetSameInstant(ZoneOffset.UTC));
+                request.setEndsAt(end.withOffsetSameInstant(ZoneOffset.UTC));
+                if (request.getFeatured() != null && request.getFeatured().booleanValue())
+                {
+                    if (!vrc.checkGroupHasAdminTag(GroupAdminTag.FEATURED_EVENTS_ENABLED))
+                    {
+                        request.setFeatured(null);
+                        LOG.warn("This group no longer has Featured Events enabled, removing featured flag from scheduled event "+request.getTitle()+" ("+this.id+")");
+                    }
+                }
+                if (request.getTags() != null && request.getTags().contains(GroupAdminTag.VRC_EVENT_GROUP_FAIR_TAG))
+                {
+                    if (!vrc.checkGroupHasAdminTag(GroupAdminTag.VRC_EVENT_GROUP_FAIR_ENABLED))
+                    {
+                        request.getTags().remove(GroupAdminTag.VRC_EVENT_GROUP_FAIR_TAG);
+                        LOG.warn("This group no longer has Event Group Fair enabled, removing featured tag from scheduled event "+request.getTitle()+" ("+this.id+")");
+                    }
+                }
+                vrcEvent = vrc.createCalendarEvent(groupId, request);
                 if (vrcEvent == null)
                     throw new IllegalStateException("vrcEvent == null");
+                this.date = futureDate;
+                calendar.save();
             }
             catch (Exception ex)
             {
-                LOG.error("Exception creating vrchat event image "+id, ex);
+                LOG.error("Exception creating vrchat event `"+this.id+"` on "+futureDate+", deactivating event for now", ex);
+                this.pending.remove(futureDate, scheduled);
+                this.active = false;
+                calendar.save();
                 return;
             }
-            scheduled.vrchatGroupId = vrc.groupId;
+            scheduled.vrchatGroupId = groupId;
             scheduled.vrchatEventId = vrcEvent.getId();
-            String guildSf = MiscUtils.nonBlankOrNull(calendar.alternateGuildSf, discord.guildSf);
-            if (guildSf != null)
+            if (this.mirrorOnDiscord)
             {
-                Guild guild = discord.jda.getGuildById(guildSf);
-                String imageId = vrcEvent.getImageId(),
-                       imageUrl = vrcEvent.getImageUrl();
-                Icon icon = null;
-                if (imageId != null && imageUrl != null) try
+                String guildSf = MiscUtils.nonBlankOrNull(calendar.alternateGuildSf, discord.guildSf);
+                if (guildSf != null)
                 {
-                    ModelFile file = vrc.getModelFile(fileId);
-                    if (file != null)
+                    Guild guild = discord.jda.getGuildById(guildSf);
+                    String imageId = vrcEvent.getImageId(),
+                           imageUrl = vrcEvent.getImageUrl();
+                    Icon icon = null;
+                    if (imageId != null && imageUrl != null) try
                     {
-                        Icon.IconType type = null;
-                        switch (file.getMimeType())
+                        ModelFile file = vrc.getModelFile(imageId);
+                        if (file != null)
                         {
-                        case IMAGE_GIF:
-                            type = Icon.IconType.GIF;
-                        break;
-                        case IMAGE_JPEG: case IMAGE_JPG:
-                            type = Icon.IconType.JPEG;
-                        break;
-                        case IMAGE_PNG:
-                            type = Icon.IconType.PNG;
-                        break;
-                        case IMAGE_WEBP:
-                            type = Icon.IconType.WEBP;
-                        break;
-                        default:
-                        }
-                        if (type != null)
-                        {
-                            icon = Icon.from(HttpURLInputStream.get(imageUrl), null);
+                            Icon.IconType type = null;
+                            switch (file.getMimeType())
+                            {
+                            case IMAGE_GIF:
+                                type = Icon.IconType.GIF;
+                            break;
+                            case IMAGE_JPEG: case IMAGE_JPG:
+                                type = Icon.IconType.JPEG;
+                            break;
+                            case IMAGE_PNG:
+                                type = Icon.IconType.PNG;
+                            break;
+                            case IMAGE_WEBP:
+                                type = Icon.IconType.WEBP;
+                            break;
+                            default:
+                            }
+                            if (type != null)
+                            {
+                                icon = Icon.from(HttpURLInputStream.get(imageUrl), null);
+                            }
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Exception getting event image "+imageId, ex);
-                }
-                try
-                {
-                    ScheduledEvent discordEvent = guild
-                        .createScheduledEvent(
-                            MiscUtils.maybeEllipsis(ScheduledEvent.MAX_NAME_LENGTH, request.getTitle()),
-                            ScarletURLs.vrchatCalendarEvent(vrc.groupId, vrcEvent.getId()),
-                            start,
-                            end)
-                        .setDescription(MiscUtils.maybeEllipsis(ScheduledEvent.MAX_DESCRIPTION_LENGTH, request.getDescription()))
-                        .setImage(icon) // 5:2 aspect ratio
-                        .reason(vrcEvent.getId())
-                        .complete();
-                    if (discordEvent == null)
-                        throw new IllegalStateException("discordEvent == null");
-                    scheduled.discordGuildSf = guildSf;
-                    scheduled.discordEventSf = discordEvent.getId();
-                }
-                catch (Exception ex)
-                {
-                    LOG.error("Failed to create Discord event in "+guildSf+" for "+this.id+"/"+vrcEvent.getId(), ex);
+                    catch (Exception ex)
+                    {
+                        LOG.error("Exception getting event image "+imageId+" for `"+this.id+"/"+vrcEvent.getId()+"` on "+futureDate, ex);
+                    }
+                    try
+                    {
+                        ScheduledEvent discordEvent = guild
+                            .createScheduledEvent(
+                                MiscUtils.maybeEllipsis(ScheduledEvent.MAX_NAME_LENGTH, request.getTitle()),
+                                ScarletURLs.vrchatCalendarEvent(groupId, vrcEvent.getId()),
+                                start,
+                                end)
+                            .setDescription(MiscUtils.maybeEllipsis(ScheduledEvent.MAX_DESCRIPTION_LENGTH, request.getDescription()))
+                            .setImage(icon) // 5:2 aspect ratio
+                            .reason(vrcEvent.getId())
+                            .complete();
+                        if (discordEvent == null)
+                            throw new IllegalStateException("discordEvent == null");
+                        scheduled.discordGuildSf = guildSf;
+                        scheduled.discordEventSf = discordEvent.getId();
+                        calendar.save();
+                    }
+                    catch (Exception ex)
+                    {
+                        LOG.error("Failed to create Discord event in "+guildSf+" for "+this.id+"/"+vrcEvent.getId()+"` on "+futureDate, ex);
+                    }
                 }
             }
             
             LOG.info("Scheduled event "+this.id+": vrc:"+scheduled.vrchatGroupId+"/"+scheduled.vrchatEventId+", discord: "+scheduled.discordGuildSf+"/"+scheduled.discordEventSf);
         }
         @Deprecated
-        public synchronized void makeInstance(ScarletCalendar calendar, ScarletVRChat vrc)
+        public synchronized void makeInstance(ScarletCalendar calendar, ScarletVRChat vrc, Scheduled scheduled)
         {
-            CreateInstanceRequest request = this.vrcInstanceParameters;
-            if (request == null)
+            if (scheduled == null || scheduled.vrchatGroupId == null || scheduled.vrchatEventId == null || scheduled.vrchatLocation != null)
                 return;
+            CreateInstanceRequest request = this.vrcInstanceParameters;
+            if (request == null || request.getWorldId() == null)
+                return;
+            JsonObject requestJson;
             {
                 request.setType(InstanceType.GROUP);
-                request.setOwnerId(vrc.groupId);
-                request.setClosedAt(this.date.atTime(this.time).plus(this.duration));
+                request.setOwnerId(scheduled.vrchatGroupId);
+//                request.setCalendarEntryId(scheduled.vrchatEventId);
+//                request.setClosedAt(this.date.atTime(this.time).plus(this.duration).plusMinutes(closeAfterEndMins != null ? closeAfterEndMins.longValue() : 0L));
+                request.setDisplayName(this.vrcCalendarEventParameters.getTitle());
+                requestJson = JSON.getGson().toJsonTree(request, CreateInstanceRequest.class).getAsJsonObject();
+                requestJson.addProperty("calendarEntryId", scheduled.vrchatEventId);
             }
             try
             {
-                Instance instance = vrc.createInstance(request);
+                Instance instance = vrc.createInstanceEx(requestJson);
+                if (instance != null)
+                {
+                    scheduled.vrchatLocation = instance.getLocation();
+                }
+                calendar.save();
+                LOG.info("Created VRChat instance in "+request.getWorldId()+" for "+this.id+"/"+scheduled.vrchatEventId+": "+instance.getInstanceId());
             }
             catch (Exception ex)
             {
-                
+                LOG.error("Failed to create VRChat instance in "+request.getWorldId()+" for "+this.id+"/"+scheduled.vrchatEventId, ex);
             }
         }
         synchronized boolean hasPending(LocalDate date)
@@ -244,14 +332,30 @@ public class ScarletCalendar
             }
             prev.start = start;
             prev.end = end;
+            Integer hostEarlyMins = this.vrcCalendarEventParameters.getHostEarlyJoinMinutes(),
+                    guestEarlyMins = this.vrcCalendarEventParameters.getGuestEarlyJoinMinutes(),
+                    closeAfterMins = this.vrcCalendarEventParameters.getCloseInstanceAfterEndMinutes();
+            if (hostEarlyMins != null || guestEarlyMins != null)
+            {
+                prev.needsCreate = start.minusMinutes(Math
+                    .max(hostEarlyMins != null ? hostEarlyMins.longValue() : 0L,
+                        guestEarlyMins != null ? guestEarlyMins.longValue() : 0L));
+                prev.needsClose = end.plusMinutes(closeAfterMins.longValue());
+            }
+            if (closeAfterMins != null)
+            {
+                prev.needsClose = end.plusMinutes(closeAfterMins.longValue());
+            }
             return prev;
         }
     }
 
     public static class Scheduled
     {
+        public OffsetDateTime needsCreate;
         public OffsetDateTime start;
         public OffsetDateTime end;
+        public OffsetDateTime needsClose;
         public String vrchatLocation;
         public String vrchatGroupId;
         public String vrchatEventId;
@@ -407,7 +511,6 @@ public class ScarletCalendar
     final File calendarFile;
     String alternateGuildSf;
     final Map<String, EventSpec> eventSpecs;
-    final ScarletUI.Setting<Integer> maxDaysAhead, maxEventsAhead;
 
     public static class DataSpec
     {
