@@ -64,17 +64,17 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.isTailerLive = false;
         this.isInGroupInstance = false;
         this.isSameAsPreviousInstance = false;
-        
-        this.ttsVoiceName = scarlet.ui.settingString("tts_voice_name", "TTS: Voice name", "", $ -> scarlet.ttsService != null && scarlet.ttsService.getInstalledVoices().contains($));
-        this.ttsUseDefaultAudioDevice = scarlet.ui.settingBool("tts_use_default_audio_device", "TTS: Use default system audio device", false);
-        this.announceWatchedUsers = scarlet.ui.settingBool("tts_announce_watched_users", "TTS: Announce watched users", true);
-        this.announceWatchedGroups = scarlet.ui.settingBool("tts_announce_watched_groups", "TTS: Announce watched groups", true);
-        this.announceWatchedAvatars = scarlet.ui.settingBool("tts_announce_watched_avatars", "TTS: Announce watched avatars", true);
-        this.announceNewPlayers = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce new players", true);
-        this.announceVotesToKick = scarlet.ui.settingBool("tts_announce_new_players", "TTS: Announce Votes-to-Kick", true);
-        this.announcePlayersNewerThan = scarlet.ui.settingInt("tts_announce_players_newer_than_days", "TTS: Announce players newer than (days)", 30, 1, 365);
 
-        this.attemptAvatarImageMatch = scarlet.ui.settingBool("attempt_avatar_image_match", "Attempt avatar image match", false);
+        this.ttsVoiceName = scarlet.settings.new FileValuedStringChoice("tts_voice_name", "TTS: Voice name", "", () -> scarlet.ttsService == null ? Collections.emptyList() : scarlet.ttsService.getInstalledVoices());
+        this.ttsUseDefaultAudioDevice = scarlet.settings.new FileValuedBoolean("tts_use_default_audio_device", "TTS: Use default system audio device", false);
+        this.announceWatchedUsers = scarlet.settings.new FileValuedBoolean("tts_announce_watched_users", "TTS: Announce watched users", true);
+        this.announceWatchedGroups = scarlet.settings.new FileValuedBoolean("tts_announce_watched_groups", "TTS: Announce watched groups", true);
+        this.announceWatchedAvatars = scarlet.settings.new FileValuedBoolean("tts_announce_watched_avatars", "TTS: Announce watched avatars", true);
+        this.announceNewPlayers = scarlet.settings.new FileValuedBoolean("tts_announce_new_players", "TTS: Announce new players", true);
+        this.announceVotesToKick = scarlet.settings.new FileValuedBoolean("tts_announce_votes_to_kick", "TTS: Announce Votes-to-Kick", true);
+        this.announcePlayersNewerThan = scarlet.settings.new FileValuedIntRange("tts_announce_players_newer_than_days", "TTS: Announce players newer than (days)", 30, 1, 365);
+
+        this.attemptAvatarImageMatch = scarlet.settings.new FileValuedBoolean("attempt_avatar_image_match", "Attempt avatar image match", false);
     }
 
     final Scarlet scarlet;
@@ -102,16 +102,15 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     boolean isTailerLive,
             isInGroupInstance,
             isSameAsPreviousInstance;
-
-    final ScarletUI.Setting<String> ttsVoiceName;
-    final ScarletUI.Setting<Boolean> ttsUseDefaultAudioDevice,
+    final ScarletSettings.FileValued<String> ttsVoiceName;
+    final ScarletSettings.FileValued<Boolean> ttsUseDefaultAudioDevice,
                                      announceWatchedUsers,
                                      announceWatchedGroups,
                                      announceWatchedAvatars,
                                      announceNewPlayers,
                                      announceVotesToKick,
                                      attemptAvatarImageMatch;
-    final ScarletUI.Setting<Integer> announcePlayersNewerThan;
+    final ScarletSettings.FileValued<Integer> announcePlayersNewerThan;
 
     void settingsLoaded()
     {
@@ -120,7 +119,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             String voiceName = this.ttsVoiceName.get();
             if (voiceName.trim().isEmpty())
             {
-                this.scarlet.ttsService.getInstalledVoices().stream().findFirst().ifPresent(this.ttsVoiceName::set);
+                this.scarlet.ttsService.getInstalledVoices().stream().findFirst().ifPresent($ -> this.ttsVoiceName.set($, "default"));
             }
             else
             {

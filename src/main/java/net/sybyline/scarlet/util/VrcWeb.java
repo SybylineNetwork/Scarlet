@@ -54,7 +54,8 @@ public interface VrcWeb
                MARKETPLACE = HOME+"/marketplace",
                ACCOUNT_LINK = HOME+"/accountlink",
                BLOCKS_MUTES = HOME+"/playermoderations",
-               SUBSCRIPTIONS = HOME+"/subscriptions";
+               SUBSCRIPTIONS = HOME+"/subscriptions",
+               MESSAGES = HOME+"/messages";
         static String user(String userId) { return user+userId;}String user = HOME+"/user/";
         static String avatar(String avatarId) { return avatar+avatarId;}String avatar = HOME+"/avatar/";
         static String world(String worldId) { return world+worldId;}String world = HOME+"/world/";

@@ -9,12 +9,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.google.common.base.Objects;
 import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.ApiClient;
@@ -63,7 +63,7 @@ public class ScarletVRChatCookieJar implements CookieJar, Closeable
     static void _reset(String context, String previousContext)
     {
         String currentContext = _context.get();
-        if (!Objects.equal(currentContext, context))
+        if (!Objects.equals(currentContext, context))
             ScarletVRChat.LOG.warn("AltCredContext mismatch", new IllegalStateException("context = "+context+", currentContext = "+currentContext+", previousContext = "+previousContext));
         _context.set(previousContext);
     }

@@ -16,6 +16,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -57,6 +59,15 @@ import io.github.vrchatapi.model.World;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.components.ModalTopLevelComponent;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
+import net.dv8tion.jda.api.components.label.Label;
+import net.dv8tion.jda.api.components.selections.SelectOption;
+import net.dv8tion.jda.api.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
+import net.dv8tion.jda.api.components.textinput.TextInput;
+import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -71,22 +82,17 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
-import net.dv8tion.jda.api.components.ModalTopLevelComponent;
-import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.components.buttons.Button;
-import net.dv8tion.jda.api.components.label.Label;
-import net.dv8tion.jda.api.components.selections.SelectOption;
-import net.dv8tion.jda.api.components.selections.StringSelectMenu;
-import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
-import net.dv8tion.jda.api.components.textinput.TextInput;
-import net.dv8tion.jda.api.components.textinput.TextInputStyle;
+import net.dv8tion.jda.api.interactions.modals.ModalMapping;
 import net.dv8tion.jda.api.modals.Modal;
 import net.dv8tion.jda.api.requests.restaction.interactions.AutoCompleteCallbackAction;
 import net.dv8tion.jda.api.utils.FileUpload;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.dv8tion.jda.api.utils.MarkdownUtil;
+import net.sybyline.scarlet.ScarletSettings.FileValued;
+import net.sybyline.scarlet.ScarletSettings.FileValuedVisitor;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.log.ScarletLogger;
+import net.sybyline.scarlet.server.discord.DEnum;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DInteractions.DefaultPerms;
 import net.sybyline.scarlet.server.discord.DInteractions.Desc;
@@ -99,12 +105,14 @@ import net.sybyline.scarlet.server.discord.DInteractions.SlashCmd;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOpt;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOption;
 import net.sybyline.scarlet.server.discord.DInteractions.SlashOptionStrings;
+import net.sybyline.scarlet.server.discord.DInteractions.SlashOptionsChoicesUnsanitized;
 import net.sybyline.scarlet.server.discord.DInteractions.StringSel;
 import net.sybyline.scarlet.server.discord.DOptionEnum;
 import net.sybyline.scarlet.util.Func.F1;
 import net.sybyline.scarlet.util.Gifs;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.Location;
+import net.sybyline.scarlet.util.Maths;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
@@ -2591,6 +2599,346 @@ public class ScarletDiscordCommands
         }
     }
 
+    // settings
+
+    @SlashCmd("settings")
+    @Desc("Configures settings")
+    @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
+    public class Settings
+    {
+        public final SlashOption<ScarletSettings.FileValued<?>> _settingId = SlashOption.ofString("setting-id", "The setting", true, null, ScarletDiscordCommands.this.discord.scarlet.settings.fileValuedSettings::get, false, new SlashOptionsChoicesUnsanitized(() -> ScarletDiscordCommands.this.discord.scarlet.settings.fileValuedSettings.values().stream().map($ -> new Command.Choice($.name(), $.id())).toArray(Command.Choice[]::new), false));
+        @SlashCmd("edit")
+        @Desc("Configure a setting")
+        public void edit(SlashCommandInteractionEvent event, @SlashOpt("setting-id") ScarletSettings.FileValued<?> settingId) throws Exception
+        {
+            if (settingId.visit(new FileValuedVisitor<Boolean>()
+            {
+                @Override
+                public Boolean visitBasic(FileValued<?> fileValued)
+                {
+                    return Boolean.FALSE;
+                }
+                @Override
+                public Boolean visitBoolean(FileValued<Boolean> fileValued, boolean defaultValue)
+                {
+                    Modal modal = Modal.create("settings:"+fileValued.id(), fileValued.name())
+                        .addComponents(Label.of(fileValued.name(), StringSelectMenu.create(fileValued.id())
+                            .addOption("True", "true")
+                            .addOption("False", "false")
+                            .setDefaultValues(fileValued.get().toString())
+                            .setRequired(true)
+                            .build()))
+                        .build();
+                    DInteractions.ModalFlowImmediate immediate = interaction ->
+                    {
+                        String[] selected = interaction.getValues().stream().map(ModalMapping::getAsStringList).flatMap(List::stream).toArray(String[]::new);
+                        if (selected.length != 1)
+                        {
+                            interaction.replyFormat("Must select exactly 1 value for %s", fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            return;
+                        }
+                        String value = selected[0];
+                        fileValued.set(Boolean.parseBoolean(value), "discord");
+                        interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                    };
+                    ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, modal, immediate).queue();
+                    return Boolean.TRUE;
+                }
+                @Override
+                public Boolean visitIntegerRange(FileValued<Integer> fileValued, int defaultValue, int minimum, int maximum)
+                {
+                    Modal modal = Modal.create("settings:"+fileValued.id(), fileValued.name())
+                        .addComponents(Label.of(String.format("An integer between %d and %d, inclusive", minimum, maximum), TextInput.create(fileValued.id(), TextInputStyle.SHORT)
+                            .setValue(fileValued.get().toString())
+                            .setMinLength(1)
+                            .setMaxLength(32)
+                            .setRequired(true)
+                            .build()))
+                        .build();
+                    DInteractions.ModalFlowImmediate immediate = interaction ->
+                    {
+                        String[] selected = interaction.getValues().stream().map(ModalMapping::getAsStringList).flatMap(List::stream).toArray(String[]::new);
+                        if (selected.length != 1)
+                        {
+                            interaction.replyFormat("Must select exactly 1 value for %s", fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            return;
+                        }
+                        String value = selected[0];
+                        int intValue;
+                        try
+                        {
+                            intValue = Maths.clamp(Integer.parseInt(value), minimum, maximum);
+                        }
+                        catch (Exception ex)
+                        {
+                            interaction.replyFormat("%s must be an integer between %d and %d", fileValued.name, minimum, maximum).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            return;
+                        }
+                        fileValued.set(intValue, "discord");
+                        interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                    };
+                    ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, modal, immediate).queue();
+                    return Boolean.TRUE;
+                }
+                @Override
+                public <E extends Enum<E>> Boolean visitEnum(FileValued<E> fileValued, E defaultValue)
+                {
+                    E[] values = defaultValue.getDeclaringClass().getEnumConstants();
+                    SelectOption[] options;
+                    Function<String, E> parser;
+                    Function<E, String> stringifier;
+                    if (defaultValue instanceof DEnum.DEnumString || defaultValue instanceof DEnum.DEnumWrapper)
+                    {
+                        Class<E> clazz = defaultValue.getDeclaringClass();
+                        options = DEnum.optionsRaw(clazz);
+                        parser = $ -> DEnum.ofRaw(clazz, $);
+                        stringifier = $ -> ((DEnum<?, String>)$).value();
+                    }
+                    else
+                    {
+                        Class<E> clazz = defaultValue.getDeclaringClass();
+                        options = Stream.of(values).map($ -> SelectOption.of($.toString(), $.name())).toArray(SelectOption[]::new);
+                        parser = $ -> Enum.valueOf(clazz, $);
+                        stringifier = Enum::name;
+                    }
+                    if (values.length <= 125)
+                    {
+                        Modal modal;
+                        DInteractions.ModalFlowImmediate immediate;
+                        if (values.length <= 25)
+                        {
+                            modal = Modal.create("settings:"+fileValued.id(), fileValued.name())
+                                .addComponents(Label.of(fileValued.name(), StringSelectMenu.create(fileValued.id())
+                                    .addOptions(options)
+                                    .setDefaultValues(stringifier.apply(fileValued.get()))
+                                    .setRequired(true)
+                                    .build()))
+                                .build();
+                            immediate = interaction ->
+                            {
+                                String[] selected = interaction.getValues().stream().map(ModalMapping::getAsStringList).flatMap(List::stream).toArray(String[]::new);
+                                if (selected.length != 1)
+                                {
+                                    interaction.replyFormat("Must select exactly 1 value for %s", fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                    return;
+                                }
+                                String value = selected[0];
+                                E enumValue;
+                                try
+                                {
+                                    enumValue = parser.apply(value);
+                                }
+                                catch (Exception ex)
+                                {
+                                    interaction.replyFormat("Invalid value %s for %s", value, fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                    return;
+                                }
+                                fileValued.set(enumValue, "discord");
+                                interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            };
+                        }
+                        else
+                        {
+                            Modal.Builder builder = Modal.create("settings:"+fileValued.id(), fileValued.name());
+                            DInteractions.Paginator.Selector[] selectors = DInteractions.Paginator.Selector.embeds(options, 25);
+                            final int pages = selectors.length;
+                            for (int page = 0; page < pages; page++)
+                            {
+                                SelectOption[] pageOptions = selectors[page].applyContent();
+                                int ordinal = page * 25 + 1;
+                                builder.addComponents(Label.of(String.format("%s (%d thru %d)", fileValued.name(), ordinal, ordinal + pageOptions.length), StringSelectMenu.create(fileValued.id()+":"+page)
+                                    .addOptions(options)
+                                    .setDefaultValues(stringifier.apply(fileValued.get()))
+                                    .setMinValues(0)
+                                    .setMaxValues(1)
+                                    .setRequired(false)
+                                    .build()));
+                            }
+                            modal = builder.build();
+                            immediate = interaction ->
+                            {
+                                String[] selected = interaction.getValues().stream().map(ModalMapping::getAsStringList).flatMap(List::stream).toArray(String[]::new);
+                                if (selected.length != 1)
+                                {
+                                    interaction.replyFormat("Must select exactly 1 value for %s", fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                    return;
+                                }
+                                E enumValue;
+                                try
+                                {
+                                    enumValue = parser.apply(selected[0]);
+                                }
+                                catch (Exception ex)
+                                {
+                                    interaction.replyFormat("Invalid value %s for %s", selected[0], fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                    return;
+                                }
+                                fileValued.set(enumValue, "discord");
+                                interaction.replyFormat("Set %s to %s", fileValued.name, selected[0]).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            };
+                        }
+                        ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, modal, immediate).queue();
+                    }
+                    else
+                    {
+                        MessageEmbed[] embeds = Stream.of(options).map($ -> new EmbedBuilder().setTitle($.getLabel()).setDescription($.getValue()).build()).toArray(MessageEmbed[]::new);
+                        event.deferReply().queue(hook -> ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, options, 25, (interaction, value) ->
+                        {
+                            E enumValue;
+                            try
+                            {
+                                enumValue = parser.apply(value);
+                            }
+                            catch (Exception ex)
+                            {
+                                interaction.replyFormat("Invalid value %s for %s", value, fileValued.name).setEphemeral(true).queue(hook2 -> hook2.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                return;
+                            }
+                            fileValued.set(enumValue, "discord");
+                            interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook2 -> hook2.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                        }).queue(hook));
+                    }
+                    return Boolean.TRUE;
+                }
+                @Override
+                public Boolean visitStringChoice(FileValued<String> fileValued, Supplier<Collection<String>> validValues)
+                {
+                    String[] values = validValues.get().toArray(new String[0]);
+                    SelectOption[] options = Stream.of(values).map($ -> SelectOption.of($, $)).toArray(SelectOption[]::new);
+                    if (values.length <= 125)
+                    {
+                        Modal modal;
+                        DInteractions.ModalFlowImmediate immediate;
+                        if (values.length <= 25)
+                        {
+                            modal = Modal.create("settings:"+fileValued.id(), fileValued.name())
+                                .addComponents(Label.of(fileValued.name(), StringSelectMenu.create(fileValued.id())
+                                    .addOptions(options)
+                                    .setDefaultValues(fileValued.get())
+                                    .setRequired(true)
+                                    .build()))
+                                .build();
+                            immediate = interaction ->
+                            {
+                                String[] selected = interaction.getValues().stream().map(ModalMapping::getAsStringList).flatMap(List::stream).toArray(String[]::new);
+                                if (selected.length != 1)
+                                {
+                                    interaction.replyFormat("Must select exactly 1 value for %s", fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                    return;
+                                }
+                                String value = selected[0];
+                                fileValued.set(value, "discord");
+                                interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            };
+                        }
+                        else
+                        {
+                            Modal.Builder builder = Modal.create("settings:"+fileValued.id(), fileValued.name());
+                            DInteractions.Paginator.Selector[] selectors = DInteractions.Paginator.Selector.embeds(options, 25);
+                            final int pages = selectors.length;
+                            for (int page = 0; page < pages; page++)
+                            {
+                                SelectOption[] pageOptions = selectors[page].applyContent();
+                                int ordinal = page * 25 + 1;
+                                builder.addComponents(Label.of(String.format("%s (%d thru %d)", fileValued.name(), ordinal, ordinal + pageOptions.length), StringSelectMenu.create(fileValued.id()+":"+page)
+                                    .addOptions(options)
+                                    .setDefaultValues(fileValued.get())
+                                    .setMinValues(0)
+                                    .setMaxValues(1)
+                                    .setRequired(false)
+                                    .build()));
+                            }
+                            modal = builder.build();
+                            immediate = interaction ->
+                            {
+                                String[] selected = interaction.getValues().stream().map(ModalMapping::getAsStringList).flatMap(List::stream).toArray(String[]::new);
+                                if (selected.length != 1)
+                                {
+                                    interaction.replyFormat("Must select exactly 1 value for %s", fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                                    return;
+                                }
+                                fileValued.set(selected[0], "discord");
+                                interaction.replyFormat("Set %s to %s", fileValued.name, selected[0]).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                            };
+                        }
+                        ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, modal, immediate).queue();
+                    }
+                    else
+                    {
+                        MessageEmbed[] embeds = Stream.of(values).map($ -> new EmbedBuilder().setTitle($).setDescription($).build()).toArray(MessageEmbed[]::new);
+                        event.deferReply().queue(hook -> ScarletDiscordCommands.this.discord.interactions.new Pagination(event.getId(), embeds, options, 25, (interaction, value) ->
+                        {
+                            fileValued.set(value, "discord");
+                            interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook2 -> hook2.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                        }).queue(hook));
+                    }
+                    return Boolean.TRUE;
+                }
+                @Override
+                public Boolean visitStringPattern(FileValued<String> fileValued, String pattern, boolean lenient)
+                {
+                    Modal modal = Modal.create("settings:"+fileValued.id(), fileValued.name())
+                        .addComponents(Label.of(pattern != null ? "A string of the pattern "+pattern : fileValued.name(), TextInput.create(fileValued.id(), TextInputStyle.SHORT)
+                            .setValue(fileValued.get())
+                            .setRequired(true)
+                            .build()))
+                        .build();
+                    DInteractions.ModalFlowImmediate immediate = interaction ->
+                    {
+                        String value = interaction.getValue(fileValued.id()).getAsString();
+                        if (fileValued.set(value, "discord"))
+                        {
+                            interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                        }
+                        else
+                        {
+                            interaction.replyFormat("Invalid value %s for %s", value, fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                        }
+                    };
+                    ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, modal, immediate).queue();
+                    return Boolean.TRUE;
+                }
+                @Override
+                public Boolean visitStringArrayPattern(FileValued<String[]> fileValued, String pattern, boolean lenient)
+                {
+                    String[] currentValues = fileValued.get();
+                    Modal modal = Modal.create("settings:"+fileValued.id(), fileValued.name())
+                        .addComponents(Label.of(pattern != null ? "Strings of the pattern "+pattern : fileValued.name(), TextInput.create(fileValued.id(), TextInputStyle.SHORT)
+                            .setValue(String.join("\n", currentValues))
+                            .setRequired(true)
+                            .build()))
+                        .build();
+                    DInteractions.ModalFlowImmediate immediate = interaction ->
+                    {
+                        String value = interaction.getValue(fileValued.id()).getAsString();
+                        if (fileValued.set(value.split("\\R"), "discord"))
+                        {
+                            interaction.replyFormat("Set %s to %s", fileValued.name, value).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                        }
+                        else
+                        {
+                            interaction.replyFormat("Invalid value %s for %s", value, fileValued.name).setEphemeral(true).queue(hook -> hook.deleteOriginal().queueAfter(5_000L, TimeUnit.MILLISECONDS));
+                        }
+                    };
+                    ScarletDiscordCommands.this.discord.interactions.submitModalFlow(event, modal, immediate).queue();
+                    return Boolean.TRUE;
+                }
+                @Override
+                public Boolean visitVoid(FileValued<Void> fileValued, Runnable task)
+                {
+                    return Boolean.FALSE;
+                }
+            }).booleanValue())
+            {
+                ; // noop
+            }
+            else
+            {
+                event.replyFormat("The setting %s currently can't be configured via Discord.", settingId.name()).setEphemeral(true).queue();
+            }
+        }
+    }
+
     // config-set
 
     @SlashCmd("config-set")
@@ -2671,14 +3019,14 @@ public class ScarletDiscordCommands
             @Desc("The kick count")
             public void kickCount(SlashCommandInteractionEvent event, @SlashOpt("kick-count") int kickCount) throws Exception
             {
-                ScarletDiscordCommands.this.discord.scarlet.settings.heuristicKickCount.set(kickCount);
+                ScarletDiscordCommands.this.discord.scarlet.settings.heuristicKickCount.set(kickCount, "discord");
                 event.replyFormat("Set suggested moderation kick count: %d", kickCount).setEphemeral(true).queue();
             }
             @SlashCmd("period-days")
             @Desc("The period")
             public void periodDays(SlashCommandInteractionEvent event, @SlashOpt("period-days") int periodDays) throws Exception
             {
-                ScarletDiscordCommands.this.discord.scarlet.settings.heuristicPeriodDays.set(periodDays);
+                ScarletDiscordCommands.this.discord.scarlet.settings.heuristicPeriodDays.set(periodDays, "discord");
                 event.replyFormat("Set suggested moderation period: %d day%s", periodDays, periodDays==1?"":"s").setEphemeral(true).queue();
             }
         }
@@ -2691,7 +3039,7 @@ public class ScarletDiscordCommands
             @Desc("The period")
             public void periodDays(SlashCommandInteractionEvent event, @SlashOpt("period-days") int periodDays) throws Exception
             {
-                ScarletDiscordCommands.this.discord.scarlet.settings.outstandingPeriodDays.set(periodDays);
+                ScarletDiscordCommands.this.discord.scarlet.settings.outstandingPeriodDays.set(periodDays, "discord");
                 event.replyFormat("Set outstanding moderation period: %d day%s", periodDays, periodDays==1?"":"s").setEphemeral(true).queue();
             }
             @SlashCmd("time-of-day")
@@ -3113,7 +3461,7 @@ public class ScarletDiscordCommands
             return;
         }
         
-        this.discord.scarlet.eventListener.ttsVoiceName.set(voiceName);
+        this.discord.scarlet.eventListener.ttsVoiceName.set(voiceName, "discord");
         
         hook.sendMessageFormat("Setting TTS voice to `%s`", voiceName).setEphemeral(true).queue();
     }

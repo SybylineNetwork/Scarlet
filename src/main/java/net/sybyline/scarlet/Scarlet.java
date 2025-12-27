@@ -88,7 +88,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.15-rc4",
+        VERSION = "0.4.15-rc5",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -345,18 +345,18 @@ public class Scarlet implements Closeable
     final ScarletCalendar calendar = new ScarletCalendar(this, new File(dir, "event_schedule.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
-    final ScarletUI.Setting<Boolean> confirmGroupInvite = this.ui.settingBool("ui_confirm_group_invite", "Confirmation dialog for group invites", false),
-                                     alertForUpdates = this.ui.settingBool("ui_alert_update", "Notify for updates", true),
-                                     alertForPreviewUpdates = this.ui.settingBool("ui_alert_update_preview", "Notify for preview updates", true),
-                                     showUiDuringLoad = this.ui.settingBool("ui_show_during_load", "Show UI during load", false);
-    final ScarletUI.Setting<EnforcementAgeState> enforceInstances18plus = this.ui.settingEnum("enforce_instances_18_plus", "Instances: enforce 18+", EnforcementAgeState.DISABLED);
-    final ScarletUI.Setting<EnforcementListState> enforceInstancesWorlds = this.ui.settingEnum("enforce_instances_worlds", "Instances: enforce worlds", EnforcementListState.DISABLED);
-    final ScarletUI.Setting<String[]> enforceInstancesWorldList = this.ui.settingStringArr("enforce_instances_world_list", "Instances: enforce world list", new String[0]);
-    final ScarletUI.Setting<Integer> auditPollingInterval = this.ui.settingInt("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
-    final ScarletUI.Setting<Void> addAltCreds = this.ui.settingVoid("Add alternate credentials", "Add", this.vrc::addAlternateCredentials),
-                                  removeAltCreds = this.ui.settingVoid("Remove alternate credentials", "Remove", this.vrc::removeAlternateCredentials),
-                                  listAltCreds = this.ui.settingVoid("List alternate credentials", "List", this.vrc::listAlternateCredentials),
-                                  uiScale = this.ui.settingVoid("UI scale", "Set", this.ui::setUIScale);
+    final ScarletSettings.FileValued<Boolean> confirmGroupInvite = this.settings.new FileValuedBoolean("ui_confirm_group_invite", "Confirmation dialog for group invites", false),
+                                     alertForUpdates = this.settings.new FileValuedBoolean("ui_alert_update", "Notify for updates", true),
+                                     alertForPreviewUpdates = this.settings.new FileValuedBoolean("ui_alert_update_preview", "Notify for preview updates", true),
+                                     showUiDuringLoad = this.settings.new FileValuedBoolean("ui_show_during_load", "Show UI during load", false);
+    final ScarletSettings.FileValued<EnforcementAgeState> enforceInstances18plus = this.settings.new FileValuedEnum<>("enforce_instances_18_plus", "Instances: enforce 18+", EnforcementAgeState.DISABLED);
+    final ScarletSettings.FileValued<EnforcementListState> enforceInstancesWorlds = this.settings.new FileValuedEnum<>("enforce_instances_worlds", "Instances: enforce worlds", EnforcementListState.DISABLED);
+    final ScarletSettings.FileValued<String[]> enforceInstancesWorldList = this.settings.new FileValuedStringArrayPattern("enforce_instances_world_list", "Instances: enforce world list", new String[0], VrcIds.P_ID_WORLD, true);
+    final ScarletSettings.FileValued<Integer> auditPollingInterval = this.settings.new FileValuedIntRange("audit_polling_interval", "Audit polling interval seconds (10-300 inclusive)", 60, 10, 300);
+    final ScarletSettings.FileValued<Void> addAltCreds = this.settings.new FileValuedVoid("Add alternate credentials", "Add", this.vrc::addAlternateCredentials),
+                                  removeAltCreds = this.settings.new FileValuedVoid("Remove alternate credentials", "Remove", this.vrc::removeAlternateCredentials),
+                                  listAltCreds = this.settings.new FileValuedVoid("List alternate credentials", "List", this.vrc::listAlternateCredentials),
+                                  uiScale = this.settings.new FileValuedVoid("UI scale", "Set", this.ui::setUIScale);
 
     public void run()
     {
@@ -907,7 +907,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
         if (now.isAfter(next))
         {
-            this.settings.nextModSummary.set(next.plusHours(this.settings.heuristicPeriodDays.getOrSupply() * 24L));
+            this.settings.nextModSummary.set(next.plusHours(this.settings.heuristicPeriodDays.get() * 24L));
             this.modSummary(next);
         }
     }
@@ -929,7 +929,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
         if (now.isAfter(next))
         {
-            this.settings.nextOutstandingMod.set(next.plusHours(this.settings.outstandingPeriodDays.getOrSupply() * 24L));
+            this.settings.nextOutstandingMod.set(next.plusHours(this.settings.outstandingPeriodDays.get() * 24L));
             this.outstandingMod(next);
         }
     }

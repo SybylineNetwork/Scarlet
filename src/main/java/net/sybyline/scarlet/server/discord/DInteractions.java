@@ -849,7 +849,7 @@ public class DInteractions
             String typing = event.getFocusedOption().getValue().trim();
             if (!typing.isEmpty())
             {
-                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(choicesByLevenshtein(typing)))).limit(25L).toArray(Command.Choice[]::new);
+                values = (Stream.concat(includeTyping ? Stream.of(new Command.Choice(typing, typing)) : Stream.empty(), Arrays.stream(values).sorted(choicesByLevenshtein(typing)))).limit(25L).toArray(Command.Choice[]::new);
             }
             else if (values.length > 25)
             {
@@ -877,7 +877,7 @@ public class DInteractions
             String typing = event.getFocusedOption().getValue().trim();
             if (!typing.isEmpty())
             {
-                values = (Stream.concat(includeTyping ? Stream.of(typing) : Stream.empty(), Arrays.stream(values).sorted(choicesByLevenshtein(typing)))).limit(25L).toArray(Command.Choice[]::new);
+                values = (Stream.concat(includeTyping ? Stream.of(new Command.Choice(typing, typing)) : Stream.empty(), Arrays.stream(values).sorted(choicesByLevenshtein(typing)))).limit(25L).toArray(Command.Choice[]::new);
             }
             else if (values.length > 25)
             {
@@ -1377,7 +1377,7 @@ public class DInteractions
      * Public non-final fields are used as the modal elements.
      * @param <MF> self
      */
-    public static interface ModalFlow<MF extends ModalFlow<MF>> extends ModalSubmitHandler
+    public static @FunctionalInterface interface ModalFlow<MF extends ModalFlow<MF>> extends ModalSubmitHandler
     {
     }
     public <MF extends ModalFlow<MF>> ModalCallbackAction submitModalFlow(IModalCallback cb, MF mf)
@@ -1390,6 +1390,25 @@ public class DInteractions
             throw new IllegalStateException("ModalFlowInfo of "+info.type+", but ModelFlow is of "+mf.getClass()+" in "+this);
         ModalCallbackAction action = cb.replyModal(info.modal(mf));
         this.modalFlows.put(cb.getUser().getId(), mf);
+        return action;
+    }
+    public static @FunctionalInterface interface ModalFlowImmediate extends ModalSubmitHandler
+    {
+        class Holder
+        {
+            Holder(String modalId, ModalFlowImmediate immediate)
+            {
+                this.modalId = modalId;
+                this.immediate = immediate;
+            }
+            final String modalId;
+            final ModalFlowImmediate immediate;
+        }
+    }
+    public <MF extends ModalFlow<MF>> ModalCallbackAction submitModalFlow(IModalCallback cb, Modal modal, ModalFlowImmediate mfi)
+    {
+        ModalCallbackAction action = cb.replyModal(modal);
+        this.modalFlowImmediates.put(cb.getUser().getId(), new ModalFlowImmediate.Holder(modal.getId(), mfi));
         return action;
     }
     class ModalFlowInfo<MF extends ModalFlow<MF>> implements ModalSubmitHandler
@@ -1497,6 +1516,7 @@ public class DInteractions
     final Map<String, ModalFlowOption<?>> modalFlowOptionsBound = new HashMap<>();
     final Map<String, Pagination> pagination = new ConcurrentHashMap<>();
     final Map<String, ModalFlow<?>> modalFlows = new ConcurrentHashMap<>();
+    final Map<String, ModalFlowImmediate.Holder> modalFlowImmediates = new ConcurrentHashMap<>();
 
     final boolean warnMissing;
     final ExecutorService exec;
@@ -1851,6 +1871,32 @@ public class DInteractions
         return true;
     }
 
+    boolean handleFlowImmediate(ModalInteractionEvent event, String id, String[] parts, String op)
+    {
+        String userSf = event.getUser().getId();
+        ModalFlowImmediate.Holder holder = this.modalFlowImmediates.get(userSf);
+        if (holder == null)
+            return false;
+        if (!Objects.equals(holder.modalId, id))
+            return false;
+        this.modalFlowImmediates.remove(userSf, holder);
+        try
+        {
+            holder.immediate.handle(event);
+        }
+        catch (Exception ex)
+        {
+            LOG.error("Exception sync handling immediate modal flow of "+id, ex);
+            event.reply("Exception sync handling immediate modal flow of "+id+":\n`"+ex+"`").setEphemeral(true).queue();
+        }
+        if (!event.isAcknowledged())
+        {
+            LOG.warn("immediate modal flow for `"+id+"` did not acknowledge");
+            event.deferReply(true).queue();
+        }
+        return true;
+    }
+
     public void clearDeadPagination()
     {
         new ArrayList<>(this.pagination.values()).forEach(Pagination::removeIfExpired);
@@ -2039,6 +2085,8 @@ public class DInteractions
                parts[] = id.split(":"),
                op = parts[0];
         if (this.handlePagination(event, id, parts, op))
+            return true;
+        if (this.handleFlowImmediate(event, id, parts, op))
             return true;
         ModalSubmitHandler submit = this.modalSubmits.get(op);
         if (submit == null)

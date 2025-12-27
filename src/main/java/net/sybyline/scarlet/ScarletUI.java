@@ -30,6 +30,7 @@ import java.time.Period;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -38,12 +39,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.regex.Pattern;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -61,7 +59,6 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
 import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.DocumentEvent;
@@ -74,9 +71,6 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonPrimitive;
 import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.model.AgeVerificationStatus;
@@ -87,6 +81,7 @@ import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.ModelFile;
 import io.github.vrchatapi.model.User;
 
+import net.sybyline.scarlet.ScarletSettings.FileValued;
 import net.sybyline.scarlet.ext.AvatarBundleInfo;
 import net.sybyline.scarlet.ui.Swing;
 import net.sybyline.scarlet.util.Func;
@@ -103,33 +98,6 @@ public class ScarletUI implements AutoCloseable
     static
     {
         Swing.init();
-    }
-
-    public interface Setting<T>
-    {
-        String id();
-        String name();
-        Component render();
-        T get();
-        T getDefault();
-        void set(T value);
-        void setOnChanged(Consumer<T> onChanged);
-    }
-//    public interface SettingCategory
-//    {
-//        String id();
-//        String name();
-//        Component render();
-//        Setting<String> settingString(String id, String name, String defaultValue);
-//        Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max);
-//        Setting<Boolean> settingBool(String id, String name, boolean defaultValue);
-//    }
-    interface SerializableSetting<T> extends Setting<T>
-    {
-        boolean pollDirty();
-        void markDirty();
-        JsonElement serialize();
-        void deserialize(JsonElement element);
     }
 
     public ScarletUI(Scarlet scarlet)
@@ -329,121 +297,13 @@ public class ScarletUI implements AutoCloseable
         this.propstable.sortEntries(COMPARE);
     }
 
-//    public synchronized SettingCategory settingCategory(String id, String name)
-//    {
-//        try
-//        {
-//            return new SettingCategoryImpl(id, name);
-//        }
-//        finally
-//        {
-//            this.readdSettingUI();
-//        }
-//    }
-
-    public synchronized Setting<String> settingString(String id, String name, String defaultValue)
-    {
-        return this.settingString(id, name, defaultValue, (Predicate<String>)null);
-    }
-    public synchronized Setting<String> settingString(String id, String name, String defaultValue, String regex)
-    {
-        return this.settingString(id, name, defaultValue, regex == null ? null : Pattern.compile(regex));
-    }
-    public synchronized Setting<String> settingString(String id, String name, String defaultValue, Pattern pattern)
-    {
-        return this.settingString(id, name, defaultValue, pattern == null ? null : pattern.asPredicate());
-    }
-    public synchronized Setting<String> settingString(String id, String name, String defaultValue, Predicate<String> validator)
-    {
-        try
-        {
-            return new StringSetting(id, name, defaultValue, validator);
-        }
-        finally
-        {
-            this.readdSettingUI();
-        }
-    }
-
-    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue)
-    {
-        return this.settingStringArr(id, name, defaultValue, (Predicate<String>)null);
-    }
-    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue, String regex)
-    {
-        return this.settingStringArr(id, name, defaultValue, regex == null ? null : Pattern.compile(regex));
-    }
-    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue, Pattern pattern)
-    {
-        return this.settingStringArr(id, name, defaultValue, pattern == null ? null : pattern.asPredicate());
-    }
-    public synchronized Setting<String[]> settingStringArr(String id, String name, String[] defaultValue, Predicate<String> validator)
-    {
-        try
-        {
-            return new StringArr2Setting(id, name, defaultValue, validator);
-        }
-        finally
-        {
-            this.readdSettingUI();
-        }
-    }
-
-    public synchronized Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max)
-    {
-        try
-        {
-            return new IntSetting(id, name, defaultValue, min, max);
-        }
-        finally
-        {
-            this.readdSettingUI();
-        }
-    }
-
-    public synchronized Setting<Boolean> settingBool(String id, String name, boolean defaultValue)
-    {
-        try
-        {
-            return new BoolSetting(id, name, defaultValue);
-        }
-        finally
-        {
-            this.readdSettingUI();
-        }
-    }
-
-    public synchronized <E extends Enum<E>> Setting<E> settingEnum(String id, String name, E defaultValue)
-    {
-        try
-        {
-            return new EnumSetting<>(id, name, defaultValue);
-        }
-        finally
-        {
-            this.readdSettingUI();
-        }
-    }
-
-    public synchronized Setting<Void> settingVoid(String name, String buttonText, Runnable buttonPressed)
-    {
-        try
-        {
-            return new VoidSetting(name, buttonText, buttonPressed);
-        }
-        finally
-        {
-            this.readdSettingUI();
-        }
-    }
-
     final Scarlet scarlet;
     final JFrame jframe;
     final JTabbedPane jtabs;
     final PropsTable<ConnectedPlayer> propstable;
     final JPanel jpanel_settings;
     final JLabel jlabel_lastSavedAt;
-    final List<SerializableSetting<?>> ssettings;
+    final List<GUISetting<?>> ssettings;
     boolean propstableColumsDirty;
     final Map<String, ConnectedPlayer> connectedPlayers;
     final Map<String, List<Func.V1.NE<ConnectedPlayer>>> pendingUpdates;
@@ -1209,14 +1069,14 @@ public class ScarletUI implements AutoCloseable
         this.jframe.dispose();
     }
 
-    void readdSettingUI()
+    void readSettingUI()
     {
         this.jpanel_settings.removeAll();
         GridBagConstraints gbc_settings = new GridBagConstraints();
         gbc_settings.gridx = 0;
         gbc_settings.gridy = 0;
         gbc_settings.insets = new Insets(2, 2, 2, 2);
-        for (SerializableSetting<?> ssetting : this.ssettings)
+        for (GUISetting<?> ssetting : this.ssettings)
         {
             gbc_settings.anchor = GridBagConstraints.EAST;
             this.jpanel_settings.add(new JLabel(ssetting.name()+":", JLabel.RIGHT), gbc_settings);
@@ -1270,14 +1130,12 @@ public class ScarletUI implements AutoCloseable
 
     void loadSettings()
     {
-        for (SerializableSetting<?> ssetting : this.ssettings)
+        SettingUI settingui = new SettingUI();
+        for (ScarletSettings.FileValued<?> fileValued : this.scarlet.settings.fileValuedSettings.values())
         {
-            JsonElement element = this.scarlet.settings.getElement(ssetting.id());
-            if (element != null && !element.isJsonNull())
-            {
-                ssetting.deserialize(element);
-            }
+            fileValued.visit(settingui);
         }
+        this.readSettingUI();
         if (this.scarlet.showUiDuringLoad.get())
         {
             this.jframe.setVisible(true);
@@ -1286,22 +1144,7 @@ public class ScarletUI implements AutoCloseable
 
     void saveSettings(boolean showTimeSaved)
     {
-        int saved = 0;
-        for (SerializableSetting<?> ssetting : this.ssettings)
-        {
-            if (!ssetting.id().isEmpty())
-            {
-                this.scarlet.settings.setElementNoSave(ssetting.id(), ssetting.serialize());
-                if (ssetting.pollDirty())
-                {
-                    saved++;
-                }
-            }
-        }
-        if (saved > 0)
-        {
-            this.scarlet.settings.saveJson();
-        }
+        this.scarlet.settings.saveJson();
         if (showTimeSaved)
         {
             String savedText = "Saved settings: " + DateTimeFormatter.ISO_LOCAL_TIME.format(LocalTime.now());
@@ -1313,167 +1156,117 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-//    class SettingCategoryImpl implements SettingCategory, SerializableSetting<JsonObject>
-//    {
-//        @Override
-//        public JsonObject get()
-//        {
-//            return null;
-//        }
-//        @Override
-//        public JsonObject getDefault()
-//        {
-//            return null;
-//        }
-//        @Override
-//        public void set(JsonObject value)
-//        {
-//        }
-//        @Override
-//        public boolean pollDirty()
-//        {
-//            return false;
-//        }
-//        @Override
-//        public void markDirty()
-//        {
-//        }
-//        @Override
-//        public JsonElement serialize()
-//        {
-//            return null;
-//        }
-//        @Override
-//        public void deserialize(JsonElement element)
-//        {
-//        }
-//        @Override
-//        public String id()
-//        {
-//            return null;
-//        }
-//        @Override
-//        public String name()
-//        {
-//            return null;
-//        }
-//        @Override
-//        public Component render()
-//        {
-//            return null;
-//        }
-//        @Override
-//        public Setting<String> settingString(String id, String name, String defaultValue)
-//        {
-//            return null;
-//        }
-//        @Override
-//        public Setting<Integer> settingInt(String id, String name, int defaultValue, int min, int max)
-//        {
-//            return null;
-//        }
-//        @Override
-//        public Setting<Boolean> settingBool(String id, String name, boolean defaultValue)
-//        {
-//            return null;
-//        }
-//    }
-
-    abstract class ASetting<T, C extends Component> implements SerializableSetting<T>
+    public interface GUISetting<T>
     {
-        protected ASetting(String id, String name, T defaultValue, Supplier<C> render)
+        String id();
+        String name();
+        Component render();
+        T get();
+        T getDefault();
+        void set(T value);
+    }
+
+    class SettingUI implements ScarletSettings.FileValuedVisitor<GUISetting<?>>
+    {
+        @Override
+        public GUISetting<?> visitBasic(FileValued<?> fileValued)
         {
-            this(id, name, defaultValue, render.get());
+            return null;
         }
-        protected ASetting(String id, String name, T defaultValue, C render)
+        @Override
+        public GUISetting<?> visitBoolean(FileValued<Boolean> fileValued, boolean defaultValue)
         {
-            this.id = id;
-            this.name = name;
-            this.defaultValue = defaultValue;
-            this.value = defaultValue;
-            this.valueFiltered = null;
+            return new BoolSetting(fileValued);
+        }
+        @Override
+        public GUISetting<?> visitIntegerRange(FileValued<Integer> fileValued, int defaultValue, int minimum, int maximum)
+        {
+            return new IntSetting(fileValued);
+        }
+        @Override
+        public <E extends Enum<E>> GUISetting<?> visitEnum(FileValued<E> fileValued, E defaultValue)
+        {
+            return new EnumSetting<>(fileValued);
+        }
+        @Override
+        public GUISetting<?> visitStringChoice(FileValued<String> fileValued, Supplier<Collection<String>> validValues)
+        {
+            return null;//new StringSetting(fileValued);
+        }
+        @Override
+        public GUISetting<?> visitStringPattern(FileValued<String> fileValued, String pattern, boolean lenient)
+        {
+            return new StringSetting(fileValued);
+        }
+        @Override
+        public GUISetting<?> visitStringArrayPattern(FileValued<String[]> fileValued, String pattern, boolean lenient)
+        {
+            return null;//new StringArr2Setting(pattern, pattern, null, null);
+        }
+        @Override
+        public GUISetting<?> visitVoid(FileValued<Void> fileValued, Runnable task)
+        {
+            return new VoidSetting(fileValued, task);
+        }
+    }
+
+    abstract class ASetting<T, C extends Component> implements GUISetting<T>
+    {
+        protected ASetting(ScarletSettings.FileValued<T> setting, Supplier<C> render)
+        {
+            this(setting, render.get());
+        }
+        protected ASetting(ScarletSettings.FileValued<T> setting, C render)
+        {
+            this.setting = setting;
             this.render = render;
-            this.dirty = new AtomicBoolean(false);
             this.update();
             ScarletUI.this.ssettings.add(this);
+            setting.listeners.register("ui", 0, true, this::onMaybeChange);
         }
-        final String id, name;
-        final T defaultValue;
+        final ScarletSettings.FileValued<T> setting;
         final C render;
-        final AtomicBoolean dirty;
-        T value;
-        T valueFiltered;
         Consumer<T> onChanged;
         @Override
         public final String id()
         {
-            return this.id;
+            return this.setting.id;
         }
         @Override
         public final String name()
         {
-            return this.name;
+            return this.setting.name;
         }
         @Override
         public final T get()
         {
-            T value = this.valueFiltered;
-            if (value == null)
-                value = this.value;
-            return value;
+            return this.setting.get();
         }
         @Override
         public final T getDefault()
         {
-            return this.defaultValue;
+            return this.setting.ifNull.get();
         }
         @Override
         public final void set(T value)
         {
-            value = value != null ? value : this.defaultValue;
-            T prev = this.value;
-            this.value = value;
+            this.setting.set(value, "ui");
             this.update();
-            this.markDirty();
-            Consumer<T> onChanged = this.onChanged;
-            if (onChanged != null && !Objects.equals(prev, value)) try
-            {
-                onChanged.accept(prev);
-            }
-            catch (Exception ex)
-            {
-                LOG.error("Exception onChanged for "+this.id, ex);
-            }
         }
         @Override
         public final Component render()
         {
             return this.render;
         }
-        @Override
-        public final boolean pollDirty()
-        {
-            return this.dirty.getAndSet(false);
-        }
-        @Override
-        public final void markDirty()
-        {
-            this.dirty.set(true);
-        }
-        @Override
-        public final void setOnChanged(Consumer<T> onChanged)
-        {
-            this.onChanged = onChanged;
-        }
         protected abstract void update();
+        protected abstract void onMaybeChange(T previous, T next, boolean valid, String source);
     }
 
     class StringSetting extends ASetting<String, JTextField>
     {
-        StringSetting(String id, String name, String defaultValue, Predicate<String> validator)
+        StringSetting(ScarletSettings.FileValued<String> setting)
         {
-            super(id, name, defaultValue, new JTextField(32));
-            this.validator = validator == null ? $ -> true : validator;
+            super(setting, new JTextField(32));
             this.background = this.render.getBackground();
             JPopupMenu cpm = new JPopupMenu();
             cpm.add("Paste").addActionListener($ -> {
@@ -1482,20 +1275,17 @@ public class ScarletUI implements AutoCloseable
                 {
                     this.render.replaceSelection(cbc);
                     this.accept();
-                    this.markDirty();
                 }
             });
             this.render.setComponentPopupMenu(cpm);
             this.render.addActionListener($ -> {
                 this.accept();
-                this.markDirty();
             });
             this.render.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusLost(FocusEvent e)
                 {
                     StringSetting.this.accept();
-                    StringSetting.this.markDirty();
                 }
             });
             this.render.getDocument().addDocumentListener(new DocumentListener() {
@@ -1516,140 +1306,33 @@ public class ScarletUI implements AutoCloseable
                 }
             });
         }
-        final Predicate<String> validator;
         final Color background;
-        @Override
-        public JsonElement serialize()
+        void accept()
         {
-            return new JsonPrimitive(this.value);
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-            if (!element.isJsonPrimitive())
-                return;
-            JsonPrimitive primitive = element.getAsJsonPrimitive();
-            if (!primitive.isString())
-                return;
-            this.set(primitive.getAsString());
+            this.set(this.render.getText());
         }
         @Override
         protected void update()
         {
-            if (Objects.equals(this.value, this.render.getText()))
+            if (Objects.equals(this.get(), this.render.getText()))
                 return;
-            this.render.setText(this.value);
-            this.testValid(this.value);
+            this.render.setText(this.get());
         }
-        void accept()
+        @Override
+        protected void onMaybeChange(String previous, String next, boolean valid, String source)
         {
-            String value = this.render.getText();
-            if (this.testValid(value))
+            if ("ui".equals(source))
             {
-                this.value = value;
+                this.render.setBackground(valid ? this.background : MiscUtils.lerp(this.background, Color.PINK, 0.5F));
             }
-        }
-        boolean testValid(String value)
-        {
-            boolean ret = this.validator.test(value);
-            this.render.setBackground(ret ? this.background : MiscUtils.lerp(this.background, Color.PINK, 0.5F));
-            return ret;
+            else if (valid)
+            {
+                this.render.setText(next);
+            }
         }
     }
 
-    @Deprecated
-    class StringArrSetting extends ASetting<String[], JTextArea>
-    {
-        StringArrSetting(String id, String name, String[] defaultValue, Predicate<String> validator)
-        {
-            super(id, name, defaultValue, new JTextArea(8, 32));
-            this.validator = validator == null ? $ -> true : validator;
-            this.background = this.render.getBackground();
-            JPopupMenu cpm = new JPopupMenu();
-            cpm.add("Paste").addActionListener($ -> {
-                String cbc = MiscUtils.AWTToolkit.get();
-                if (cbc != null)
-                {
-                    this.render.replaceSelection(cbc);
-                    this.accept();
-                    this.markDirty();
-                }
-            });
-            this.render.setComponentPopupMenu(cpm);
-            this.render.addFocusListener(new FocusAdapter() {
-                @Override
-                public void focusLost(FocusEvent e)
-                {
-                    StringArrSetting.this.accept();
-                    StringArrSetting.this.markDirty();
-                }
-            });
-            this.render.getDocument().addDocumentListener(new DocumentListener() {
-                @Override
-                public void removeUpdate(DocumentEvent e)
-                {
-                    StringArrSetting.this.accept();
-                }
-                @Override
-                public void insertUpdate(DocumentEvent e)
-                {
-                    StringArrSetting.this.accept();
-                }
-                @Override
-                public void changedUpdate(DocumentEvent e)
-                {
-                    StringArrSetting.this.accept();
-                }
-            });
-        }
-        final Predicate<String> validator;
-        final Color background;
-        @Override
-        public JsonElement serialize()
-        {
-            JsonArray array = new JsonArray();
-            for (String line : this.value)
-                array.add(line);
-            return array;
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-            if (!element.isJsonArray())
-                return;
-            this.set(element.getAsJsonArray().asList().stream().map(JsonElement::getAsString).toArray(String[]::new));
-        }
-        @Override
-        protected void update()
-        {
-            String value = String.join("\n", this.value);
-            if (Objects.equals(value, this.render.getText()))
-                return;
-            this.render.setText(value);
-            this.testValid(value);
-        }
-        void accept()
-        {
-            String value = this.render.getText();
-            if (this.testValid(value))
-            {
-                this.value = value.split("\\R");
-            }
-        }
-        boolean testValid(String value)
-        {
-            if (this.validator != null)
-                for (String line : value.split("\\R"))
-                    if (!this.validator.test(line))
-                    {
-                        this.render.setBackground(MiscUtils.lerp(this.background, Color.PINK, 0.5F));
-                        return false;
-                    }
-            this.render.setBackground(this.background);
-            return true;
-        }
-    }
-
+ /*
     class StringArr2Setting extends ASetting<String[], JPanel>
     {
         class EntryPanel extends JPanel
@@ -1664,7 +1347,6 @@ public class ScarletUI implements AutoCloseable
                     StringArr2Setting.this.renderInner.remove(this);
                     StringArr2Setting.this.entries.remove(this);
                     StringArr2Setting.this.accept();
-                    StringArr2Setting.this.markDirty();
                 });
                 this.text = new JTextField(32);
                 this.background = this.text.getBackground();
@@ -1675,7 +1357,6 @@ public class ScarletUI implements AutoCloseable
                     {
                         this.text.replaceSelection(cbc);
                         StringArr2Setting.this.accept();
-                        StringArr2Setting.this.markDirty();
                     }
                 });
                 this.text.setComponentPopupMenu(cpm);
@@ -1684,7 +1365,6 @@ public class ScarletUI implements AutoCloseable
                     public void focusLost(FocusEvent e)
                     {
                         StringArr2Setting.this.accept();
-                        StringArr2Setting.this.markDirty();
                     }
                 });
                 this.text.setText(value);
@@ -1731,9 +1411,9 @@ public class ScarletUI implements AutoCloseable
                 return this.text.getText();
             }
         }
-        StringArr2Setting(String id, String name, String[] defaultValue, Predicate<String> validator)
+        StringArr2Setting(ScarletSettings.FileValued<String[]> setting)
         {
-            super(id, name, defaultValue, new JPanel(new BorderLayout()));
+            super(setting, new JPanel(new BorderLayout()));
             JButton button = new JButton("+");
             button.addActionListener($ -> Swing.invokeLater(() -> new EntryPanel("")));
             JPanel panel = new JPanel(new GridBagLayout());
@@ -1747,25 +1427,13 @@ public class ScarletUI implements AutoCloseable
             this.entries = new ArrayList<>();
             this.render.add(scroll, BorderLayout.CENTER);
             this.render.add(button, BorderLayout.SOUTH);
-            this.validator = validator == null ? $ -> true : validator;
         }
         final List<EntryPanel> entries;
-        final Predicate<String> validator;
         final JPanel renderInner;
-        @Override
-        public JsonElement serialize()
+        void accept()
         {
-            JsonArray array = new JsonArray();
-            for (String line : this.value)
-                array.add(line);
-            return array;
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-            if (!element.isJsonArray())
-                return;
-            this.set(element.getAsJsonArray().asList().stream().map(JsonElement::getAsString).toArray(String[]::new));
+            String[] valuesValidated = this.entries.stream().filter(EntryPanel::validateAndColor).map(EntryPanel::getStringValue).toArray(String[]::new);
+            this.valueFiltered = valuesValidated.length == this.value.length ? null : valuesValidated;
         }
         @Override
         protected void update()
@@ -1777,21 +1445,18 @@ public class ScarletUI implements AutoCloseable
             for (String value : this.value)
                 new EntryPanel(value);
             this.accept();
-        }
-        void accept()
-        {
-            String[] valuesValidated = this.entries.stream().filter(EntryPanel::validateAndColor).map(EntryPanel::getStringValue).toArray(String[]::new);
-            this.valueFiltered = valuesValidated.length == this.value.length ? null : valuesValidated;
+            if (Objects.equals(String.valueOf(this.get()), this.render.getText()))
+                return;
+            this.render.setText(String.valueOf(this.get()));
         }
     }
+//*/
 
     class IntSetting extends ASetting<Integer, JTextField>
     {
-        IntSetting(String id, String name, int defaultValue, int min, int max)
+        IntSetting(ScarletSettings.FileValued<Integer> setting)
         {
-            super(id, name, defaultValue, new JTextField(32));
-            this.min = min;
-            this.max = max;
+            super(setting, new JTextField(32));
             JPopupMenu cpm = new JPopupMenu();
             cpm.add("Paste").addActionListener($ -> Optional.ofNullable(MiscUtils.AWTToolkit.get()).ifPresent($$ -> {
                 this.render.setText($$);
@@ -1826,144 +1491,123 @@ public class ScarletUI implements AutoCloseable
                 }
             });
         }
-        final int min, max;
-        @Override
-        public JsonElement serialize()
-        {
-            return new JsonPrimitive(this.value);
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-            if (!element.isJsonPrimitive())
-                return;
-            JsonPrimitive primitive = element.getAsJsonPrimitive();
-            if (!primitive.isNumber())
-                return;
-            this.set(primitive.getAsInt());
-        }
-        @Override
-        protected void update()
-        {
-            this.value = Math.max(this.min, Math.min(this.value, this.max));
-            this.render.setText(String.valueOf(this.value));
-        }
         Color bg_ok = this.render.getBackground(),
               bg_err = MiscUtils.lerp(this.bg_ok, Color.RED, 0.1F);
         void accept()
         {
-            Integer value;
             try
             {
-                value = Integer.parseInt(this.render.getText());
+                this.set(Integer.parseInt(this.render.getText()));
             }
             catch (Exception ex)
             {
-                value = null;
             }
-            if (value != null && value >= this.min && value <= this.max)
+        }
+        @Override
+        protected void update()
+        {
+            if (Objects.equals(String.valueOf(this.get()), this.render.getText()))
+                return;
+            this.render.setText(String.valueOf(this.get()));
+        }
+        @Override
+        protected void onMaybeChange(Integer previous, Integer next, boolean valid, String source)
+        {
+            if ("ui".equals(source))
             {
-                this.render.setBackground(this.bg_ok);
-                this.value = value;
-                this.markDirty();
+                this.render.setBackground(valid ? this.bg_ok : this.bg_err);
             }
-            else
+            else if (valid)
             {
-                this.render.setBackground(this.bg_err);
+                this.render.setText(next.toString());
             }
         }
     }
 
     class BoolSetting extends ASetting<Boolean, JCheckBox>
     {
-        BoolSetting(String id, String name, boolean defaultValue)
+        BoolSetting(ScarletSettings.FileValued<Boolean> setting)
         {
-            super(id, name, defaultValue, new JCheckBox(null, null, defaultValue));
+            super(setting, new JCheckBox(null, null, setting.get()));
             this.render.addActionListener($ -> {
                 this.accept();
-                this.markDirty();
             });
         }
-        @Override
-        public JsonElement serialize()
+        void accept()
         {
-            return new JsonPrimitive(this.value);
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-            if (!element.isJsonPrimitive())
-                return;
-            JsonPrimitive primitive = element.getAsJsonPrimitive();
-            if (!primitive.isBoolean())
-                return;
-            this.set(primitive.getAsBoolean());
+            this.set(this.render.isSelected());
         }
         @Override
         protected void update()
         {
-            this.render.setSelected(this.value);
+            if (Objects.equals(this.get(), this.render.isSelected()))
+                return;
+            this.render.setSelected(this.get());
         }
-        void accept()
+        @Override
+        protected void onMaybeChange(Boolean previous, Boolean next, boolean valid, String source)
         {
-            this.value = this.render.isSelected();
+            if ("ui".equals(source))
+            {
+                ; // noop
+            }
+            else if (valid)
+            {
+                this.render.setSelected(next.booleanValue());
+            }
         }
     }
 
     class EnumSetting<E extends Enum<E>> extends ASetting<E, JComboBox<E>>
     {
-        EnumSetting(String id, String name, E defaultValue)
+        EnumSetting(ScarletSettings.FileValued<E> setting)
         {
-            super(id, name, defaultValue, new JComboBox<>(defaultValue.getDeclaringClass().getEnumConstants()));
-            this.render.setSelectedItem(defaultValue);
+            super(setting, new JComboBox<>(setting.ifNull.get().getDeclaringClass().getEnumConstants()));
+            this.render.setSelectedItem(setting.ifNull.get());
             this.render.addItemListener($ -> {
                 if ($.getStateChange() == ItemEvent.SELECTED)
                 {
                     this.accept();
-                    this.markDirty();
                 }
             });
             this.nameMap = new HashMap<>();
-            for (E value : defaultValue.getDeclaringClass().getEnumConstants())
+            for (E value : setting.ifNull.get().getDeclaringClass().getEnumConstants())
                 this.nameMap.put(value.name(), value);
         }
         final Map<String, E> nameMap;
-        @Override
-        public JsonElement serialize()
-        {
-            return new JsonPrimitive(this.value.name());
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-            if (!element.isJsonPrimitive())
-                return;
-            JsonPrimitive primitive = element.getAsJsonPrimitive();
-            if (!primitive.isString())
-                return;
-            this.set(this.nameMap.getOrDefault(primitive.getAsString(), this.defaultValue));
-        }
-        @Override
-        protected void update()
-        {
-            this.render.setSelectedItem(this.value);
-        }
         void accept()
         {
             @SuppressWarnings("unchecked")
             E value = (E)this.render.getSelectedItem();
-            if (value == null)
-                value = this.defaultValue;
-            this.value = value;
+            this.set(value);
+        }
+        @Override
+        protected void update()
+        {
+            if (Objects.equals(this.get(), this.render.getSelectedItem()))
+                return;
+            this.render.setSelectedItem(this.get());
+        }
+        @Override
+        protected void onMaybeChange(E previous, E next, boolean valid, String source)
+        {
+            if ("ui".equals(source))
+            {
+                ; // noop
+            }
+            else if (valid)
+            {
+                this.render.setSelectedItem(next);
+            }
         }
     }
 
-    class VoidSetting implements SerializableSetting<Void>
+    class VoidSetting implements GUISetting<Void>
     {
-        protected VoidSetting(String name, String buttonText, Runnable buttonPressed)
+        protected VoidSetting(ScarletSettings.FileValued<Void> setting, Runnable buttonPressed)
         {
-            this.name = name;
-            this.render = new JButton(buttonText);
+            this.name = setting.id;
+            this.render = new JButton(setting.name);
             this.render.addActionListener($ ->
             {
                 try
@@ -2008,59 +1652,6 @@ public class ScarletUI implements AutoCloseable
         {
             return this.render;
         }
-        @Override
-        public final boolean pollDirty()
-        {
-            return false;
-        }
-        @Override
-        public final void markDirty()
-        {
-        }
-        @Override
-        public JsonElement serialize()
-        {
-            return null;
-        }
-        @Override
-        public void deserialize(JsonElement element)
-        {
-        }
-        @Override
-        public void setOnChanged(Consumer<Void> onChanged)
-        {
-        }
     }
-
-//    class ObjSetting<T> extends ASetting<T, JButton>
-//    {
-//        ObjSetting(String id, String name, T defaultValue, Class<T> type)
-//        {
-//            super(id, name, defaultValue, new JButton("Edit"));
-//            this.type = type;
-//            this.render.addActionListener($ -> this.edit());
-//        }
-//        final Class<T> type;
-//        @Override
-//        public JsonElement serialize()
-//        {
-//            return Scarlet.GSON_PRETTY.toJsonTree(this.value, this.type);
-//        }
-//        @Override
-//        public void deserialize(JsonElement element)
-//        {
-//            this.set(Scarlet.GSON_PRETTY.fromJson(element, this.type));
-//        }
-//        @Override
-//        protected void update()
-//        {
-//        }
-//        void edit()
-//        {
-//            ScarletUI.this.scarlet.execModal.execute(() -> {
-//                
-//            });
-//        }
-//    }
 
 }

@@ -139,27 +139,27 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.token = scarlet.settings.new RegistryStringEncrypted("discord.token", true);
         this.discordBotFile = discordBotFile;
         this.audio = new JDAAudioSendingHandler();
-        this.requestingEmail = scarlet.ui.settingString("vrchat_report_email", "VRChat Help Desk report email", "");
-        this.appendTemplateFooter = scarlet.ui.settingBool("vrchat_report_template_footer", "Append footer to template", true);
-        this.bundleModerations_instanceKick2userBan = scarlet.ui.settingBool("discord_bundle_instance_kick_with_user_ban", "Discord: Bundle Instance Kicks with causing User Ban", true);
-        this.moderationSummary_onlyActivity = scarlet.ui.settingBool("moderation_summary_only_activity", "Moderation summary: only list staff with activity", true);
-        this.pingOnModeration_instanceWarn = scarlet.ui.settingBool("discord_ping_instance_warn", "Discord: Ping on Instance Warn", false);
-        this.pingOnModeration_instanceKick = scarlet.ui.settingBool("discord_ping_instance_kick", "Discord: Ping on Instance Kick", false);
-        this.pingOnModeration_memberRemove = scarlet.ui.settingBool("discord_ping_member_remove", "Discord: Ping on Member Remove", true);
-        this.pingOnModeration_userBan = scarlet.ui.settingBool("discord_ping_user_ban", "Discord: Ping on User Ban", true);
-        this.pingOnModeration_userUnban = scarlet.ui.settingBool("discord_ping_user_unban", "Discord: Ping on User Unban", false);
-        this.pingOnOutstandingModeration_instanceWarn = scarlet.ui.settingBool("discord_ping_outstanding_instance_warn", "Discord: Ping on outstanding Instance Warn", false);
-        this.pingOnOutstandingModeration_instanceKick = scarlet.ui.settingBool("discord_ping_outstanding_instance_kick", "Discord: Ping on outstanding Instance Kick", true);
-        this.pingOnOutstandingModeration_memberRemove = scarlet.ui.settingBool("discord_ping_outstanding_member_remove", "Discord: Ping on outstanding Member Remove", false);
-        this.pingOnOutstandingModeration_userBan = scarlet.ui.settingBool("discord_ping_outstanding_user_ban", "Discord: Ping on outstanding User Ban", true);
-        this.pingOnOutstandingModeration_userUnban = scarlet.ui.settingBool("discord_ping_outstanding_user_unban", "Discord: Ping on outstanding User Unban", false);
-        this.vrchatClient_launchOnInstanceCreate = scarlet.ui.settingBool("vrchat_client_launch_on_instance_create", "VRChat Client: Launch on Instance Create", false);
-        this.evidenceEnabled = scarlet.ui.settingBool("evidence_enabled", "Evidence submission", false);
-        this.selectEvidenceRoot = scarlet.ui.settingVoid("Evidence root folder", "Select", this::selectEvidenceRoot);
-        this.evidenceFilePathFormat = scarlet.ui.settingString("evidence_file_path_format", "Evidence file path format", "");
-        this.avatarSearchProvidersEnabled = scarlet.ui.settingBool("custom_avatar_search_providers_enabled", "Use custom avatar search providers", false);
-        this.avatarSearchProviders = scarlet.ui.settingStringArr("custom_avatar_search_providers", "VRCX-compatible avatar search providers", AvatarSearch.URL_ROOTS.clone());
-        this.resetAvatarSearchProviders = scarlet.ui.settingVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
+        this.requestingEmail = scarlet.settings.new FileValuedStringPattern("vrchat_report_email", "VRChat Help Desk report email", "", ".+@.+", false);
+        this.appendTemplateFooter = scarlet.settings.new FileValuedBoolean("vrchat_report_template_footer", "Append footer to template", true);
+        this.bundleModerations_instanceKick2userBan = scarlet.settings.new FileValuedBoolean("discord_bundle_instance_kick_with_user_ban", "Discord: Bundle Instance Kicks with causing User Ban", true);
+        this.moderationSummary_onlyActivity = scarlet.settings.new FileValuedBoolean("moderation_summary_only_activity", "Moderation summary: only list staff with activity", true);
+        this.pingOnModeration_instanceWarn = scarlet.settings.new FileValuedBoolean("discord_ping_instance_warn", "Discord: Ping on Instance Warn", false);
+        this.pingOnModeration_instanceKick = scarlet.settings.new FileValuedBoolean("discord_ping_instance_kick", "Discord: Ping on Instance Kick", false);
+        this.pingOnModeration_memberRemove = scarlet.settings.new FileValuedBoolean("discord_ping_member_remove", "Discord: Ping on Member Remove", true);
+        this.pingOnModeration_userBan = scarlet.settings.new FileValuedBoolean("discord_ping_user_ban", "Discord: Ping on User Ban", true);
+        this.pingOnModeration_userUnban = scarlet.settings.new FileValuedBoolean("discord_ping_user_unban", "Discord: Ping on User Unban", false);
+        this.pingOnOutstandingModeration_instanceWarn = scarlet.settings.new FileValuedBoolean("discord_ping_outstanding_instance_warn", "Discord: Ping on outstanding Instance Warn", false);
+        this.pingOnOutstandingModeration_instanceKick = scarlet.settings.new FileValuedBoolean("discord_ping_outstanding_instance_kick", "Discord: Ping on outstanding Instance Kick", true);
+        this.pingOnOutstandingModeration_memberRemove = scarlet.settings.new FileValuedBoolean("discord_ping_outstanding_member_remove", "Discord: Ping on outstanding Member Remove", false);
+        this.pingOnOutstandingModeration_userBan = scarlet.settings.new FileValuedBoolean("discord_ping_outstanding_user_ban", "Discord: Ping on outstanding User Ban", true);
+        this.pingOnOutstandingModeration_userUnban = scarlet.settings.new FileValuedBoolean("discord_ping_outstanding_user_unban", "Discord: Ping on outstanding User Unban", false);
+        this.vrchatClient_launchOnInstanceCreate = scarlet.settings.new FileValuedBoolean("vrchat_client_launch_on_instance_create", "VRChat Client: Launch on Instance Create", false);
+        this.evidenceEnabled = scarlet.settings.new FileValuedBoolean("evidence_enabled", "Evidence submission", false);
+        this.selectEvidenceRoot = scarlet.settings.new FileValuedVoid("Evidence root folder", "Select", this::selectEvidenceRoot);
+        this.evidenceFilePathFormat = scarlet.settings.new FileValuedStringPattern("evidence_file_path_format", "Evidence file path format", "", ".+", false);
+        this.avatarSearchProvidersEnabled = scarlet.settings.new FileValuedBoolean("custom_avatar_search_providers_enabled", "Use custom avatar search providers", false);
+        this.avatarSearchProviders = scarlet.settings.new FileValuedStringArrayPattern("custom_avatar_search_providers", "VRCX-compatible avatar search providers", AvatarSearch.URL_ROOTS.clone(), "https?://.+", false);
+        this.resetAvatarSearchProviders = scarlet.settings.new FileValuedVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
         this.load();
         JDA jda = null;
         String token0 = this.token.getOrNull();
@@ -212,9 +212,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
     final JDA jda;
     final ScarletSettings.RegistryStringEncrypted token;
     String guildSf, audioChannelSf, evidenceRoot;
-    final ScarletUI.Setting<String> requestingEmail,
+    final ScarletSettings.FileValued<String> requestingEmail,
                                     evidenceFilePathFormat;
-    final ScarletUI.Setting<Boolean> appendTemplateFooter,
+    final ScarletSettings.FileValued<Boolean> appendTemplateFooter,
                                      bundleModerations_instanceKick2userBan,
                                      moderationSummary_onlyActivity,
                                      pingOnModeration_instanceWarn,
@@ -230,9 +230,9 @@ public class ScarletDiscordJDA implements ScarletDiscord
                                      vrchatClient_launchOnInstanceCreate,
                                      evidenceEnabled,
                                      avatarSearchProvidersEnabled;
-    final ScarletUI.Setting<Void> selectEvidenceRoot,
+    final ScarletSettings.FileValued<Void> selectEvidenceRoot,
                                   resetAvatarSearchProviders;
-    final ScarletUI.Setting<String[]> avatarSearchProviders;
+    final ScarletSettings.FileValued<String[]> avatarSearchProviders;
     final DInteractions interactions;
     final DPerms perms;
     final Map<String, InstanceCreation> instanceCreation = new ConcurrentHashMap<>();
@@ -456,7 +456,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     void resetAvatarSearchProviders()
     {
-        this.avatarSearchProviders.set(this.avatarSearchProviders.getDefault());
+        this.avatarSearchProviders.set(null, "discord");
     }
 
     String[] getAvatarSearchProviders()
@@ -703,7 +703,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 save = true;
             }
         }
-        this.scarlet.ui.settingVoid("Discord bot token", "Reset", () -> this.scarlet.execModal.execute(() ->
+        this.scarlet.settings.new FileValuedVoid("Discord bot token", "Reset", () -> this.scarlet.execModal.execute(() ->
         {
             if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the bot token?", "Reset bot token"))
                 return;
@@ -716,7 +716,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             spec.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
             save = true;
         }
-        this.scarlet.ui.settingVoid("Discord guild snowflake", "Reset", () -> this.scarlet.execModal.execute(() ->
+        this.scarlet.settings.new FileValuedVoid("Discord guild snowflake", "Reset", () -> this.scarlet.execModal.execute(() ->
         {
             if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the guild snowflake?", "Reset guild snowflake"))
                 return;
@@ -2193,7 +2193,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay)
     {
-        this.condEmitEx(GroupAuditTypeEx.MOD_SUMMARY, true, false, null, (channelSf, guild, channel) -> this.emitModSummary(scarlet, endOfDay, this.scarlet.settings.heuristicPeriodDays.getOrSupply() * 24L, channel::sendMessageEmbeds));
+        this.condEmitEx(GroupAuditTypeEx.MOD_SUMMARY, true, false, null, (channelSf, guild, channel) -> this.emitModSummary(scarlet, endOfDay, this.scarlet.settings.heuristicPeriodDays.get() * 24L, channel::sendMessageEmbeds));
 
     }
     <MCR extends MessageCreateRequest<MCR> & FluentRestAction<Message, MCR>> Message emitModSummary(Scarlet scarlet, OffsetDateTime endOfDay, long hoursBack, Function<MessageEmbed, MCR> mca)
@@ -2357,7 +2357,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void emitOutstandingMod(Scarlet scarlet, OffsetDateTime endOfDay)
     {
-        this.condEmitEx(GroupAuditTypeEx.OUTSTANDING_MODERATION, true, false, null, (channelSf, guild, channel) ->  this.emitOutstandingMod(scarlet, endOfDay, this.scarlet.settings.outstandingPeriodDays.getOrSupply() * 24L, channel::sendMessageEmbeds));
+        this.condEmitEx(GroupAuditTypeEx.OUTSTANDING_MODERATION, true, false, null, (channelSf, guild, channel) ->  this.emitOutstandingMod(scarlet, endOfDay, this.scarlet.settings.outstandingPeriodDays.get() * 24L, channel::sendMessageEmbeds));
     }
     <MCR extends MessageCreateRequest<MCR> & FluentRestAction<Message, MCR>> Message emitOutstandingMod(Scarlet scarlet, OffsetDateTime endOfDay, long hoursBack, Function<MessageEmbed, MCR> mca)
     {
@@ -2448,8 +2448,8 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public void tryEmitExtendedSuggestedModeration(Scarlet scarlet, User target)
     {
-        int periodDays = this.scarlet.settings.heuristicPeriodDays.getOrSupply(),
-            kickThreshold = this.scarlet.settings.heuristicKickCount.getOrSupply();
+        int periodDays = this.scarlet.settings.heuristicPeriodDays.get(),
+            kickThreshold = this.scarlet.settings.heuristicKickCount.get();
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC),
                        before = now.minusDays(periodDays);
         List<GroupAuditLogEntry> entries = this.scarlet.vrc.auditQuery(before, now, null, "group.instance.kick", target.getId());

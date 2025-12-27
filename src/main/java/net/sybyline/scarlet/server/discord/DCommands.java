@@ -22,6 +22,8 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import net.dv8tion.jda.api.interactions.commands.localization.LocalizationMap;
+import net.sybyline.scarlet.util.Resource;
+import net.sybyline.scarlet.util.ThreadLocalSwap;
 
 public interface DCommands
 {
@@ -77,7 +79,7 @@ public interface DCommands
 
     static boolean equals_command(Command current, CommandData data)
     {
-String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getFullCommandName()+' '; try {
+try (Resource prevCommand = DCommandsUtil.command.push(current.getFullCommandName()+' ')) {
         if (!Objects.equals(data.getType(), current.getType()))
             return neq("type", current.getType(), data.getType());
         if (!Objects.equals(data.getName(), current.getName()))
@@ -108,11 +110,11 @@ String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getF
             }
         }
         return true;
-} finally { DCommandsUtil.command = prevCommand; }
+}
     }
     static boolean equals_group(SubcommandGroupData data, Command.SubcommandGroup current)
     {
-String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getFullCommandName()+' '; try {
+try (Resource prevCommand = DCommandsUtil.command.push(current.getFullCommandName()+' ')) {
         if (!Objects.equals(data.getName(), current.getName()))
             return neq("name", current.getName(), data.getName());
         if (!Objects.equals(data.getDescription(), current.getDescription()))
@@ -124,11 +126,11 @@ String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getF
         if (!equals_list(data.getSubcommands(), SubcommandData::getName, current.getSubcommands(), Command.Subcommand::getName, DCommands::equals_sub))
             return false;
         return true;
-} finally { DCommandsUtil.command = prevCommand; }
+}
     }
     static boolean equals_sub(SubcommandData data, Command.Subcommand current)
     {
-String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getFullCommandName()+' '; try {
+try (Resource prevCommand = DCommandsUtil.command.push(current.getFullCommandName()+' ')) {
         if (!Objects.equals(data.getName(), current.getName()))
             return neq("name", current.getName(), data.getName());
         if (!Objects.equals(data.getDescription(), current.getDescription()))
@@ -140,7 +142,7 @@ String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getF
         if (!equals_list(data.getOptions(), OptionData::getName, current.getOptions(), Command.Option::getName, DCommands::equals_option))
             return false;
         return true;
-} finally { DCommandsUtil.command = prevCommand; }
+}
     }
     static boolean equals_option(OptionData data, Command.Option current)
     {
@@ -162,10 +164,10 @@ String prevCommand = DCommandsUtil.command; DCommandsUtil.command = current.getF
             return neq("nameLocalizations", current.getNameLocalizations().toMap(), data.getNameLocalizations().toMap());
         if (!equals_locale(data.getDescriptionLocalizations(), current.getDescriptionLocalizations()))
             return neq("descriptionLocalizations", current.getDescriptionLocalizations().toMap(), data.getDescriptionLocalizations().toMap());
-DCommandsUtil.option = "/ "+current.getName()+' '; try {
+try (Resource prevCommand = DCommandsUtil.option.push("/ "+current.getName()+' ')) {
         if (!equals_list(data.getChoices(), Command.Choice::getName, current.getChoices(), Command.Choice::getName, DCommands::equals_choice))
             return false;
-} finally { DCommandsUtil.option = ""; }
+}
         return true;
     }
     static boolean equals_choice(Command.Choice data, Command.Choice current)
@@ -232,13 +234,13 @@ DCommandsUtil.option = "/ "+current.getName()+' '; try {
 
 }
 
-class DCommandsUtil
+interface DCommandsUtil
 {
-    static String command = "";
-    static String option = "";
+    ThreadLocalSwap<String> command = ThreadLocalSwap.of(""),
+                            option = ThreadLocalSwap.of("");
     static String value(Object value)
     {
-        return command + option + value;
+        return command.get() + option.get() + value;
     }
 }
 

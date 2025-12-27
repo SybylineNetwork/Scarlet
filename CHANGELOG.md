@@ -7,6 +7,11 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.15-rc5
+  - Added `/schedule` Discord slash command to edit general settings. This is part of a move toward having full (desktop-)headless support.
+  - Fixed alt accounts causing nonexistant class to be loaded
+  - Fixed bug with `tts_announce_new_players` setting being overwritten by `tts_announce_votes_to_kick`
+
 ## 0.4.15-rc4
   - Added optional use of alternate credentials for checking watched groups
   - Added check to eliminate unnecessary avatar file analysis data retrieval on initial startup

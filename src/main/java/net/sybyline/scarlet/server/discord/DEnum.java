@@ -328,6 +328,11 @@ public interface DEnum<DE extends Enum<DE> & DEnum<DE, V>, V>
     {
         return DEnumInfo.of(type.getDeclaringClass()).choices;
     }
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    static Command.Choice[] choicesRaw(Class type)
+    {
+        return DEnumInfo.of(type).choices;
+    }
     static <DE extends Enum<DE> & DEnum<DE, V>, V> SelectOption[] options(Class<DE> type)
     {
         return DEnumInfo.of(type).options;
@@ -336,6 +341,11 @@ public interface DEnum<DE extends Enum<DE> & DEnum<DE, V>, V>
     {
         return DEnumInfo.of(type.getDeclaringClass()).options;
     }
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    static SelectOption[] optionsRaw(Class type)
+    {
+        return DEnumInfo.of(type).options;
+    }
     static <DE extends Enum<DE> & DEnum<DE, V>, V> DE of(Class<DE> type, V value)
     {
         return DEnumInfo.of(type).byValue.getOrDefault(value, null);
@@ -343,6 +353,11 @@ public interface DEnum<DE extends Enum<DE> & DEnum<DE, V>, V>
     static <DE extends Enum<DE> & DEnum<DE, V>, V> DE of(DE type, V value)
     {
         return DEnumInfo.of(type.getDeclaringClass()).byValue.getOrDefault(value, type);
+    }
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    static <T> T ofRaw(Class type, Object value)
+    {
+        return (T)DEnumInfo.of(type).byValue.getOrDefault(value, null);
     }
     static <DE extends Enum<DE> & DEnum<DE, V>, V> V to(Class<DE> type, Object value)
     {

@@ -113,7 +113,7 @@ public class ScarletCalendar
         
         public synchronized void update(ScarletCalendar calendar, ScarletVRChat vrc, String groupId, ScarletDiscordJDA discord, OffsetDateTime now)
         {
-groupId = "grp_c19f568a-d105-442d-b82a-b5a2e103d13d";
+//groupId = "grp_c19f568a-d105-442d-b82a-b5a2e103d13d";
             if (!this.active)
                 return;
             LocalDate nowDate = now.toLocalDate();

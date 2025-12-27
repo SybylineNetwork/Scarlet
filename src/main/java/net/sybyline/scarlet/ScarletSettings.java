@@ -11,12 +11,19 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Scanner;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.prefs.Preferences;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.JOptionPane;
 import javax.swing.JPasswordField;
@@ -30,7 +37,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
+import net.sybyline.scarlet.util.ChangeListener;
 import net.sybyline.scarlet.util.EncryptedPrefs;
+import net.sybyline.scarlet.util.Maths;
 import net.sybyline.scarlet.util.MiscUtils;
 
 public class ScarletSettings
@@ -60,9 +69,9 @@ public class ScarletSettings
         this.nextOutstandingMod = new RegistryOffsetDateTime("nextOutstandingMod");
         this.lastInstanceJoined = new RegistryLocalDateTime("lastInstanceJoined");
         this.uiBounds = new RegistryRectangle("uiBounds");
-        this.heuristicKickCount = new FileValued<>("heuristicKickCount", Integer.class, 3);
-        this.heuristicPeriodDays = new FileValued<>("heuristicPeriodDays", Integer.class, 3);
-        this.outstandingPeriodDays = new FileValued<>("outstandingPeriodDays", Integer.class, 3);
+        this.heuristicKickCount = new FileValuedIntRange("heuristicKickCount", "Heuristic Kick Count", 3, 1, 10);
+        this.heuristicPeriodDays = new FileValuedIntRange("heuristicPeriodDays", "Heuristic Period (days)", 3, 1, 30);
+        this.outstandingPeriodDays = new FileValuedIntRange("outstandingPeriodDays", "Outstanding Period (days)", 3, 1, 30);
     }
 
     public void setNamespace(String namespace)
@@ -83,7 +92,7 @@ public class ScarletSettings
     public final RegistryOffsetDateTime lastRunTime, lastAuditQuery, lastInstancesCheck, lastAuthRefresh, lastUpdateCheck, nextPollAction, nextModSummary, nextOutstandingMod;
     public final RegistryLocalDateTime lastInstanceJoined;
     public final RegistryRectangle uiBounds;
-    public final FileValued<Integer> heuristicKickCount, heuristicPeriodDays, outstandingPeriodDays;
+    public final FileValuedIntRange heuristicKickCount, heuristicPeriodDays, outstandingPeriodDays;
 
     public boolean checkHasVersionChangedSinceLastRun()
     {
@@ -116,52 +125,237 @@ public class ScarletSettings
         this.lastRunTime.set(OffsetDateTime.now(ZoneOffset.UTC));
     }
 
+    public interface FileValuedVisitor<T>
+    {
+        T visitBasic(FileValued<?> fileValued);
+        T visitBoolean(FileValued<Boolean> fileValued, boolean defaultValue);
+        T visitIntegerRange(FileValued<Integer> fileValued, int defaultValue, int minimum, int maximum);
+        <E extends Enum<E>> T visitEnum(FileValued<E> fileValued, E defaultValue);
+        T visitStringChoice(FileValued<String> fileValued, Supplier<Collection<String>> validValues);
+        T visitStringPattern(FileValued<String> fileValued, String pattern, boolean lenient);
+        T visitStringArrayPattern(FileValued<String[]> fileValued, String pattern, boolean lenient);
+        T visitVoid(FileValued<Void> fileValued, Runnable task);
+    }
+
+    final Map<String, FileValued<?>> fileValuedSettings = Collections.synchronizedMap(new LinkedHashMap<>());
     public class FileValued<T>
     {
-        FileValued(String name, Class<T> type, T ifNull)
+        FileValued(String id, String name, Class<T> type, UnaryOperator<T> validate, T ifNull)
         {
-            this(name, type, () -> ifNull);
+            this(id, name, type, validate, () -> ifNull);
         }
-        FileValued(String name, Class<T> type, Supplier<T> ifNull)
+        FileValued(String id, String name, Class<T> type, UnaryOperator<T> validate, Supplier<T> ifNull)
         {
+            if (ScarletSettings.this.fileValuedSettings.putIfAbsent(id, this) != null)
+                throw new IllegalArgumentException("Duplicate setting: "+id);
+            this.id = id;
             this.name = name;
             this.type = type;
+            this.validate = validate != null ? validate : UnaryOperator.identity();
             this.ifNull = ifNull != null ? ifNull : () -> null;
             this.cached = null;
+            this.listeners = ChangeListener.newListenerList();
         }
-        final String name;
+        final String id, name;
         final Class<T> type;
+        final UnaryOperator<T> validate;
         final Supplier<T> ifNull;
         T cached;
-        public T getOrNull()
+        final ChangeListener.ListenerList<T> listeners;
+        public String id()
         {
-            return this.get(false);
+            return this.id;
         }
-        public T getOrSupply()
+        public String name()
         {
-            return this.get(true);
+            return this.name;
         }
-        private T get(boolean orDefault)
+        public Class<T> getType()
+        {
+            return this.type;
+        }
+        public T get()
         {
             T cached_ = this.cached;
             if (cached_ == null)
             {
-                cached_ = ScarletSettings.this.getObject(this.name, this.type);
+                cached_ = ScarletSettings.this.getObject(this.id, this.type);
                 this.cached = cached_;
             }
-            if (cached_ == null && orDefault)
+            if (cached_ == null)
             {
                 cached_ = this.ifNull.get();
                 this.cached = cached_;
             }
             return cached_;
         }
-        public void set(T value_)
+        public boolean set(T value_, String source)
         {
+            T prev = this.cached;
+            if (Objects.deepEquals(prev, value_))
+                return true;
             if (value_ == null)
-                return;
-            this.cached = value_;
-            ScarletSettings.this.setObject(this.name, this.type, value_);
+                value_ = this.ifNull.get();
+            T validated = this.validate.apply(value_);
+            boolean valid = validated != null;
+            if (valid)
+            {
+                this.cached = value_;
+                ScarletSettings.this.setObject(this.id, this.type, value_);
+            }
+            this.listeners.onMaybeChange(prev, valid ? validated : value_, valid, source);
+            return valid;
+        }
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitBasic(this);
+        }
+    }
+    public class FileValuedBoolean extends FileValued<Boolean>
+    {
+        public FileValuedBoolean(String id, String name, boolean defaultValue)
+        {
+            super(id, name, Boolean.class, null, defaultValue);
+            this.defaultValue = defaultValue;
+        }
+        final boolean defaultValue;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitBoolean(this, this.defaultValue);
+        }
+    }
+    public class FileValuedIntRange extends FileValued<Integer>
+    {
+        public FileValuedIntRange(String id, String name, int defaultValue, int min, int max)
+        {
+            super(id, name, Integer.class, value -> Maths.clamp(value, min, max), defaultValue);
+            this.def = defaultValue;
+            this.min = min;
+            this.max = max;
+        }
+        final int def, min, max;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitIntegerRange(this, this.def, this.min, this.max);
+        }
+    }
+    static UnaryOperator<String> patternOne(String pattern, boolean lenient)
+    {
+        if (pattern == null)
+            return UnaryOperator.identity();
+        Pattern p = Pattern.compile(pattern);
+        if (lenient)
+            return value ->
+            {
+                Matcher m = p.matcher(value);
+                return m.find() ? m.group() : null;
+            };
+        return value -> p.matcher(value).matches() ? value : null;
+    }
+    public class FileValuedEnum<E extends Enum<E>> extends FileValued<E>
+    {
+        public FileValuedEnum(String id, String name, E defaultValue)
+        {
+            super(id, name, defaultValue.getDeclaringClass(), UnaryOperator.identity(), defaultValue);
+            this.defaultValue = defaultValue;
+        }
+        final E defaultValue;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitEnum(this, this.defaultValue);
+        }
+    }
+    public class FileValuedStringChoice extends FileValued<String>
+    {
+        public FileValuedStringChoice(String id, String name, String defaultValue, Supplier<Collection<String>> validValues)
+        {
+            super(id, name, String.class, value -> validValues.get().contains(value) ? value : null, defaultValue);
+            this.validValues = validValues;
+        }
+        final Supplier<Collection<String>> validValues;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitStringChoice(this, this.validValues);
+        }
+    }
+    public class FileValuedStringPattern extends FileValued<String>
+    {
+        public FileValuedStringPattern(String id, String name, String defaultValue, String pattern, boolean lenient)
+        {
+            super(id, name, String.class, patternOne(pattern, lenient), defaultValue);
+            this.pattern = pattern;
+            this.lenient = lenient;
+        }
+        final String pattern;
+        final boolean lenient;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitStringPattern(this, this.pattern, this.lenient);
+        }
+    }
+    static UnaryOperator<String[]> patternAll(String pattern, boolean lenient)
+    {
+        if (pattern == null)
+            return UnaryOperator.identity();
+        Pattern p = Pattern.compile(pattern);
+        if (lenient)
+            return values ->
+            {
+                if (values != null)
+                {
+                    values = values.clone();
+                    for (int i = 0; i < values.length; i++)
+                    {
+                        Matcher m = p.matcher(values[i]);
+                        if (!m.find())
+                            return null;
+                        values[i] = m.group();
+                    }
+                }
+                return values;
+            };
+        return values ->
+        {
+            if (values != null)
+                for (String value : values)
+                    if (!p.matcher(value).matches())
+                        return null;
+            return values;
+        };
+    }
+    public class FileValuedStringArrayPattern extends FileValued<String[]>
+    {
+        public FileValuedStringArrayPattern(String id, String name, String[] defaultValue, String pattern, boolean lenient)
+        {
+            super(id, name, String[].class, patternAll(pattern, lenient), defaultValue);
+            this.pattern = pattern;
+            this.lenient = lenient;
+        }
+        final String pattern;
+        final boolean lenient;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitStringArrayPattern(this, this.pattern, this.lenient);
+        }
+    }
+    public class FileValuedVoid extends FileValued<Void>
+    {
+        public FileValuedVoid(String id, String name, Runnable task)
+        {
+            super(id, name, Void.class, null, (Void)null);
+            this.task = task;
+        }
+        final Runnable task;
+        @Override
+        protected <TT> TT visit(FileValuedVisitor<TT> visitor)
+        {
+            return visitor.visitVoid(this, this.task);
         }
     }
 
