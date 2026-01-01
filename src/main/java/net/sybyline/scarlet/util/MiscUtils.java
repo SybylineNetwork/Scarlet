@@ -34,6 +34,7 @@ import java.time.zone.ZoneRules;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Formatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,13 @@ public interface MiscUtils
     static boolean blank(String string)
     {
         return string == null || string.isEmpty();
+    }
+
+    static StringBuilder fmt(StringBuilder sb, String format, Object... params)
+    {
+        @SuppressWarnings({ "unused", "resource" })
+        Formatter fmt = new Formatter(sb).format(format, params);
+        return sb;
     }
 
     static String nonBlankOrNull(String string1)

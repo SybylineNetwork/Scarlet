@@ -2,6 +2,7 @@ package net.sybyline.scarlet;
 
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -731,7 +732,7 @@ public class ScarletVRChat implements Closeable
             this.groupLimitedMember = this.getGroupMembership(this.groupId, this.currentUserId);
             if (this.groupLimitedMember == null)
             {
-                if (this.scarlet.ui.confirmModal(null, "The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
+                if (this.scarlet.settings.requireConfirmYesNo("The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
                 {
                     this.cookies.clear();
                     this.cookies.save();
@@ -1618,25 +1619,24 @@ public class ScarletVRChat implements Closeable
 
     public void removeAlternateCredentials()
     {
-        this.scarlet.execModal.submit(() ->
+        class AltDisplay
         {
-            class AltDisplay
+            AltDisplay(String id)
             {
-                AltDisplay(String id)
-                {
-                    this.id = id;
-                    this.name = ScarletVRChat.this.getUserDisplayName(id);
-                    this.display = this.name+" ("+this.id+")";
-                }
-                final String id, name, display;
-                @Override
-                public String toString()
-                {
-                    return this.display;
-                }
+                this.id = id;
+                this.name = ScarletVRChat.this.getUserDisplayName(id);
+                this.display = this.name+" ("+this.id+")";
             }
-            AltDisplay[] alts = this.cookies.alts().stream().map(AltDisplay::new).toArray(AltDisplay[]::new);
-            AltDisplay selected = (AltDisplay)JOptionPane.showInputDialog(this.scarlet.ui.jframe, "Select the credentials to remove", "Remove alternate credentials", JOptionPane.WARNING_MESSAGE, null, alts, null);
+            final String id, name, display;
+            @Override
+            public String toString()
+            {
+                return this.display;
+            }
+        }
+        AltDisplay[] alts = this.cookies.alts().stream().map(AltDisplay::new).toArray(AltDisplay[]::new);
+        this.scarlet.settings.requireSelectAsync("Select the credentials to remove", "Remove alternate credentials", alts, null, selected ->
+        {
             if (selected == null)
                 return;
             boolean loggedOut = this.logoutAlt(selected.id, false);
@@ -1647,6 +1647,14 @@ public class ScarletVRChat implements Closeable
 
     public void listAlternateCredentials()
     {
+        if (GraphicsEnvironment.isHeadless())
+        {
+            StringBuilder sb = new StringBuilder("Alternate credentials:");
+            for (String alt : this.cookies.alts())
+                sb.append('\n').append('\t').append(this.getUserDisplayName(alt)).append(':').append(alt);
+            LOG.info(sb.toString());
+            return;
+        }
         JPanel panel = new JPanel(new GridBagLayout());
         {
             GridBagConstraints constraints = new GridBagConstraints();
@@ -1672,13 +1680,12 @@ public class ScarletVRChat implements Closeable
         scroll.setSize(new Dimension(500, 300));
         scroll.setPreferredSize(new Dimension(500, 300));
         scroll.setMaximumSize(new Dimension(500, 300));
-        this.scarlet.ui.messageModalAsyncInfo(null, scroll, "Alternate credentials");
+        this.scarlet.execModal.execute(() -> JOptionPane.showMessageDialog(null, scroll, "Alternate credentials", JOptionPane.INFORMATION_MESSAGE));
     }
 
     public void modalNeedPerms(GroupPermissions perms)
     {
-        this.scarlet.ui.submitModalAsync(
-            null,
+        this.scarlet.settings.requireConfirmYesNoAsync(
             "The bot VRChat account `"+this.currentUserId+"` is missing the necessary permission `"+perms.getValue()+"`",
             "Missing permissions",
             () -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.Home.groupSettings(this.groupId))),

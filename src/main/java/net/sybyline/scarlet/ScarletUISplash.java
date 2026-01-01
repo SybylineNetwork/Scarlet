@@ -16,7 +16,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JWindow;
 
-public class ScarletUISplash implements AutoCloseable
+public class ScarletUISplash implements IScarletUISplash
 {
 
     public ScarletUISplash(Scarlet scarlet)
@@ -30,26 +30,14 @@ public class ScarletUISplash implements AutoCloseable
     JLabel splashText = new TransparentJLabel("Loading...", JLabel.CENTER),
            splashSubtext = new TransparentJLabel("", JLabel.CENTER);
 
-    public void queueFeedbackPopup(Component component, long durationMillis, String text)
-    {
-        this.queueFeedbackPopup(component, durationMillis, text, "", null, null);
-    }
-    public void queueFeedbackPopup(Component component, long durationMillis, String text, Color color)
-    {
-        this.queueFeedbackPopup(component, durationMillis, text, "", color, color);
-    }
-    public void queueFeedbackPopup(Component component, long durationMillis, String text, String subtext)
-    {
-        this.queueFeedbackPopup(component, durationMillis, text, subtext, null, null);
-    }
-    public void queueFeedbackPopup(Component component, long durationMillis, String text, String subtext, Color color)
-    {
-        this.queueFeedbackPopup(component, durationMillis, text, subtext, color, color);
-    }
     public void queueFeedbackPopup(Component component, long durationMillis, String text, String subtext, Color textcolor, Color subtextcolor)
     {
         if (component == null)
-            component = this.scarlet.ui.jframe;
+        {
+            Component[] ref = new Component[1];
+            this.scarlet.ui.jframe(jframe -> ref[0] = jframe);
+            component = ref[0];
+        }
         if (durationMillis < 500L)
             durationMillis = 500L;
         if (durationMillis > 30_000L)
@@ -168,7 +156,7 @@ public class ScarletUISplash implements AutoCloseable
         this.splashSubtext = null;
         splash.setVisible(false);
         splash.dispose();
-        this.scarlet.ui.jframe.setVisible(true);
+        this.scarlet.ui.jframe(jframe -> jframe.setVisible(true));
     }
 
     public void splashText(String text)

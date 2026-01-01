@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Scanner;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -48,8 +49,9 @@ public class ScarletSettings
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/Settings");
     private static final String globalPW = Optional.ofNullable(System.getenv("SCARLET_GLOBAL_PW")).orElseGet(()->System.getProperty("scarlet.global.pw", "ZaxzVNStRpG1DU9dLVE"));
 
-    public ScarletSettings(File settingsFile)
+    public ScarletSettings(Scarlet scarlet, File settingsFile)
     {
+        this.scarlet = scarlet;
         this.settingsFile = settingsFile;
         this.settingsFileLastModified = settingsFile.lastModified();
         this.hasVersionChangedSinceLastRun = null;
@@ -80,6 +82,7 @@ public class ScarletSettings
         this.encrypted = new EncryptedPrefs(this.preferences, globalPW);
     }
 
+    final Scarlet scarlet;
     final File settingsFile;
     final long settingsFileLastModified;
     Boolean hasVersionChangedSinceLastRun;
@@ -670,6 +673,68 @@ public class ScarletSettings
         @SuppressWarnings("resource")
         Scanner s = new Scanner(System.in);
         return s.nextLine();
+    }
+    public void requireInputAsync(String display, boolean sensitive, Consumer<String> then)
+    {
+        this.scarlet.execModal.execute(() -> then.accept(this.requireInput(display, sensitive)));
+    }
+
+    public boolean requireConfirmYesNo(String message, String title)
+    {
+        if (!GraphicsEnvironment.isHeadless())
+        {
+            return JOptionPane.showConfirmDialog(null, message, title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+        }
+        Console console = System.console();
+        if (console != null)
+            return "y".equalsIgnoreCase(console.readLine("%s%n%s: ", title, message).trim());
+        System.out.print(title+"\n"+message+": ");
+        @SuppressWarnings("resource")
+        Scanner s = new Scanner(System.in);
+        return "y".equalsIgnoreCase(s.nextLine().trim());
+    }
+    public void requireConfirmYesNoAsync(String message, String title, Runnable then, Runnable otherwise)
+    {
+        this.scarlet.execModal.execute(() -> Optional.ofNullable(this.requireConfirmYesNo(message, title) ? then : otherwise).ifPresent(Runnable::run));
+    }
+
+    public <T> void requireSelect(String message, String title, T[] selectionValues, T initialSelectionValue, Consumer<T> then)
+    {
+        if (!GraphicsEnvironment.isHeadless())
+        {
+            @SuppressWarnings("unchecked")
+            T selected = (T)JOptionPane.showInputDialog(null, message, title, JOptionPane.WARNING_MESSAGE, null, selectionValues, initialSelectionValue);
+            then.accept(selected);
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        int len = selectionValues.length;
+        for (int i = 0; i < len; i++)
+            sb.append(i).append(':').append(' ').append(selectionValues[i]).append('\n');
+        T selected = initialSelectionValue;
+        Console console = System.console();
+        if (console != null) try
+        {
+            selected = selectionValues[Integer.parseInt(console.readLine("%s%n%s%s: ", title, sb, message).trim())];
+        }
+        catch (Exception ex)
+        {
+        }
+        else try
+        {
+            System.out.print(title+"\n"+sb+message+": ");
+            @SuppressWarnings("resource")
+            Scanner s = new Scanner(System.in);
+            selected = selectionValues[s.nextInt()];
+        }
+        catch (Exception ex)
+        {
+        }
+        then.accept(selected);
+    }
+    public <T> void requireSelectAsync(String message, String title, T[] selectionValues, T initialSelectionValue, Consumer<T> then)
+    {
+        this.scarlet.execModal.execute(() -> this.requireSelect(message, title, selectionValues, initialSelectionValue, then));
     }
 
 }

@@ -140,7 +140,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     {
     } 
 
-    
     @Override
     public void log_catchUp(File file)
     {
@@ -148,7 +147,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             return;
         this.isTailerLive = true;
         this.scarlet.ui.fireSort();
-        this.scarlet.splash.close();
+        MiscUtils.close(this.scarlet.splash);
         this.clientLocation_pendingUpdates.forEach($ -> {
             try
             {

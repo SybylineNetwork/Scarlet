@@ -26,9 +26,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.swing.JButton;
-import javax.swing.JOptionPane;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import org.scalasbt.ipcsocket.UnixDomainServerSocket;
 import org.scalasbt.ipcsocket.Win32NamedPipeServerSocket;
@@ -67,6 +66,7 @@ public class Scarlet implements Closeable
 
     public static final int JVM_DATA_MODEL;
     public static final int JAVA_SPEC;
+    public static final boolean IS_DEV_ENV;
 
     static
     {
@@ -83,12 +83,25 @@ public class Scarlet implements Closeable
         else if (!"1.8".equals(javaVersion))
             System.err.println("Compiled on Java 8, running on Java "+javaVersion);
         JAVA_SPEC = javaVersion == null ? 0 : Integer.parseInt(javaVersion.startsWith("1.") ? javaVersion.substring(2) : javaVersion);
+        
+        IS_DEV_ENV =
+            Boolean.getBoolean("IS_DEV_ENV")
+            &&
+            Stream.of(System.getProperty("java.class.path")
+                .split(Pattern.quote(System.getProperty("path.separator"))))
+                .map(String::trim)
+                .filter($->!$.isEmpty())
+                .map(File::new)
+                .anyMatch(File::isDirectory)
+//            &&
+//            MavenDepsLoader.jarPath() == null
+            ;
     }
 
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.15-rc5",
+        VERSION = "0.4.15",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -275,18 +288,18 @@ public class Scarlet implements Closeable
         LOG.info("Finished shutdown flow");
     }
 
-    final ScarletUISplash splash = new ScarletUISplash(this);
+    final IScarletUISplash splash = IScarletUISplash.create(this);
 
     volatile boolean running = true;
     volatile int exitCode = 0;
     boolean staffMode = false;
     final Runnable explicitGC = MiscUtils.withMinimumInterval(3600_000L, System::gc);
     final AtomicInteger threadidx = new AtomicInteger();
-    final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet()));
-    final ScheduledExecutorService execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet()));
-    final ScheduledExecutorService execIPC = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet IPC Thread "+this.threadidx.incrementAndGet()));
+    public final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet())),
+                                          execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet())),
+                                          execIPC = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet IPC Thread "+this.threadidx.incrementAndGet()));
     
-    final ScarletSettings settings = new ScarletSettings(new File(dir, "settings.json"));
+    final ScarletSettings settings = new ScarletSettings(this, new File(dir, "settings.json"));
     {
         Float uiScale = this.settings.getObject("ui_scale", Float.class);
         if (uiScale != null) Swing.scaleAll(uiScale.floatValue());
@@ -297,7 +310,7 @@ public class Scarlet implements Closeable
                 throw new IllegalStateException("Duplicate processes detected for group "+groupId);
         }
     }
-    final ScarletUI ui = new ScarletUI(this);
+    final IScarletUI ui = IScarletUI.create(this);
     final ScarletEventListener eventListener = new ScarletEventListener(this);
     final ScarletPendingModActions pendingModActions = new ScarletPendingModActions(new File(dir, "pending_moderation_actions.json"));
     final ScarletModerationTags moderationTags = new ScarletModerationTags(new File(dir, "moderation_tags.json"));
@@ -593,6 +606,18 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
             default: {
                 LOG.info("Unknown CLI command: "+op);
             } break;
+            case "info":
+            case "help": {
+                StringBuilder sb = new StringBuilder("CLI commands:");
+                sb.append("\n\thelp (alternate: info)");
+                sb.append("\n\tlogout");
+                sb.append("\n\texit (alternate: halt, quit, stop)");
+                sb.append("\n\texplore");
+                sb.append("\n\ttts <text to speak>");
+                sb.append("\n\tlink <VRChat UserID> <Discord UserSF>");
+                sb.append("\n\timportgroups <file | URL>");
+                sb.append("\n\timportgroupsjson <file | URL>");
+            } break;
             case "logout": {
                 LOG.info("Logout success: "+this.vrc.logout());
             } // fallthrough
@@ -717,9 +742,8 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
                 LOG.info(NAME+" version "+cmp_version+" available");
                 if (this.alertForUpdates.get())
                 {
-                    JButton openReleasePage = new JButton("Browse release page");
-                    openReleasePage.addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(GITHUB_URL+"/releases/tag/"+cmp_version)));
-                    this.execModal.execute(() -> JOptionPane.showMessageDialog(null, new Object[]{NAME+" version "+cmp_version+" available", openReleasePage}, "Update available", JOptionPane.INFORMATION_MESSAGE));
+                    this.settings.requireConfirmYesNoAsync(NAME+" version "+cmp_version+" available, open in browser?", "Update available",
+                        () -> MiscUtils.AWTDesktop.browse(URI.create(GITHUB_URL+"/releases/tag/"+cmp_version)), null);
                 }
                 this.newerVersion = cmp_version;
             }
@@ -955,10 +979,6 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
     }
 
-    static final int CATCH_UP_INSTANTANEOUS = 0,
-                     CATCH_UP_SKIP_UNTIL_24 = 1,
-                     CATCH_UP_LIMIT_NEXT_24 = 2;
-    int catchupMode = CATCH_UP_LIMIT_NEXT_24;
     boolean wantsVrcRefresh = false;
     public void queueVrcRefresh()
     {
@@ -979,36 +999,44 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
             offsetMillis += (30_000L - currentPollInterval) / 10L;
         }
         OffsetDateTime from = this.settings.lastAuditQuery.getOrSupply(),
-                       to = OffsetDateTime.now(ZoneOffset.UTC).minusNanos(offsetMillis * 1_000_000L);
-        switch (this.catchupMode)
+                       to = OffsetDateTime.now(ZoneOffset.UTC).minusNanos(offsetMillis * 1_000_000L),
+                       lastAuditQuery = from,
+                       latest = from.plusHours(24);
+        boolean catchupSkip = false;
+        if (catchupSkip)
         {
-        default:
-        case CATCH_UP_INSTANTANEOUS: {
-            // noop
-        } break;
-        case CATCH_UP_SKIP_UNTIL_24: {
             OffsetDateTime earliest = to.minusHours(24);
             if (from.isBefore(earliest))
             {
                 LOG.info("Catching up: Skipping from "+from+" to "+earliest+" ("+Duration.between(from, earliest)+" total)");
                 from = earliest;
+                lastAuditQuery = to;
             }
-        } break;
-        case CATCH_UP_LIMIT_NEXT_24: {
-            OffsetDateTime latest = from.plusHours(24);
+            else
+            {
+                to = null;
+            }
+        }
+        else
+        {
             if (latest.isBefore(to))
             {
                 LOG.info("Catching up: Only querying a 24-hour period");
                 to = latest;
+                lastAuditQuery = to;
             }
-        } break;
+            else
+            {
+                to = null;
+            }
         }
-        LOG.debug("Querying from "+from+" to "+to);
+        
+        LOG.debug("Querying from "+from+" to "+(to!=null?to:"now"));
         List<GroupAuditLogEntry> entries = this.vrc.auditQuery(from, to);
         
         if (entries == null)
         {
-            LOG.warn("Failed to get entries from "+from+" to "+to);
+            LOG.warn("Failed to get entries from "+from+" to "+(to!=null?to:"now"));
             return;
         }
         
@@ -1025,14 +1053,18 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
             default:
                 this.discord.process(this, entry);
             }
+            if (lastAuditQuery.isBefore(entry.getCreatedAt()))
+            {
+                lastAuditQuery = entry.getCreatedAt();
+            }
         }
         catch (Exception ex)
         {
             LOG.error("Exception processing audit entry "+entry.getId()+" of type "+entry.getEventType()+": `"+entry.toJson()+"`", ex);
             ex.printStackTrace();
         }
-        
-        this.settings.lastAuditQuery.set(to);
+
+        this.settings.lastAuditQuery.set(lastAuditQuery);
     }
 
 }

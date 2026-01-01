@@ -16,6 +16,8 @@ import net.sybyline.scarlet.util.Platform;
 public interface VrcLaunch
 {
 
+    // vrchat://launch?ref=<Organization>&id=<Location>&shortName=<ShortName|SecureName>&attach=<integer>
+
     static void launch(String userId, Location location) throws Exception
     {
         launch(userId, location.world+':'+location.instance);

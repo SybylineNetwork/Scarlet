@@ -1,0 +1,42 @@
+[
+  {
+    "name": "VRChat",
+    "url": "https://vrchat.com",
+    "role": "VRChat itself"
+  },
+  {
+    "name": "VRChat Community API docs (unnofficial)",
+    "url": "https://vrchat.community",
+    "role": "Maintainers of the OpenAPI specification for the VRChat API"
+  },
+  {
+    "name": "Vinyarion",
+    "url": "https://discord.gg/CP3AyhypBF",
+    "role": "Author"
+  },
+  {
+    "name": "KozyBlake",
+    "url": "https://github.com/KozyBlake",
+    "role": "Contributor, provisional maintainer of Linux-compatible fork"
+  },
+  {
+    "name": "kubectl",
+    "url": "https://github.com/0xkubectl",
+    "role": "Contributor, provisional maintainer of Linux-compatible fork, VRCX-compatible search provider"
+  },
+  {
+    "name": "ComfyChloe",
+    "url": "https://github.com/ComfyChloe",
+    "role": "Contributor, provided a patched version when I was unable to address a breaking change in the VRChat API"
+  },
+  {
+    "name": "NekoSuneVR",
+    "url": "https://nekosunevr.co.uk",
+    "role": "Contributor, VRCX-compatible search provider"
+  },
+  {
+    "name": "unknownangel517",
+    "url": "https://github.com/unknownangel517",
+    "role": "Contributor, VRCX-compatible search provider"
+  }
+]

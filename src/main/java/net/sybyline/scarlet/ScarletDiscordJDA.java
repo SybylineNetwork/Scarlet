@@ -1,5 +1,6 @@
 package net.sybyline.scarlet;
 
+import java.awt.GraphicsEnvironment;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -174,7 +175,10 @@ public class ScarletDiscordJDA implements ScarletDiscord
         }
         catch (InvalidTokenException|IllegalArgumentException ex)
         {
-            this.scarlet.ui.messageModalAsyncError(null, "You can reset the bot token in the Settings page.", "Invalid bot token");
+            if (this.scarlet.settings.requireConfirmYesNo("You can reset the bot token in the Settings page.", "Invalid bot token"))
+            {
+                ; // noop
+            }
         }
         this.jda = jda;
         this.perms = new DPerms(permsFile);
@@ -451,7 +455,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
     {
         LOG.warn("No Discord bot token: entering staff mode");
         this.scarlet.staffMode = true;
-        this.scarlet.ui.jframe.setTitle(Scarlet.NAME+" (staff mode)");
+        this.scarlet.ui.jframe(jframe -> jframe.setTitle(Scarlet.NAME+" (staff mode)"));
     }
 
     void resetAvatarSearchProviders()
@@ -468,7 +472,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
 
     void selectEvidenceRoot()
     {
-        this.scarlet.execModal.submit(() ->
+        if (GraphicsEnvironment.isHeadless())
+        {
+            this.scarlet.settings.requireInputAsync("Enter new evidence root folder", false, string ->
+            {
+                File file = new File(string);
+                if (file.isDirectory())
+                {
+                    this.evidenceRoot = file.getAbsolutePath();
+                }
+            });
+        }
+        else this.scarlet.execModal.submit(() ->
         {
             JFileChooser chooser = new JFileChooser();
             chooser.setDialogTitle("Select a Folder");
@@ -703,26 +718,24 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 save = true;
             }
         }
-        this.scarlet.settings.new FileValuedVoid("Discord bot token", "Reset", () -> this.scarlet.execModal.execute(() ->
-        {
-            if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the bot token?", "Reset bot token"))
-                return;
-            this.token.set(this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true));
-            this.save();
-        }));
+        this.scarlet.settings.new FileValuedVoid("Discord bot token", "Reset", () -> 
+            this.scarlet.settings.requireConfirmYesNoAsync("Are you sure you want to reset the bot token?", "Reset bot token", () -> {
+                this.token.set(this.scarlet.settings.requireInput("Discord bot token (leave empty for staff mode)", true));
+                this.save();
+            }, null)
+        );
         
         if (spec.guildSf == null)
         {
             spec.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
             save = true;
         }
-        this.scarlet.settings.new FileValuedVoid("Discord guild snowflake", "Reset", () -> this.scarlet.execModal.execute(() ->
-        {
-            if (!this.scarlet.ui.confirmModal(null, "Are you sure you want to reset the guild snowflake?", "Reset guild snowflake"))
-                return;
-            this.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
-            this.save();
-        }));
+        this.scarlet.settings.new FileValuedVoid("Discord guild snowflake", "Reset", () -> 
+            this.scarlet.settings.requireConfirmYesNoAsync("Are you sure you want to reset the guild snowflake?", "Reset guild snowflake", () -> {
+                this.guildSf = this.scarlet.settings.requireInput("Discord guild snowflake (leave empty for staff mode)", false);
+                this.save();
+            }, null)
+        );
         
         if (save) this.save(spec);
         

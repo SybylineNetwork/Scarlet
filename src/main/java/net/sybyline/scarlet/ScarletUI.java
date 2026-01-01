@@ -3,7 +3,9 @@ package net.sybyline.scarlet;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -16,6 +18,8 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.ItemEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -84,6 +88,7 @@ import io.github.vrchatapi.model.User;
 import net.sybyline.scarlet.ScarletSettings.FileValued;
 import net.sybyline.scarlet.ext.AvatarBundleInfo;
 import net.sybyline.scarlet.ui.Swing;
+import net.sybyline.scarlet.util.Credits;
 import net.sybyline.scarlet.util.Func;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -91,7 +96,7 @@ import net.sybyline.scarlet.util.PropsTable;
 import net.sybyline.scarlet.util.VrcWeb;
 import net.sybyline.scarlet.util.VersionedFile;
 
-public class ScarletUI implements AutoCloseable
+public class ScarletUI implements IScarletUI
 {
 
     static final Logger LOG = LoggerFactory.getLogger("Scarlet/UI");
@@ -116,8 +121,15 @@ public class ScarletUI implements AutoCloseable
         this.initUI();
     }
 
-    void setUIScale()
+    public void jframe(Consumer<JFrame> edit)
     {
+        edit.accept(this.jframe);
+    }
+
+    public void setUIScale()
+    {
+        if (GraphicsEnvironment.isHeadless())
+            return;
         this.scarlet.execModal.execute(() ->
         {
             JSlider slider = new JSlider(50, 400, 100);
@@ -132,7 +144,7 @@ public class ScarletUI implements AutoCloseable
             JPanel panel = new JPanel(new BorderLayout());
             panel.add(label, BorderLayout.NORTH);
             panel.add(slider, BorderLayout.CENTER);
-            if (this.confirmModal(null, panel, "Set UI scale %"))
+            if (JOptionPane.showConfirmDialog(null, panel, "Set UI scale %", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION)
             {
                 float newUiScale = 0.01F * (float)slider.getValue();
                 this.scarlet.settings.setObject("ui_scale", Float.class, newUiScale);
@@ -141,7 +153,7 @@ public class ScarletUI implements AutoCloseable
         });
     }
 
-    void updatePending(String id, ConnectedPlayer player)
+    private void updatePending(String id, ConnectedPlayer player)
     {
         List<Func.V1.NE<ConnectedPlayer>> pending = this.pendingUpdates.remove(id);
         if (pending != null)
@@ -297,16 +309,16 @@ public class ScarletUI implements AutoCloseable
         this.propstable.sortEntries(COMPARE);
     }
 
-    final Scarlet scarlet;
-    final JFrame jframe;
-    final JTabbedPane jtabs;
-    final PropsTable<ConnectedPlayer> propstable;
-    final JPanel jpanel_settings;
-    final JLabel jlabel_lastSavedAt;
-    final List<GUISetting<?>> ssettings;
-    boolean propstableColumsDirty;
-    final Map<String, ConnectedPlayer> connectedPlayers;
-    final Map<String, List<Func.V1.NE<ConnectedPlayer>>> pendingUpdates;
+    private final Scarlet scarlet;
+    private final JFrame jframe;
+    private final JTabbedPane jtabs;
+    private final PropsTable<ConnectedPlayer> propstable;
+    private final JPanel jpanel_settings;
+    private final JLabel jlabel_lastSavedAt;
+    private final List<GUISetting<?>> ssettings;
+    private boolean propstableColumsDirty;
+    private final Map<String, ConnectedPlayer> connectedPlayers;
+    private final Map<String, List<Func.V1.NE<ConnectedPlayer>>> pendingUpdates;
     
     class ConnectedPlayer
     {
@@ -349,13 +361,8 @@ public class ScarletUI implements AutoCloseable
             @Override
             public void actionPerformed(ActionEvent e)
             {
-                ScarletUI.this.scarlet.execModal.execute(() ->
-                {
-                    if (ScarletUI.this.scarlet.ui.confirmModal(null, "Are you sure you want to ban "+ConnectedPlayer.this.name+"?", "Confirm ban"))
-                    {
-                        ScarletUI.this.tryBan(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
-                    }
-                });
+                ScarletUI.this.scarlet.settings.requireConfirmYesNoAsync("Are you sure you want to ban "+ConnectedPlayer.this.name+"?", "Confirm ban",
+                    () -> ScarletUI.this.tryBan(ConnectedPlayer.this.id, ConnectedPlayer.this.name), null);
             }
             @Override
             public String toString()
@@ -368,13 +375,8 @@ public class ScarletUI implements AutoCloseable
             @Override
             public void actionPerformed(ActionEvent e)
             {
-                ScarletUI.this.scarlet.execModal.execute(() ->
-                {
-                    if (ScarletUI.this.scarlet.ui.confirmModal(null, "Are you sure you want to unban "+ConnectedPlayer.this.name+"?", "Confirm unban"))
-                    {
-                        ScarletUI.this.tryUnban(ConnectedPlayer.this.id, ConnectedPlayer.this.name);
-                    }
-                });
+                ScarletUI.this.scarlet.settings.requireConfirmYesNoAsync("Are you sure you want to unban "+ConnectedPlayer.this.name+"?", "Confirm unban",
+                    () -> ScarletUI.this.tryUnban(ConnectedPlayer.this.id, ConnectedPlayer.this.name), null);
             }
             @Override
             public String toString()
@@ -433,7 +435,7 @@ public class ScarletUI implements AutoCloseable
         public int index;
         public int width;
     }
-    void initUI()
+    private void initUI()
     {
         // Properties
         {
@@ -532,6 +534,7 @@ public class ScarletUI implements AutoCloseable
                     jmenu_help.add("Scarlet: VRChat Group").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.SCARLET_VRCHAT_GROUP_URL)));
                     jmenu_help.add("Scarlet: Github").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.GITHUB_URL)));
                     jmenu_help.add("Scarlet: License").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.LICENSE_URL)));
+                    jmenu_help.add("Scarlet: Credits").addActionListener($ -> this.infoCredits());
                     jmenu_help.addSeparator();
                     jmenu_help.add("VRChat: Terms of Service").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.TERMS_OF_SERVICE)));
                     jmenu_help.add("VRChat: Privacy Policy").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.PRIVACY_POLICY+"#7")));
@@ -589,7 +592,7 @@ public class ScarletUI implements AutoCloseable
         this.scarlet.exec.scheduleAtFixedRate(this::saveIfDirty, 10_000L, 10_000L, TimeUnit.MILLISECONDS);
     }
 
-    void loadInstanceColumns()
+    private void loadInstanceColumns()
     {
         Map<String, UIPropsInfo> map = this.scarlet.settings.getObject("ui_instance_columns", UIPropsInfo.MAPOF);
         if (map == null || map.isEmpty())
@@ -609,7 +612,7 @@ public class ScarletUI implements AutoCloseable
             });
     }
 
-    void saveIfDirty()
+    private void saveIfDirty()
     {
         this.saveSettings(false);
         if (!this.propstableColumsDirty)
@@ -618,58 +621,24 @@ public class ScarletUI implements AutoCloseable
         this.saveInstanceColumns();
     }
 
-    void saveInstanceColumns()
+    private void saveInstanceColumns()
     {
         Map<String, UIPropsInfo> map = new HashMap<>();
         this.propstable.iterProps(info -> map.put(info.getId(), new UIPropsInfo(info.getDisplayIndex(), info.getWidth())));
         this.scarlet.settings.setObject("ui_instance_columns", UIPropsInfo.MAPOF, map);
     }
 
-    void uiModalExit()
+    private void uiModalExit()
     {
-        this.scarlet.execModal.execute(() ->
-        {
-            if (this.confirmModal(this.jframe, "Are you sure you want to quit?", "Confirm quit"))
-            {
-                this.scarlet.stop();
-            }
-        });
+        this.scarlet.settings.requireConfirmYesNoAsync("Are you sure you want to quit?", "Confirm exit", this.scarlet::stop, null);
     }
 
-    public boolean confirmModal(Component component, Object message, String title)
+    private void messageModalAsyncInfo(Component component, Object message, String title)
     {
-        return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
-    }
-    public void confirmModalAsync(Component component, Object message, String title, Runnable then, Runnable otherwise)
-    {
-        this.scarlet.execModal.execute(() -> Optional.ofNullable(this.confirmModal(component, message, title) ? then : otherwise).ifPresent(Runnable::run));
+        this.scarlet.execModal.execute(() -> JOptionPane.showMessageDialog(component != null ? component : this.jframe, message, title, JOptionPane.INFORMATION_MESSAGE));
     }
 
-    public boolean submitModal(Component component, Object message, String title)
-    {
-        return JOptionPane.showConfirmDialog(component != null ? component : this.jframe, message, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION;
-    }
-    public void submitModalAsync(Component component, Object message, String title, Runnable then, Runnable otherwise)
-    {
-        this.scarlet.execModal.execute(() -> Optional.ofNullable(this.submitModal(component, message, title) ? then : otherwise).ifPresent(Runnable::run));
-    }
-
-    public void messageModalAsync(Component component, Object message, String title)
-    { this.messageModalAsync(component, message, title, JOptionPane.PLAIN_MESSAGE); }
-    public void messageModalAsyncQuestion(Component component, Object message, String title)
-    { this.messageModalAsync(component, message, title, JOptionPane.QUESTION_MESSAGE); }
-    public void messageModalAsyncInfo(Component component, Object message, String title)
-    { this.messageModalAsync(component, message, title, JOptionPane.INFORMATION_MESSAGE); }
-    public void messageModalAsyncWarn(Component component, Object message, String title)
-    { this.messageModalAsync(component, message, title, JOptionPane.WARNING_MESSAGE); }
-    public void messageModalAsyncError(Component component, Object message, String title)
-    { this.messageModalAsync(component, message, title, JOptionPane.ERROR_MESSAGE); }
-    public void messageModalAsync(Component component, Object message, String title, int type)
-    {
-        this.scarlet.execModal.execute(() -> JOptionPane.showMessageDialog(component != null ? component : this.jframe, message, title, type));
-    }
-
-    void importWG(boolean isFile)
+    private void importWG(boolean isFile)
     {
         if (isFile)
         {
@@ -756,8 +725,8 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    final AtomicLong discordUpdateCommandListlastUpdated = new AtomicLong();
-    void discordUpdateCommandList()
+    private final AtomicLong discordUpdateCommandListlastUpdated = new AtomicLong();
+    private void discordUpdateCommandList()
     {
         long then = this.discordUpdateCommandListlastUpdated.get(),
              now = System.currentTimeMillis();
@@ -775,14 +744,14 @@ public class ScarletUI implements AutoCloseable
         this.scarlet.execModal.execute(this.scarlet.discord::updateCommandList);
     }
 
-    static void infoStatsAppend(JPanel panel, GridBagConstraints constraints, String name)
+    private static void infoStatsAppend(JPanel panel, GridBagConstraints constraints, String name)
     {
         constraints.gridx = 0;
         constraints.anchor = GridBagConstraints.WEST;
         panel.add(new JLabel(name, JLabel.LEFT), constraints);
         constraints.gridy++;
     }
-    static void infoStatsAppend(JPanel panel, GridBagConstraints constraints, String name, Supplier<Object> getter)
+    private static void infoStatsAppend(JPanel panel, GridBagConstraints constraints, String name, Supplier<Object> getter)
     {
         Object value = getter.get();
         if (value == null)
@@ -795,7 +764,7 @@ public class ScarletUI implements AutoCloseable
         panel.add(new JLabel(value.toString(), JLabel.LEFT), constraints);
         constraints.gridy++;
     }
-    protected void infoStats(String name, String avatarDisplayName, AvatarBundleInfo bundleInfo)
+    private void infoStats(String name, String avatarDisplayName, AvatarBundleInfo bundleInfo)
     {
         JPanel panel = new JPanel(new GridBagLayout());
         {
@@ -890,8 +859,69 @@ public class ScarletUI implements AutoCloseable
         scroll.setMaximumSize(new Dimension(500, 300));
         ScarletUI.this.messageModalAsyncInfo(null, scroll, name+"'s selected avatar's stats");
     }
+    private static void infoCreditsAppend(JPanel panel, GridBagConstraints constraints, Credits credits)
+    {
+        JLabel name = new JLabel(String.format("<html><a href=\"#\">%s</a></html>", credits.name), JLabel.RIGHT),
+               desc = new JLabel(credits.role, JLabel.LEFT);
+        name.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        name.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                MiscUtils.AWTDesktop.browse(URI.create(credits.url));
+            }
+        });
+        constraints.gridx = 0;
+        constraints.anchor = GridBagConstraints.EAST;
+        panel.add(name, constraints);
+        constraints.gridx = 1;
+        constraints.anchor = GridBagConstraints.WEST;
+        panel.add(desc, constraints);
+        constraints.gridy++;
+    }
+    private void infoCredits()
+    {
+        if (GraphicsEnvironment.isHeadless())
+        {
+            Credits[] credits = Credits.load();
+            if (credits == null)
+            {
+                LOG.error("Failed to load credits!?!?");
+                return;
+            }
+            StringBuilder sb = new StringBuilder("Credits:");
+            for (Credits credit : credits)
+                MiscUtils.fmt(sb, "\n\t[%s](%s): %s", credit.name, credit.url, credit.role);
+            LOG.info(sb.toString());
+            return;
+        }
+        JPanel panel = new JPanel(new GridBagLayout());
+        {
+            GridBagConstraints constraints = new GridBagConstraints();
+            constraints.gridheight = 1;
+            constraints.gridwidth = 1;
+            constraints.gridx = 0;
+            constraints.gridy = 0;
+            constraints.insets = new Insets(1, 1, 1, 1);
+            constraints.weightx = 0.0D;
+            constraints.weighty = 0.0D;
+            Credits[] credits = Credits.load();
+            if (credits == null)
+            {
+                LOG.error("Failed to load credits!?!?");
+            }
+            else for (Credits credit : credits)
+            {
+                infoCreditsAppend(panel, constraints, credit);
+            }
+        }
+        JScrollPane scroll = new JScrollPane(panel);
+        scroll.setSize(new Dimension(700, 200));
+        scroll.setPreferredSize(new Dimension(700, 200));
+        scroll.setMaximumSize(new Dimension(700, 200));
+        ScarletUI.this.messageModalAsyncInfo(null, scroll, "Credits");
+    }
 
-    protected void tryBan(String id, String name)
+    private void tryBan(String id, String name)
     {
         String ownerId = this.scarlet.vrc.groupOwnerId;
         
@@ -926,7 +956,7 @@ public class ScarletUI implements AutoCloseable
         this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Banned user", name);
     }
 
-    protected void tryUnban(String id, String name)
+    private void tryUnban(String id, String name)
     {
         String ownerId = this.scarlet.vrc.groupOwnerId;
 
@@ -961,7 +991,7 @@ public class ScarletUI implements AutoCloseable
         this.scarlet.splash.queueFeedbackPopup(this.jframe, 2_000L, "Unbanned user", name);
     }
 
-    protected void tryInvite(String id, String name)
+    private void tryInvite(String id, String name)
     {
 
         ScarletUI.this.scarlet.execModal.execute(() ->
@@ -1004,7 +1034,7 @@ public class ScarletUI implements AutoCloseable
             }
             
             
-            if (!this.scarlet.confirmGroupInvite.get() || ScarletUI.this.scarlet.ui.confirmModal(null, question, subquestion))
+            if (!this.scarlet.confirmGroupInvite.get() || ScarletUI.this.scarlet.settings.requireConfirmYesNo(question, subquestion))
             {
                 if (respond)
                 {
@@ -1062,14 +1092,14 @@ public class ScarletUI implements AutoCloseable
     }
 
     @Override
-    public void close() throws Exception
+    public void close()
     {
         this.saveSettings(false);
         this.saveInstanceColumns();
         this.jframe.dispose();
     }
 
-    void readSettingUI()
+    private void readSettingUI()
     {
         this.jpanel_settings.removeAll();
         GridBagConstraints gbc_settings = new GridBagConstraints();
@@ -1128,7 +1158,7 @@ public class ScarletUI implements AutoCloseable
         this.jpanel_settings.add(new JLabel(Scarlet.VERSION, JLabel.RIGHT), gbc_settings);
     }
 
-    void loadSettings()
+    public void loadSettings()
     {
         SettingUI settingui = new SettingUI();
         for (ScarletSettings.FileValued<?> fileValued : this.scarlet.settings.fileValuedSettings.values())
@@ -1142,7 +1172,7 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    void saveSettings(boolean showTimeSaved)
+    private void saveSettings(boolean showTimeSaved)
     {
         this.scarlet.settings.saveJson();
         if (showTimeSaved)
@@ -1166,7 +1196,7 @@ public class ScarletUI implements AutoCloseable
         void set(T value);
     }
 
-    class SettingUI implements ScarletSettings.FileValuedVisitor<GUISetting<?>>
+    private class SettingUI implements ScarletSettings.FileValuedVisitor<GUISetting<?>>
     {
         @Override
         public GUISetting<?> visitBasic(FileValued<?> fileValued)
@@ -1210,12 +1240,12 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    abstract class ASetting<T, C extends Component> implements GUISetting<T>
+    private abstract class ASetting<T, C extends Component> implements GUISetting<T>
     {
-        protected ASetting(ScarletSettings.FileValued<T> setting, Supplier<C> render)
-        {
-            this(setting, render.get());
-        }
+//        protected ASetting(ScarletSettings.FileValued<T> setting, Supplier<C> render)
+//        {
+//            this(setting, render.get());
+//        }
         protected ASetting(ScarletSettings.FileValued<T> setting, C render)
         {
             this.setting = setting;
@@ -1226,7 +1256,6 @@ public class ScarletUI implements AutoCloseable
         }
         final ScarletSettings.FileValued<T> setting;
         final C render;
-        Consumer<T> onChanged;
         @Override
         public final String id()
         {
@@ -1262,7 +1291,7 @@ public class ScarletUI implements AutoCloseable
         protected abstract void onMaybeChange(T previous, T next, boolean valid, String source);
     }
 
-    class StringSetting extends ASetting<String, JTextField>
+    private class StringSetting extends ASetting<String, JTextField>
     {
         StringSetting(ScarletSettings.FileValued<String> setting)
         {
@@ -1452,7 +1481,7 @@ public class ScarletUI implements AutoCloseable
     }
 //*/
 
-    class IntSetting extends ASetting<Integer, JTextField>
+    private class IntSetting extends ASetting<Integer, JTextField>
     {
         IntSetting(ScarletSettings.FileValued<Integer> setting)
         {
@@ -1524,7 +1553,7 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    class BoolSetting extends ASetting<Boolean, JCheckBox>
+    private class BoolSetting extends ASetting<Boolean, JCheckBox>
     {
         BoolSetting(ScarletSettings.FileValued<Boolean> setting)
         {
@@ -1558,7 +1587,7 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    class EnumSetting<E extends Enum<E>> extends ASetting<E, JComboBox<E>>
+    private class EnumSetting<E extends Enum<E>> extends ASetting<E, JComboBox<E>>
     {
         EnumSetting(ScarletSettings.FileValued<E> setting)
         {
@@ -1602,7 +1631,7 @@ public class ScarletUI implements AutoCloseable
         }
     }
 
-    class VoidSetting implements GUISetting<Void>
+    private class VoidSetting implements GUISetting<Void>
     {
         protected VoidSetting(ScarletSettings.FileValued<Void> setting, Runnable buttonPressed)
         {

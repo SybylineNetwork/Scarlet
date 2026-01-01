@@ -177,6 +177,10 @@ public class ScarletData
             return targetFile.isFile() && condition.test(targetFile);
         });
     }
+    <T> boolean existsSub(String kind, String id)
+    {
+        return new File(new File(this.dir, kind), id).isFile();
+    }
     <T> T readSub(String kind, String id, Class<T> type)
     {
         return this.readSub(kind, id, type, false);
@@ -584,6 +588,10 @@ public class ScarletData
     public AuditEntryMetadata auditEntryMetadata(String auditEntryId)
     {
         return this.readSub("gaud", auditEntryId, AuditEntryMetadata.class);
+    }
+    public boolean auditEntryMetadataExists(String auditEntryId)
+    {
+        return this.existsSub("gaud", auditEntryId);
     }
     public void auditEntryMetadata(String auditEntryId, AuditEntryMetadata auditEntryMetadata)
     {

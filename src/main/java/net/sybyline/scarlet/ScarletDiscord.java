@@ -40,6 +40,8 @@ public interface ScarletDiscord extends Closeable
         GroupAuditType latype = GroupAuditType.of(entry.getEventType());
         if (latype == null)
             return;
+        if (scarlet.data.auditEntryMetadataExists(entry.getId()))
+            return; // Avoid logging events duplicated by the new
         ScarletData.AuditEntryMetadata entryMeta = new ScarletData.AuditEntryMetadata();
         entryMeta.entry = entry;
         if (entry.getActorDisplayName() == null)

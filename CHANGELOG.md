@@ -7,6 +7,11 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.15
+  - Added proper handling of headless environments (currently no way to print Instance UI to terminal)
+  - Added credits button
+  - Fixed audit events possibly being skipped due to clock drift
+
 ## 0.4.15-rc5
   - Added `/schedule` Discord slash command to edit general settings. This is part of a move toward having full (desktop-)headless support.
   - Fixed alt accounts causing nonexistant class to be loaded
