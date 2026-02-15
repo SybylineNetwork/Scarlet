@@ -11,7 +11,7 @@ import net.sybyline.scarlet.ScarletPendingModActions;
 import net.sybyline.scarlet.ScarletStaffList;
 import net.sybyline.scarlet.ScarletVRChatReportTemplate;
 import net.sybyline.scarlet.ScarletWatchedGroups;
-import net.sybyline.scarlet.util.TTSService;
+import net.sybyline.scarlet.util.tts.TtsService;
 
 public class ScarletServer extends ScarletApp
 {
@@ -25,7 +25,7 @@ public class ScarletServer extends ScarletApp
         this.watchedGroups = new ScarletWatchedGroups(new File(this.serverDir, "watched_groups.json"));
         this.vrcReport = new ScarletVRChatReportTemplate(new File(this.serverDir, "report_template.txt"));
         this.data = new ScarletData(new File(this.serverDir, "data"));
-        this.ttsService = new TTSService(new File(this.serverDir, "tts"), new TTSListener());
+        this.ttsService = new TtsService(new File(this.serverDir, "tts"), null, null);
     }
 
     final File serverDir;
@@ -34,20 +34,7 @@ public class ScarletServer extends ScarletApp
     final ScarletWatchedGroups watchedGroups;
     final ScarletVRChatReportTemplate vrcReport;
     final ScarletData data;
-    final TTSService ttsService;
-    class TTSListener implements TTSService.Listener
-    {
-        @Override
-        public void tts_init(TTSService tts)
-        {
-            // TODO Auto-generated method stub
-        }
-        @Override
-        public void tts_ready(String job, File file)
-        {
-            // TODO Auto-generated method stub
-        }
-    }
+    final TtsService ttsService;
 
     public class VRCGroupContext
     {

@@ -68,6 +68,7 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
@@ -117,9 +118,11 @@ import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.ext.VrcLaunch;
+import net.sybyline.scarlet.server.discord.DAudioDaveSession;
 import net.sybyline.scarlet.server.discord.DCommands;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
+import net.sybyline.scarlet.server.discord.dave.Dave;
 import net.sybyline.scarlet.util.LRUMap;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -162,6 +165,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.avatarSearchProviders = scarlet.settings.new FileValuedStringArrayPattern("custom_avatar_search_providers", "VRCX-compatible avatar search providers", AvatarSearch.URL_ROOTS.clone(), "https?://.+", false);
         this.resetAvatarSearchProviders = scarlet.settings.new FileValuedVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
         this.load();
+        Dave.INSTANCE.daveSetLogSinkCallbackDefault();
         JDA jda = null;
         String token0 = this.token.getOrNull();
         if (token0 != null && !token0.isEmpty()) try
@@ -171,6 +175,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
             .enableCache(CacheFlag.VOICE_STATE)
+            .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(DAudioDaveSession::new))
             .build();
         }
         catch (InvalidTokenException|IllegalArgumentException ex)
@@ -1030,6 +1035,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 return;
         }
 
+    }
+
+    @Override
+    public boolean isEmitting(GroupAuditType auditType)
+    {
+        return this.jda != null && auditType != null && this.auditType2channelSf.get(auditType.id) != null;
+    }
+
+    @Override
+    public boolean isEmitting(GroupAuditTypeEx auditTypeEx)
+    {
+        return this.jda != null && auditTypeEx != null && this.auditExType2channelSf.get(auditTypeEx.id) != null;
     }
     
     boolean shouldRedact(String infoId, String requesterSf)

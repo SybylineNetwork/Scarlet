@@ -23,7 +23,7 @@ public interface VrcApiStatic
 
     static ModelFile file(String fileId)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/api/1/file/"+fileId))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/api/1/file/"+fileId, ExtendedUserAgent.init_conn))
         {
             return in.readAsJson(null, JSON.getGson(), ModelFile.class);
         }
@@ -49,7 +49,7 @@ public interface VrcApiStatic
     }
     static CalendarEvent event(String groupId, String eventId)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/api/1/calendar/"+groupId+"/"+eventId))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/api/1/calendar/"+groupId+"/"+eventId, ExtendedUserAgent.init_conn))
         {
             return in.readAsJson(null, JSON.getGson(), CalendarEvent.class);
         }
@@ -150,7 +150,7 @@ public interface VrcApiStatic
     }
     static StaticContent user(String userId)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/user/"+userId))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/user/"+userId, ExtendedUserAgent.init_conn))
         {
             Map<String, String> metas = Hypertext.scrapeMetaNameContent(in.asReader(null));
             String name = metas.get("og:title"),
@@ -176,7 +176,7 @@ public interface VrcApiStatic
     }
     static StaticContent group(String groupId)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/group/"+groupId))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/group/"+groupId, ExtendedUserAgent.init_conn))
         {
             Map<String, String> metas = Hypertext.scrapeMetaNameContent(in.asReader(null));
             String name = metas.get("og:title"),
@@ -202,7 +202,7 @@ public interface VrcApiStatic
     }
     static String groupResolve(String groupCode)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://api.vrchat.cloud/api/1/groups/redirect/"+groupCode, HttpURLInputStream.DISABLE_REDIRECTS))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://api.vrchat.cloud/api/1/groups/redirect/"+groupCode, ExtendedUserAgent.init_conn_disable_redirects))
         {
             String location = in.connection().getHeaderField("location");
             if (location != null && location.startsWith("/home/group/"))
@@ -219,7 +219,7 @@ public interface VrcApiStatic
     }
     static String locationSecureNameResolve(String secureName)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/i/"+secureName, HttpURLInputStream.DISABLE_REDIRECTS))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/i/"+secureName, ExtendedUserAgent.init_conn_disable_redirects))
         {
             String location = in.connection().getHeaderField("location");
             if (location != null && location.startsWith("/home/launch?worldId="))
@@ -237,7 +237,7 @@ public interface VrcApiStatic
     static final Pattern OG_IMAGE_ALT = Pattern.compile("\\A\\QA preview image of VRChat \\E\\w+\\Q \"\\E(?<name>.+)\\Q\" by \\E(?<ownerName>.+)\\z");
     static StaticContent world(String worldId)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/world/"+worldId))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/world/"+worldId, ExtendedUserAgent.init_conn))
         {
             Map<String, String> metas = Hypertext.scrapeMetaNameContent(in.asReader(null));
             Matcher matcher = OG_IMAGE_ALT.matcher(metas.get("og:image:alt"));
@@ -275,7 +275,7 @@ public interface VrcApiStatic
     }
     static StaticContent avatar(String avatarId)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/avatar/"+avatarId))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrchat.com/home/avatar/"+avatarId, ExtendedUserAgent.init_conn))
         {
             Map<String, String> metas = Hypertext.scrapeMetaNameContent(in.asReader(null));
             Matcher matcher = OG_IMAGE_ALT.matcher(metas.get("og:image:alt"));

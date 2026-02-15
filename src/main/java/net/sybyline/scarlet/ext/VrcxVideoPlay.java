@@ -46,9 +46,9 @@ public interface VrcxVideoPlay
         if (string.startsWith("VideoPlay(ZuwaZuwaDance) "))
             return parseZuwaZuwaDance(string.substring(25));
         if (string.startsWith("LSMedia "))
-            return parsePyPyDance(string.substring(8));
+            return parseLSMedia(string.substring(8));
         if (string.startsWith("VideoPlay(PopcornPalace) "))
-            return parsePyPyDance(string.substring(25));
+            return parsePopcornPalace(string.substring(25));
         return null;
     }
 

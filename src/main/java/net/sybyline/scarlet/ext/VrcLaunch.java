@@ -26,7 +26,8 @@ public interface VrcLaunch
     {
         if (Platform.CURRENT.isNT())
             launch_win(userId, location);
-        MiscUtils.AWTDesktop.browse(URI.create("vrchat://launch?ref=SybylineNetworkScarlet&id="+location));
+        else
+            MiscUtils.AWTDesktop.browse(URI.create("vrchat://launch?ref=SybylineNetworkScarlet&id="+location));
     }
     static void launch_win(String userId, String location) throws Exception
     {

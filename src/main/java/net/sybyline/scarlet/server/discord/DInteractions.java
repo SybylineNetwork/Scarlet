@@ -50,22 +50,28 @@ import io.github.vrchatapi.model.GroupRole;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.MessageTopLevelComponent;
+import net.dv8tion.jda.api.components.ModalTopLevelComponent;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.attachmentupload.AttachmentUpload;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.components.label.Label;
 import net.dv8tion.jda.api.components.label.LabelChildComponent;
+import net.dv8tion.jda.api.components.selections.EntitySelectMenu;
 import net.dv8tion.jda.api.components.selections.SelectOption;
 import net.dv8tion.jda.api.components.selections.StringSelectMenu;
+import net.dv8tion.jda.api.components.textdisplay.TextDisplay;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.IMentionable;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Mentions;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
@@ -1161,20 +1167,98 @@ public class DInteractions
             Function<? super GroupRole[], ? extends LabelChildComponent> populator = populateValue -> builder.setRequiredRange(minChoices, Math.min(maxChoices, Math.min(map.size() - 25, 25))).addOptions(map.entrySet().stream().skip(25L).limit(25L).map($ -> SelectOption.of($.getValue().getName(), $.getKey())).toArray(SelectOption[]::new)).setDefaultValues(populateValue == null ? new String[0] : MiscUtils.map(populateValue, String[]::new, GroupRole::getId)).build();
             return new ModalFlowOption<GroupRole[]>(id, name, desc, resolver, populator);
         }
+        public static ModalFlowOption<List<User>> ofDiscordUsers(String id, String name, String desc, boolean required, String placeholder, int minChoices, int maxChoices)
+        {
+            EntitySelectMenu.Builder builder = EntitySelectMenu.create(id, EntitySelectMenu.SelectTarget.USER)
+                .setRequired(required)
+                .setPlaceholder(placeholder)
+                .setRequiredRange(minChoices, maxChoices)
+                ;
+            Function<? super ModalMapping, ? extends List<User>> resolver = mapping -> mapping.getAsMentions().getUsers();
+            Function<? super List<User>, ? extends LabelChildComponent> populator = populateValue -> builder.build();
+            return new ModalFlowOption<List<User>>(id, name, desc, resolver, populator);
+        }
+        public static ModalFlowOption<List<Role>> ofDiscordRoles(String id, String name, String desc, boolean required, String placeholder, int minChoices, int maxChoices)
+        {
+            EntitySelectMenu.Builder builder = EntitySelectMenu.create(id, EntitySelectMenu.SelectTarget.ROLE)
+                .setRequired(required)
+                .setPlaceholder(placeholder)
+                .setRequiredRange(minChoices, maxChoices)
+                ;
+            Function<? super ModalMapping, ? extends List<Role>> resolver = mapping -> mapping.getAsMentions().getRoles();
+            Function<? super List<Role>, ? extends LabelChildComponent> populator = populateValue -> builder.build();
+            return new ModalFlowOption<List<Role>>(id, name, desc, resolver, populator);
+        }
+        public static ModalFlowOption<Mentions> ofDiscordUsersOrRoles(String id, String name, String desc, boolean required, String placeholder, int minChoices, int maxChoices)
+        {
+            EntitySelectMenu.Builder builder = EntitySelectMenu.create(id, EntitySelectMenu.SelectTarget.USER, EntitySelectMenu.SelectTarget.ROLE)
+                .setRequired(required)
+                .setPlaceholder(placeholder)
+                .setRequiredRange(minChoices, maxChoices)
+                ;
+            Function<? super ModalMapping, ? extends Mentions> resolver = mapping -> mapping.getAsMentions();
+            Function<? super Mentions, ? extends LabelChildComponent> populator = populateValue -> builder.build();
+            return new ModalFlowOption<Mentions>(id, name, desc, resolver, populator);
+        }
+        public static ModalFlowOption<List<GuildChannel>> ofDiscordChannels(String id, String name, String desc, boolean required, String placeholder, int minChoices, int maxChoices)
+        {
+            EntitySelectMenu.Builder builder = EntitySelectMenu.create(id, EntitySelectMenu.SelectTarget.CHANNEL)
+                .setRequired(required)
+                .setPlaceholder(placeholder)
+                .setRequiredRange(minChoices, maxChoices)
+                ;
+            Function<? super ModalMapping, ? extends List<GuildChannel>> resolver = mapping -> mapping.getAsMentions().getChannels();
+            Function<? super List<GuildChannel>, ? extends LabelChildComponent> populator = populateValue -> builder.build();
+            return new ModalFlowOption<List<GuildChannel>>(id, name, desc, resolver, populator);
+        }
+        public static ModalFlowOption<String> ofTextDisplay(String id, String content)
+        {
+            return new ModalFlowOption<String>(id, id, id, $ -> content, TextDisplay::of, null);
+        }
+        public static ModalFlowOption<List<Message.Attachment>> ofAttachmentUpload(String id, String name, String desc, boolean required, int minAttachments, int maxAttachments)
+        {
+            AttachmentUpload.Builder builder = AttachmentUpload.create(id)
+                .setRequired(required)
+                .setRequiredRange(minAttachments, maxAttachments)
+                ;
+            Function<? super ModalMapping, ? extends List<Message.Attachment>> resolver = mapping -> mapping.getAsAttachmentList();
+            Function<? super List<Message.Attachment>, ? extends LabelChildComponent> populator = populateValue -> builder.build();
+            return new ModalFlowOption<List<Message.Attachment>>(id, name, desc, resolver, populator);
+        }
+//        public static <T> ModalFlowOption<T> ofRadioGroup(String id, String name, String desc, boolean required, int minAttachments, int maxAttachments, T[] options)
+//        {
+//            return new ModalFlowOption<T>(id, name, desc, null, null);
+//        }
+//        public static <T> ModalFlowOption<T[]> ofCheckboxGroup(String id, String name, String desc, boolean required, int minSelected, int maxSelected, T[] options)
+//        {
+//            return new ModalFlowOption<T[]>(id, name, desc, null, null);
+//        }
+//        public static ModalFlowOption<Boolean> ofCheckbox(String id, String name, String desc, boolean defaultValue)
+//        {
+//            return new ModalFlowOption<Boolean>(id, name, desc, null, null);
+//        }
         ModalFlowOption(String id, String name, String desc, Function<? super ModalMapping, ? extends T> resolver, Function<? super T, ? extends LabelChildComponent> populator)
         {
             this.id = id;
             this.name = name;
             this.desc = desc;
             this.resolver = resolver;
+            this.populator = $ -> Label.of(this.name, this.desc, populator.apply($));
+        }
+        ModalFlowOption(String id, String name, String desc, Function<? super ModalMapping, ? extends T> resolver, Function<? super T, ? extends ModalTopLevelComponent> populator, Void ignored)
+        {
+            this.id = id;
+            this.name = name;
+            this.desc = name;
+            this.resolver = resolver;
             this.populator = populator;
         }
         final String id, name, desc;
         final Function<? super ModalMapping, ? extends T> resolver;
-        final Function<? super T, ? extends LabelChildComponent> populator;
+        final Function<? super T, ? extends ModalTopLevelComponent> populator;
         Modal.Builder append(Modal.Builder builder, T populateValue)
         {
-            return builder.addComponents(Label.of(this.name, this.desc, this.populator.apply(populateValue)));
+            return builder.addComponents(this.populator.apply(populateValue));
         }
         T get(ModalInteractionEvent event)
         {

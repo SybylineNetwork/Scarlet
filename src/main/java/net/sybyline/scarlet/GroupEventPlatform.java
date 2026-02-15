@@ -1,26 +1,34 @@
 package net.sybyline.scarlet;
 
+import io.github.vrchatapi.model.CalendarEventPlatform;
+
 import net.sybyline.scarlet.server.discord.DEnum;
 
 public enum GroupEventPlatform implements DEnum.DEnumString<GroupEventPlatform>
 {
-    ANDRIOD("android", "Android"),
-    IOS("ios", "iOS"),
-    WINDOWS("standalonewindows", "Windows"),
+    ANDRIOD(CalendarEventPlatform.ANDROID, "Android"),
+    IOS(CalendarEventPlatform.IOS, "iOS"),
+    WINDOWS(CalendarEventPlatform.STANDALONEWINDOWS, "Windows"),
     ;
 
-    private GroupEventPlatform(String value, String display)
+    private GroupEventPlatform(CalendarEventPlatform value, String display)
     {
         this.value = value;
         this.display = display;
     }
 
-    final String value, display;
+    final CalendarEventPlatform value;
+    final String display;
+
+    public CalendarEventPlatform model()
+    {
+        return this.value;
+    }
 
     @Override
     public String value()
     {
-        return this.value;
+        return this.value.getValue();
     }
 
     @Override
@@ -38,6 +46,18 @@ public enum GroupEventPlatform implements DEnum.DEnumString<GroupEventPlatform>
         case "android": return ANDRIOD;
         case "ios": return IOS;
         case "standalonewindows": return WINDOWS;
+        default: return null;
+        }
+    }
+    public static GroupEventPlatform of(CalendarEventPlatform model)
+    {
+        if (model == null)
+            return null;
+        switch (model)
+        {
+        case ANDROID: return ANDRIOD;
+        case IOS: return IOS;
+        case STANDALONEWINDOWS: return WINDOWS;
         default: return null;
         }
     }

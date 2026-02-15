@@ -26,7 +26,7 @@ import com.google.gson.JsonObject;
 import io.github.vrchatapi.ApiException;
 import io.github.vrchatapi.JSON;
 import io.github.vrchatapi.model.GroupAccessType;
-import io.github.vrchatapi.model.GroupLimitedMember;
+import io.github.vrchatapi.model.GroupMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.Instance;
@@ -238,7 +238,7 @@ public class ScarletDiscordUI
             return;
         }
         
-        GroupLimitedMember glm = this.discord.scarlet.vrc.getGroupMembership(this.discord.scarlet.vrc.groupId, vrcTargetId);
+        GroupMember glm = this.discord.scarlet.vrc.getGroupMembership(this.discord.scarlet.vrc.groupId, vrcTargetId);
         String value = glm == null ? null : glm.getManagerNotes();
         
         event.replyModal(Modal.create("vrchat-user-edit-manager-notes:"+vrcTargetId, "Manager notes for "+MarkdownSanitizer.escape(sc.getDisplayName()))

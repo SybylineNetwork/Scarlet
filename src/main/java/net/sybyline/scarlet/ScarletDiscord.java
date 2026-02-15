@@ -35,6 +35,10 @@ public interface ScarletDiscord extends Closeable
 
     public boolean submitAudio(File file);
 
+    public boolean isEmitting(GroupAuditType auditType);
+
+    public boolean isEmitting(GroupAuditTypeEx auditTypeEx);
+
     public default void process(Scarlet scarlet, GroupAuditLogEntry entry)
     {
         GroupAuditType latype = GroupAuditType.of(entry.getEventType());

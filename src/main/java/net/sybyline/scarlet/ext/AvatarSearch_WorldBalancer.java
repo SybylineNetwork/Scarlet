@@ -28,7 +28,7 @@ public interface AvatarSearch_WorldBalancer
 
     static boolean putAvatarExternal(String id, String userid)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/v2/vrchat/avatars/store/putavatarEx", HttpURLInputStream.writeAsJson(null, null, PutAvatarExternalRequest.class, new PutAvatarExternalRequest(id, userid))))
+        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/v2/vrchat/avatars/store/putavatarEx", ExtendedUserAgent.init_conn, HttpURLInputStream.writeAsJson(null, null, PutAvatarExternalRequest.class, new PutAvatarExternalRequest(id, userid))))
         {
         }
         catch (IOException ioex)

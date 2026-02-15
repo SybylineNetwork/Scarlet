@@ -42,12 +42,14 @@ import io.github.vrchatapi.api.InstancesApi;
 import io.github.vrchatapi.api.UsersApi;
 import io.github.vrchatapi.api.WorldsApi;
 import io.github.vrchatapi.model.Avatar;
+import io.github.vrchatapi.model.CalendarEventAccess;
+import io.github.vrchatapi.model.CalendarEventPlatform;
 import io.github.vrchatapi.model.CreateCalendarEventRequest;
 import io.github.vrchatapi.model.Group;
 import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupGallery;
 import io.github.vrchatapi.model.GroupGalleryImage;
-import io.github.vrchatapi.model.GroupLimitedMember;
+import io.github.vrchatapi.model.GroupMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
@@ -109,6 +111,7 @@ import net.sybyline.scarlet.server.discord.DInteractions.SlashOptionsChoicesUnsa
 import net.sybyline.scarlet.server.discord.DInteractions.StringSel;
 import net.sybyline.scarlet.server.discord.DOptionEnum;
 import net.sybyline.scarlet.util.Func.F1;
+import net.sybyline.scarlet.util.tts.TtsProvider;
 import net.sybyline.scarlet.util.Gifs;
 import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.Location;
@@ -238,7 +241,7 @@ public class ScarletDiscordCommands
         public void world(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("search-query") String searchQuery, @SlashOpt("entries-per-page") int entriesPerPage) throws Exception
         {
             MessageEmbed[] embeds = new WorldsApi(ScarletDiscordCommands.this.discord.scarlet.vrc.client)
-                .searchWorlds(null, null, null, null, 50, null, 0, searchQuery, null, null, null, null, null, null, null)
+                .searchWorlds(null, null, null, null, 50, null, 0, searchQuery, null, null, null, null, null, null, null, null, null)
                 .stream()
                 .map($ -> new EmbedBuilder()
                     .setAuthor($.getAuthorName(), VrcWeb.Home.user($.getAuthorId()), null)
@@ -254,7 +257,7 @@ public class ScarletDiscordCommands
         public void user(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("search-query") String searchQuery, @SlashOpt("entries-per-page") int entriesPerPage) throws Exception
         {
             MessageEmbed[] embeds = new UsersApi(ScarletDiscordCommands.this.discord.scarlet.vrc.client)
-                .searchUsers(searchQuery, null, 50, 0)
+                .searchUsers(searchQuery, null, 50, 0, null)
                 .stream()
                 .map($ -> new EmbedBuilder()
                     .setTitle(MiscUtils.maybeEllipsis(256, $.getDisplayName()), VrcWeb.Home.user($.getId()))
@@ -1612,7 +1615,7 @@ public class ScarletDiscordCommands
             MessageEmbed[] embeds = Arrays.stream(this._getIds())
                 .map($ -> {
                     User sc = ScarletDiscordCommands.this.discord.scarlet.vrc.getUser($, within1day);
-                    GroupLimitedMember member = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, $);
+                    GroupMember member = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, $);
                     ScarletData.UserMetadata userMeta = ScarletDiscordCommands.this.discord.scarlet.data.userMetadata($);
                     EmbedBuilder builder = new EmbedBuilder();
                     builder.setTitle(sc == null ? $ : sc.getDisplayName(), VrcWeb.Home.user($));
@@ -1682,7 +1685,7 @@ public class ScarletDiscordCommands
             
             if (vrchatRoleOpt == null)
                 return;
-            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId);
+            GroupMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId);
             if (glm != null)
             {
                 List<String> roleIds = glm.getRoleIds();
@@ -1714,7 +1717,7 @@ public class ScarletDiscordCommands
 
             if (vrchatRoleOpt == null)
                 return;
-            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId);
+            GroupMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrcId);
             if (glm != null)
             {
                 List<String> roleIds = glm.getRoleIds();
@@ -2192,7 +2195,7 @@ public class ScarletDiscordCommands
         @Desc("Adds a VRChat Group Role")
         public void addRole(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("vrchat-role") io.github.vrchatapi.model.GroupRole vrchatRole) throws Exception
         {
-            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId());
+            GroupMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId());
             if (glm != null)
             {
                 List<String> roleIds = glm.getRoleIds();
@@ -2210,7 +2213,7 @@ public class ScarletDiscordCommands
         @Desc("Removes a VRChat Group Role")
         public void removeRole(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("vrchat-user") io.github.vrchatapi.model.User vrchatUser, @SlashOpt("vrchat-role") io.github.vrchatapi.model.GroupRole vrchatRole) throws Exception
         {
-            GroupLimitedMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId());
+            GroupMember glm = ScarletDiscordCommands.this.discord.scarlet.vrc.getGroupMembership(ScarletDiscordCommands.this.discord.scarlet.vrc.groupId, vrchatUser.getId());
             if (glm != null)
             {
                 List<String> roleIds = glm.getRoleIds();
@@ -3442,20 +3445,14 @@ public class ScarletDiscordCommands
 
     // set-tts-voice
 
-    public final SlashOption<String> _voiceName = SlashOption.ofString("voice-name", "The name of the installed voice to use", true, null, this::_voiceName);
-    void _voiceName(CommandAutoCompleteInteractionEvent event) { event.replyChoiceStrings(this.discord.scarlet.ttsService.getInstalledVoices()).queue(); }
+    public final SlashOption<String> _voiceName = SlashOption.ofString("voice-name", "The name of the installed voice to use", true, null, new DInteractions.SlashOptionStringsUnsanitized(this::_voiceName, true));
+    String[] _voiceName() { List<String> names = this.discord.scarlet.ttsService.getInstalledVoices(); return names.toArray(new String[names.size()]); }
     @SlashCmd("set-tts-voice")
     @Desc("Selects which TTS voice is used to make announcements")
     @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setTtsVoice(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("voice-name") String voiceName) throws Exception
     {
-        if (!this.discord.scarlet.ttsService.selectVoice(voiceName))
-        {
-            hook.sendMessageFormat("Tried to set TTS voice to `%s` (subprocess not responsive)", voiceName).setEphemeral(true).queue();
-            return;
-        }
-        
-        if (!this.discord.scarlet.ttsService.getInstalledVoices().contains(voiceName))
+        if (!this.discord.scarlet.ttsService.getInstalledVoices().stream().anyMatch(voiceName::equals))
         {
             hook.sendMessageFormat("TTS voice `%s` is not installed on this system", voiceName).setEphemeral(true).queue();
             return;
@@ -3599,7 +3596,7 @@ public class ScarletDiscordCommands
             eventSpec.duration = eventDuration;
             eventSpec.frequency = eventFrequency;
             eventSpec.vrcCalendarEventParameters.setCategory(eventCategory.value);
-            eventSpec.vrcCalendarEventParameters.setAccessType(CreateCalendarEventRequest.AccessTypeEnum.PUBLIC);
+            eventSpec.vrcCalendarEventParameters.setAccessType(CalendarEventAccess.PUBLIC);
             eventSpec.vrcCalendarEventParameters.setSendCreationNotification(Boolean.TRUE);
             ScarletDiscordCommands.this.discord.scarlet.calendar.eventSpecs.put(eventId, eventSpec);
             ScarletDiscordCommands.this.discord.scarlet.calendar.save();
@@ -3757,12 +3754,12 @@ public class ScarletDiscordCommands
             ScarletDiscordCommands.this.discord.scarlet.calendar.save();
             hook.sendMessage("Set event schedule category").setEphemeral(true).queue();
         }
-        public final SlashOption<CreateCalendarEventRequest.AccessTypeEnum> _eventAccess = SlashOption.ofDOptionEnum(DOptionEnum.of("event-access", "Event Access", CreateCalendarEventRequest.AccessTypeEnum.class, CreateCalendarEventRequest.AccessTypeEnum::getValue, "Public", "Group"), true);
+        public final SlashOption<CalendarEventAccess> _eventAccess = SlashOption.ofDOptionEnum(DOptionEnum.of("event-access", "Event Access", CalendarEventAccess.class, CalendarEventAccess::getValue, "Public", "Group"), true);
         @SlashCmd("set-access")
         @Desc("Set an event schedule's access")
         public void setAccess(SlashCommandInteractionEvent event, InteractionHook hook,
                 @SlashOpt("scarlet-event-spec") ScarletCalendar.EventSpec eventSpec,
-                @SlashOpt("event-access") CreateCalendarEventRequest.AccessTypeEnum eventAccess)
+                @SlashOpt("event-access") CalendarEventAccess eventAccess)
         {
             if (eventSpec == null)
             {
@@ -3962,7 +3959,7 @@ public class ScarletDiscordCommands
             SetPlatformsModal(ScarletCalendar.EventSpec eventSpec)
             {
                 this.eventSpec = eventSpec;
-                List<String> platforms = eventSpec.vrcCalendarEventParameters.getPlatforms();
+                List<CalendarEventPlatform> platforms = eventSpec.vrcCalendarEventParameters.getPlatforms();
                 if (platforms != null && !platforms.isEmpty())
                 {
                     GroupEventPlatform[] eventPlatforms = platforms.stream().map(GroupEventPlatform::of).filter(Objects::nonNull).toArray(GroupEventPlatform[]::new);
@@ -3984,7 +3981,7 @@ public class ScarletDiscordCommands
                     return;
                 }
                 
-                this.eventSpec.vrcCalendarEventParameters.setPlatforms(new ArrayList<>(Arrays.stream(this.eventPlatforms).filter(Objects::nonNull).map(GroupEventPlatform::value).collect(Collectors.toList())));
+                this.eventSpec.vrcCalendarEventParameters.setPlatforms(new ArrayList<>(Arrays.stream(this.eventPlatforms).filter(Objects::nonNull).map(GroupEventPlatform::model).collect(Collectors.toList())));
                 ScarletDiscordCommands.this.discord.scarlet.calendar.save();
                 event.reply("Set event platforms").setEphemeral(true).queue();
             }

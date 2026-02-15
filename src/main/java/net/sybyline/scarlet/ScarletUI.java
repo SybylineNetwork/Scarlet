@@ -94,6 +94,7 @@ import net.sybyline.scarlet.util.HttpURLInputStream;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.PropsTable;
 import net.sybyline.scarlet.util.VrcWeb;
+import net.sybyline.scarlet.util.tts.WinSapiTtsProvider;
 import net.sybyline.scarlet.util.VersionedFile;
 
 public class ScarletUI implements IScarletUI
@@ -536,12 +537,16 @@ public class ScarletUI implements IScarletUI
                     jmenu_help.add("Scarlet: License").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.LICENSE_URL)));
                     jmenu_help.add("Scarlet: Credits").addActionListener($ -> this.infoCredits());
                     jmenu_help.addSeparator();
+                    jmenu_help.add("Text-to-Speech: Natural Voices (Windows)").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(WinSapiTtsProvider.NaturalVoiceSAPIAdapter_URL)));
+                    jmenu_help.addSeparator();
                     jmenu_help.add("VRChat: Terms of Service").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.TERMS_OF_SERVICE)));
                     jmenu_help.add("VRChat: Privacy Policy").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.PRIVACY_POLICY+"#7")));
                     jmenu_help.add("VRChat: Community Guidelines").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(VrcWeb.Community.GUIDELINES)));
                     jmenu_help.addSeparator();
                     jmenu_help.add("VRChat Community (unofficial): API Documentation").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.COMMUNITY_URL)));
                     jmenu_help.add("VRChat Community (unofficial): API Documentation Github").addActionListener($ -> MiscUtils.AWTDesktop.browse(URI.create(Scarlet.COMMUNITY_GITHUB_URL)));
+                    
+                    
                 }
                 jmenubar.add(jmenu_help);
             }

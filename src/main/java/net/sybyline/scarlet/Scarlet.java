@@ -56,8 +56,8 @@ import net.sybyline.scarlet.util.MavenDepsLoader;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Platform;
 import net.sybyline.scarlet.util.ProcLock;
-import net.sybyline.scarlet.util.TTSService;
 import net.sybyline.scarlet.util.VrcIds;
+import net.sybyline.scarlet.util.tts.TtsService;
 import net.sybyline.scarlet.util.EnforcementAgeState;
 import net.sybyline.scarlet.util.EnforcementListState;
 
@@ -101,7 +101,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.15",
+        VERSION = "0.4.16-b1",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -352,9 +352,9 @@ public class Scarlet implements Closeable
     final ScarletSecretStaffList secretStaffList = new ScarletSecretStaffList(new File(dir, "secret_staff_list.json"));
     final ScarletVRChatReportTemplate vrcReport = new ScarletVRChatReportTemplate(new File(dir, "report_template.txt"));
     final ScarletData data = new ScarletData(new File(dir, "data"));
-    final TTSService ttsService = new TTSService(new File(dir, "tts"), this.eventListener);
     final ScarletVRChat vrc = new ScarletVRChat(this, "global", new File(dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
+    final TtsService ttsService = new TtsService(new File(dir, "tts"), this.eventListener, this.discord);
     final ScarletCalendar calendar = new ScarletCalendar(this, new File(dir, "event_schedule.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     String[] last25logs = new String[0];
@@ -635,7 +635,6 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
                 String text = ls.nextLine().trim();
                 if (!text.isEmpty())
                 {
-                    this.ttsService.setOutputToDefaultAudioDevice(this.eventListener.ttsUseDefaultAudioDevice.get());
                     LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit("cli-"+Long.toUnsignedString(System.nanoTime()), text));
                 }
             } break;

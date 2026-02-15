@@ -7,6 +7,17 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.16-b1
+  - Added (very WIP) support for the new DAVE system (voice channel encryption)
+  - Added TTS support for eSpeak on Linux (credit to 0xkubectl and KozyBlake for downstream implementation reference)
+  - Added informational link to the [NaturalVoiceSAPIAdapter](https://github.com/gexgd0419/NaturalVoiceSAPIAdapter) project, which Scarlet can take advantage of on Windows
+  - Changed TTS support on Windows to use COM/SAPI5 instead of spawning a PowerShell process
+  - Changed handling of User Switch Avatar extended event to only search for matches if the event will be logged in Discord
+  - Changed User-Agent sent to VRCX avatar search providers to include requester ID (requested by a provider in effort to prevent unnecessary load)
+  - Bump dependency `vrchatapi`: 1.20.4 -> 1.20.8-nightly.8
+  - Bump dependency `jda`: 6.1.0 -> 6.3.0
+  - Bump dependency `jna`: 4.4.0 -> 5.18.1
+
 ## 0.4.15
   - Added proper handling of headless environments (currently no way to print Instance UI to terminal)
   - Added credits button

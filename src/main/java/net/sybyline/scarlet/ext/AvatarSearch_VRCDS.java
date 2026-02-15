@@ -28,7 +28,7 @@ public interface AvatarSearch_VRCDS
 
     static boolean putAvatarExternal(String id, String userid)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/v1/vrchat/avatars/store/putavatarExternal", HttpURLInputStream.writeAsJson(null, null, PutAvatarExternalRequest.class, new PutAvatarExternalRequest(id, userid))))
+        try (HttpURLInputStream in = HttpURLInputStream.post(API_ROOT+"/v1/vrchat/avatars/store/putavatarExternal", ExtendedUserAgent.init_conn, HttpURLInputStream.writeAsJson(null, null, PutAvatarExternalRequest.class, new PutAvatarExternalRequest(id, userid))))
         {
         }
         catch (IOException ioex)

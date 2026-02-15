@@ -38,7 +38,7 @@ public interface AvatarSearch_AvatarSearch_CC
     }
     static VrcxAvatar[] list(String url)
     {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(HttpURLInputStream.get(url))))
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(HttpURLInputStream.get(url, ExtendedUserAgent.init_conn))))
         {
             return in.lines().map(AvatarSearch_AvatarSearch_CC::parse).toArray(VrcxAvatar[]::new);
         }

@@ -687,8 +687,8 @@ public class ScarletSettings
         }
         Console console = System.console();
         if (console != null)
-            return "y".equalsIgnoreCase(console.readLine("%s%n%s: ", title, message).trim());
-        System.out.print(title+"\n"+message+": ");
+            return "y".equalsIgnoreCase(console.readLine("%s%n%s (y/n): ", title, message).trim());
+        System.out.print(title+"\n"+message+" (y/n): ");
         @SuppressWarnings("resource")
         Scanner s = new Scanner(System.in);
         return "y".equalsIgnoreCase(s.nextLine().trim());

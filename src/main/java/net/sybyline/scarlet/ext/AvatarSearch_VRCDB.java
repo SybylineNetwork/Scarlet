@@ -35,7 +35,7 @@ public interface AvatarSearch_VRCDB
 
     static List<String> search0(String name)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrcdb.bs002.de/avatars/Avatar?name="+URLs.encode(name)))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrcdb.bs002.de/avatars/Avatar?name="+URLs.encode(name), ExtendedUserAgent.init_conn))
         {
             List<String> ret = new ArrayList<>();
             try (JsonReader r = in.asReaderJson(null, null))
@@ -70,7 +70,7 @@ public interface AvatarSearch_VRCDB
 
     static AvatarSearch_VRCDB.ID[] search(String name)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrcdb.bs002.de/avatars/Avatar?name="+URLs.encode(name)))
+        try (HttpURLInputStream in = HttpURLInputStream.get("https://vrcdb.bs002.de/avatars/Avatar?name="+URLs.encode(name), ExtendedUserAgent.init_conn))
         {
             return in.readAsJson(null, null, AvatarSearch_VRCDB.ID[].class);
         }
@@ -83,7 +83,7 @@ public interface AvatarSearch_VRCDB
 
     static boolean putAvatar(String id, String userid)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.put("https://search.bs002.de/api/Avatar/putavatar", HttpURLInputStream.writeAsJson(null, null, PutAvatarRequest.class, new PutAvatarRequest(id, userid))))
+        try (HttpURLInputStream in = HttpURLInputStream.put("https://search.bs002.de/api/Avatar/putavatar", ExtendedUserAgent.init_conn, HttpURLInputStream.writeAsJson(null, null, PutAvatarRequest.class, new PutAvatarRequest(id, userid))))
         {
         }
         catch (Exception ex)

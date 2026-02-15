@@ -75,7 +75,7 @@ import io.github.vrchatapi.model.GroupAuditLogEntry;
 import io.github.vrchatapi.model.GroupGalleryImage;
 import io.github.vrchatapi.model.GroupInstance;
 import io.github.vrchatapi.model.GroupJoinRequestAction;
-import io.github.vrchatapi.model.GroupLimitedMember;
+import io.github.vrchatapi.model.GroupMember;
 import io.github.vrchatapi.model.GroupMemberStatus;
 import io.github.vrchatapi.model.GroupPermissions;
 import io.github.vrchatapi.model.GroupRole;
@@ -97,6 +97,7 @@ import io.github.vrchatapi.model.UpdateGroupMemberRequest;
 import io.github.vrchatapi.model.User;
 import io.github.vrchatapi.model.World;
 
+import net.sybyline.scarlet.ext.ExtendedUserAgent;
 import net.sybyline.scarlet.util.EnumHelper;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.VersionedFile;
@@ -209,6 +210,7 @@ public class ScarletVRChat implements Closeable
         this.cookies.setup(this.client);
         this.cookies.load();
         this.groupId = MiscUtils.extractTypedUuid("grp", "", scarlet.settings.getStringOrRequireInput("vrchat_group_id", "VRChat Group ID", false));
+        ExtendedUserAgent.setCurrentGroupId(this.groupId);
         this.groupOwnerId = null;
         this.group = null;
         this.groupLimitedMember = null;
@@ -236,7 +238,7 @@ public class ScarletVRChat implements Closeable
     final String groupId;
     String groupOwnerId;
     Group group;
-    GroupLimitedMember groupLimitedMember;
+    GroupMember groupLimitedMember;
     final Map<String, GroupRole> groupRoles;
     VrcAllGroupPermissions allGroupPermissions;
     CurrentUser currentUser;
@@ -283,6 +285,8 @@ public class ScarletVRChat implements Closeable
 
     private void login(boolean isRefresh)
     {
+try
+{
         try
         {
             long timePre = System.currentTimeMillis(),
@@ -484,6 +488,11 @@ public class ScarletVRChat implements Closeable
             this.save();
             this.updateGroupInfo();
         }
+}
+finally
+{
+    ExtendedUserAgent.setCurrentUserId(this.currentUserId);
+}
     }
 
     class AltCred extends ScarletVRChatCookieJar.AltCredContext
@@ -909,7 +918,7 @@ public class ScarletVRChat implements Closeable
         UsersApi users = new UsersApi(this.client);
         try
         {
-            return users.searchUsers(name, null, n, offset);
+            return users.searchUsers(name, null, n, offset, null);
         }
         catch (ApiException apiex)
         {
@@ -964,7 +973,7 @@ public class ScarletVRChat implements Closeable
         WorldsApi worlds = new WorldsApi(this.client);
         try
         {
-            return worlds.searchWorlds(null, SortOption.RELEVANCE, null, null, n, OrderOption.DESCENDING, offset, null, null, null, null, null, null, null, null);
+            return worlds.searchWorlds(null, SortOption.RELEVANCE, null, null, n, OrderOption.DESCENDING, offset, null, null, null, null, null, null, null, null, null, null);
         }
         catch (ApiException apiex)
         {
@@ -1150,10 +1159,10 @@ public class ScarletVRChat implements Closeable
 
     public GroupMemberStatus getGroupMembershipStatus(String groupId, String targetUserId)
     {
-        GroupLimitedMember member = this.getGroupMembership(groupId, targetUserId);
+        GroupMember member = this.getGroupMembership(groupId, targetUserId);
         return member == null ? null : member.getMembershipStatus();
     }
-    public GroupLimitedMember getGroupMembership(String groupId, String targetUserId)
+    public GroupMember getGroupMembership(String groupId, String targetUserId)
     {
         GroupsApi groups = new GroupsApi(this.client);
         try
@@ -1167,7 +1176,7 @@ public class ScarletVRChat implements Closeable
             return null;
         }
     }
-    public GroupLimitedMember updateGroupMembershipNotes(String groupId, String targetUserId, String managerNotes)
+    public GroupMember updateGroupMembershipNotes(String groupId, String targetUserId, String managerNotes)
     {
         GroupsApi groups = new GroupsApi(this.client);
         try
@@ -1322,10 +1331,10 @@ public class ScarletVRChat implements Closeable
     {
         if (userId == null)
             return false;
-        GroupLimitedMember glm = this.getGroupMembership(this.groupId, userId);
+        GroupMember glm = this.getGroupMembership(this.groupId, userId);
         return this.checkUserHasVRChatPermission(glm, vrchatPermission);
     }
-    public boolean checkUserHasVRChatPermission(GroupLimitedMember glm, GroupPermissions vrchatPermission)
+    public boolean checkUserHasVRChatPermission(GroupMember glm, GroupPermissions vrchatPermission)
     {
         if (glm == null)
             return false;
@@ -1499,7 +1508,10 @@ public class ScarletVRChat implements Closeable
         if (analysis != null)
             return analysis;
         if (this.cachedFileAnalyses.is404(stringified))
+        {
+            LOG.warn("file 404: "+versionedFile);
             return null;
+        }
         FilesApi files = new FilesApi(this.client);
         try
         {
@@ -1514,6 +1526,7 @@ public class ScarletVRChat implements Closeable
         }
         catch (ApiException apiex)
         {
+            LOG.warn("file exception: "+versionedFile, apiex);
             this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
                 this.cachedFileAnalyses.add404(stringified);

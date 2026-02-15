@@ -21,7 +21,6 @@ import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import io.github.vrchatapi.model.Avatar;
 import io.github.vrchatapi.model.FileAnalysis;
 import io.github.vrchatapi.model.InventoryItem;
 import io.github.vrchatapi.model.InventoryItemType;
@@ -36,11 +35,11 @@ import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.CollectionMap;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
-import net.sybyline.scarlet.util.TTSService;
 import net.sybyline.scarlet.util.VersionedFile;
 import net.sybyline.scarlet.util.VrcIds;
+import net.sybyline.scarlet.util.tts.TtsProvider;
 
-public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSService.Listener
+public class ScarletEventListener implements ScarletVRChatLogs.Listener
 {
 
     public ScarletEventListener(Scarlet scarlet)
@@ -65,7 +64,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         this.isInGroupInstance = false;
         this.isSameAsPreviousInstance = false;
 
-        this.ttsVoiceName = scarlet.settings.new FileValuedStringChoice("tts_voice_name", "TTS: Voice name", "", () -> scarlet.ttsService == null ? Collections.emptyList() : scarlet.ttsService.getInstalledVoices());
+        this.ttsVoiceName = scarlet.settings.new FileValuedStringChoice("tts_voice_name", "TTS: Voice name", "", () -> scarlet.ttsService.getInstalledVoices());
         this.ttsUseDefaultAudioDevice = scarlet.settings.new FileValuedBoolean("tts_use_default_audio_device", "TTS: Use default system audio device", false);
         this.announceWatchedUsers = scarlet.settings.new FileValuedBoolean("tts_announce_watched_users", "TTS: Announce watched users", true);
         this.announceWatchedGroups = scarlet.settings.new FileValuedBoolean("tts_announce_watched_groups", "TTS: Announce watched groups", true);
@@ -121,16 +120,21 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             {
                 this.scarlet.ttsService.getInstalledVoices().stream().findFirst().ifPresent($ -> this.ttsVoiceName.set($, "default"));
             }
-            else
-            {
-                this.scarlet.ttsService.selectVoiceLater(voiceName);
-            }
         }, 0_000L, 60_000L, TimeUnit.MILLISECONDS);
     }
 
     public OffsetDateTime getJoinedOrNull(String userId)
     {
         return this.clientLocation_userId2userJoined.get(userId);
+    }
+
+    public String getTtsVoiceName()
+    {
+        return this.ttsVoiceName.get();
+    }
+    public boolean getTtsUseDefaultAudioDevice()
+    {
+        return this.ttsUseDefaultAudioDevice.get().booleanValue();
     }
 
     // ScarletVRChatLogs.Listener
@@ -321,7 +325,10 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
     }
     void switchPlayerAvatar(boolean preamble, OffsetDateTime odt, LocalDateTime timestamp, String userDisplayName, String userId, String avatarDisplayName)
     {
-        String[] potentialIds = this.searchAvatar(avatarDisplayName);
+        if (!this.scarlet.discord.isEmitting(GroupAuditTypeEx.USER_AVATAR))
+            return;
+        
+        String[] potentialIds = null;
         
         if (this.attemptAvatarImageMatch.get())
         {
@@ -332,20 +339,22 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 if (m.find())
                 {
                     String uafid = m.group();
-                    long withinOneHour = System.currentTimeMillis() - 3600_000L;
-                    String[] altPotentialIds = Stream
-                        .of(potentialIds)
-                        .map($ -> this.scarlet.vrc.getAvatar($, withinOneHour))
-                        .filter(Objects::nonNull)
-                        .filter($ -> $.getImageUrl().contains(uafid))
-                        .map(Avatar::getId)
-                        .toArray(String[]::new)
-                    ;
-                    if (altPotentialIds.length > 0)
-                        potentialIds = altPotentialIds;
+//                    long withinOneHour = System.currentTimeMillis() - 3600_000L;
+//                    potentialIds = Stream
+//                        .of(potentialIds)
+//                        .map($ -> this.scarlet.vrc.getAvatar($, withinOneHour))
+//                        .filter(Objects::nonNull)
+//                        .filter($ -> $.getImageUrl().contains(uafid))
+//                        .map(Avatar::getId)
+//                        .toArray(String[]::new)
+//                    ;
+                    potentialIds = AvatarSearch.ByImage.vrcxSearchAllByImage(uafid).map(AvatarSearch.VrcxAvatar::id).toArray(String[]::new);
                 }
             }
         }
+        
+        if (potentialIds == null || potentialIds.length == 0)
+            potentialIds = this.searchAvatar(avatarDisplayName);
         
 
         // check avatar
@@ -361,7 +370,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 sb.append("User ").append(userDisplayName).append(" may be wearing a watched avatar.");
                 if (watchedAvatar.message != null)
                     sb.append(' ').append(watchedAvatar.message);
-                this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                 this.scarlet.ttsService.submit("wa-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
             });
         
@@ -380,7 +388,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
         if (watchedUser != null && !watchedUser.silent)
         {
             advisories.add(watchedUser.message);
-            this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
             this.scarlet.ttsService.submit("wu-"+Long.toUnsignedString(System.nanoTime()), watchedUser.message);
         }
         
@@ -416,7 +423,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                     sb.append("User ").append(userDisplayName).append(" joined the lobby.");
                     if (wg.message != null)
                         sb.append(' ').append(wg.message);
-                    this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                     this.scarlet.ttsService.submit("wg-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
                 }
                 priority[0] = wg.priority;
@@ -438,7 +444,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
             long acctAgeDays = LocalDate.now().toEpochDay() - user.getDateJoined().toEpochDay();
             if (acctAgeDays <= this.announcePlayersNewerThan.get().longValue())
             {
-                this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                 this.scarlet.ttsService.submit("new-"+Long.toUnsignedString(System.nanoTime()), "User "+userDisplayName+" is new to VRChat, joined "+acctAgeDays+" days ago.");
             }
         }
@@ -469,7 +474,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 this.scarlet.discord.emitExtendedVtkInitiated(this.scarlet, timestamp, this.clientLocation, userId, targetDisplayName, actorId, nullable_actorDisplayName);
                 if (this.announceVotesToKick.get())
                 {
-                    this.scarlet.ttsService.setOutputToDefaultAudioDevice(this.ttsUseDefaultAudioDevice.get());
                     String vtktts = actorId == null
                         ? ("A vote to kick was initiated against "+targetDisplayName+".")
                         : ("A vote to kick was initiated against "+targetDisplayName+" by "+nullable_actorDisplayName+".");
@@ -653,20 +657,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, TTSServ
                 this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_VIDEO, odt, userId, userDisplayName, url, title);
             }
         }
-    }
-
-    // TTSService.Listener
-
-    @Override
-    public void tts_init(TTSService tts)
-    {
-    }
-
-    @Override
-    public void tts_ready(String job, File file)
-    {
-        Scarlet.LOG.info("TTS Job "+job+"("+file.length()+") : "+this.scarlet.discord.submitAudio(file));
-        file.delete();
     }
 
 }
