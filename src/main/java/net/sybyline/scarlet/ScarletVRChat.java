@@ -741,11 +741,15 @@ finally
             this.groupLimitedMember = this.getGroupMembership(this.groupId, this.currentUserId);
             if (this.groupLimitedMember == null)
             {
-                if (this.scarlet.settings.requireConfirmYesNo("The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
+                List<LimitedUserGroups> userGroups = this.getUserGroups(this.currentUserId);
+                if (userGroups != null && userGroups.stream().noneMatch($ -> this.groupId != null && this.groupId.equals($.getGroupId())))
                 {
-                    this.cookies.clear();
-                    this.cookies.save();
-                    throw new IllegalStateException();
+                    if (this.scarlet.settings.requireConfirmYesNo("The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
+                    {
+                        this.cookies.clear();
+                        this.cookies.save();
+                        throw new IllegalStateException();
+                    }
                 }
             }
             if (group.getRoles() == null)
@@ -1172,7 +1176,13 @@ finally
         catch (ApiException apiex)
         {
             this.scarlet.checkVrcRefresh(apiex);
-            LOG.error("Error getting group member group: "+apiex.getMessage());
+            String message = apiex.getMessage();
+            if (message != null && message.contains("HTTP response code: 404"))
+                return null;
+            List<LimitedUserGroups> userGroups = this.getUserGroups(targetUserId);
+            if (userGroups != null && userGroups.stream().anyMatch($ -> groupId != null && groupId.equals($.getGroupId())))
+                return new GroupMember().userId(targetUserId).groupId(groupId).membershipStatus(GroupMemberStatus.MEMBER).roleIds(new ArrayList<>());
+            LOG.error("Error getting group member group: "+message);
             return null;
         }
     }
