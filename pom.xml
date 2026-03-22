@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
-  <version>0.4.12</version><!--scarlet-version-->
+  <version>0.4.16-b1</version><!--scarlet-version-->
   <name>Scarlet</name>
   <build>
     <plugins>
@@ -47,14 +47,6 @@
           </execution>
         </executions>
       </plugin>
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <configuration>
-                <source>21</source>
-                <target>21</target>
-            </configuration>
-        </plugin>
     </plugins>
   </build>
   <repositories>
@@ -70,12 +62,13 @@
     </repository>
   </repositories>
   <properties>
-    <vrchatapi.version>1.20.1</vrchatapi.version>
-    <JDA.version>5.6.1</JDA.version>
+    <vrchatapi.version>1.20.8-nightly.8</vrchatapi.version>
+    <JDA.version>6.3.0</JDA.version>
     <selenium.version>4.31.0</selenium.version>
     <jcef.version>132.3.1</jcef.version>
-    <nanohttpd.version>2.3.2-SNAPSHOT</nanohttpd.version>
-    <jna.version>4.4.0</jna.version>
+    <nanohttpd.version>2.3.1</nanohttpd.version>
+    <jna.version>5.18.1</jna.version>
+    <libdave.version>0.1.2</libdave.version>
   </properties>
   <dependencies>
     <dependency>
@@ -122,6 +115,35 @@
       <groupId>net.java.dev.jna</groupId>
       <artifactId>jna-platform</artifactId>
       <version>${jna.version}</version>
+    </dependency>
+    <!-- DAVE/E2EE Protocol Support -->
+    <dependency>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>adapter-jda</artifactId>
+      <version>${libdave.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>impl-jni</artifactId>
+      <version>${libdave.version}</version>
+    </dependency>
+    <!-- Native libraries for DAVE - Linux x86-64 (glibc 2.28+) -->
+    <dependency>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>natives-linux-x86-64</artifactId>
+      <version>${libdave.version}</version>
+    </dependency>
+    <!-- Native libraries for DAVE - Windows x86-64 -->
+    <dependency>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>natives-win-x86-64</artifactId>
+      <version>${libdave.version}</version>
+    </dependency>
+    <!-- Native libraries for DAVE - macOS (Universal) -->
+    <dependency>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>natives-darwin</artifactId>
+      <version>${libdave.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
@@ -190,11 +212,5 @@
         <artifactId>ipcsocket</artifactId>
         <version>1.6.3</version>
     </dependency>
-      <dependency>
-          <groupId>org.junit.jupiter</groupId>
-          <artifactId>junit-jupiter</artifactId>
-          <version>RELEASE</version>
-          <scope>test</scope>
-      </dependency>
   </dependencies>
 </project>

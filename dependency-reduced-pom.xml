@@ -4,7 +4,7 @@
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
   <name>Scarlet</name>
-  <version>0.4.12</version><!--scarlet-version-->
+  <version>0.4.16-b1</version>
   <build>
     <plugins>
       <plugin>
@@ -63,11 +63,12 @@
     </repository>
   </repositories>
   <properties>
-    <vrchatapi.version>1.20.1</vrchatapi.version>
-    <JDA.version>5.6.1</JDA.version>
     <selenium.version>4.31.0</selenium.version>
-    <nanohttpd.version>2.3.2-SNAPSHOT</nanohttpd.version>
+    <nanohttpd.version>2.3.1</nanohttpd.version>
+    <JDA.version>6.3.0</JDA.version>
+    <libdave.version>0.1.2</libdave.version>
     <jcef.version>132.3.1</jcef.version>
-    <jna.version>4.4.0</jna.version>
+    <jna.version>5.18.1</jna.version>
+    <vrchatapi.version>1.20.8-nightly.8</vrchatapi.version>
   </properties>
 </project>
