@@ -31,7 +31,7 @@ Settings for the Discord bot account
 ```json
 {
     // The Discord bot token
-    "token": "MTIzNDU2Nzg5MTIzNDU2Nzg5.3q2-7w.VGhpcyB0ZXh0IGhhcyAyOCBjaGFyYWN0ZXJzLg",
+    "token": "",
     // DEPRECATED: this value is read, but is no longer written. This value now persists in the encrypted store.
     
     // The Discord server snowflake id
