@@ -19,7 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import org.apache.commons.lang3.ArrayUtils;
+// commons-lang3 removed: ArrayUtils operations inlined below
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -361,7 +361,9 @@ public class DConfig
             {
                 return event ->
                 {
-                    this.set(ArrayUtils.add(this.get(), event.getOption(this.name).getAsString()));
+                    String[] prev = this.get(), next = java.util.Arrays.copyOf(prev, prev.length + 1);
+                    next[prev.length] = event.getOption(this.name).getAsString();
+                    this.set(next);
                 };
             }
             if (name.equals(this.name+"-remove"))
@@ -369,10 +371,15 @@ public class DConfig
                 return event ->
                 {
                     String[] array = this.get();
-                    int index = ArrayUtils.indexOf(array, event.getOption(this.name).getAsString());
+                    int index = -1;
+                    String target = event.getOption(this.name).getAsString();
+                    for (int i = 0; i < array.length; i++) if (target.equals(array[i])) { index = i; break; }
                     if (index >= 0)
                     {
-                        this.set(ArrayUtils.remove(array, index));
+                        String[] trimmed = new String[array.length - 1];
+                        System.arraycopy(array, 0, trimmed, 0, index);
+                        System.arraycopy(array, index + 1, trimmed, index, array.length - index - 1);
+                        this.set(trimmed);
                     }
                 };
             }

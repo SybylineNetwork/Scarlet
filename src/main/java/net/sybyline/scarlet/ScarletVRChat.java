@@ -392,6 +392,26 @@ try
                     this.username.set(null);
                     this.password.set(null);
                     LOG.error("Invalid credentials");
+                    // Only offer the reset dialog when stored credentials silently
+                    // failed — not when the user just typed them in this iteration
+                    // (in which case the loop will simply re-prompt). Using the
+                    // synchronous form so the do-while waits for the user's answer
+                    // before looping back, preventing a tight spin/hang on Windows.
+                    boolean hadStoredCredentials;
+                    try { hadStoredCredentials = (this.username.getOrNull() != null || this.password.getOrNull() != null); }
+                    catch (Exception ignored) { hadStoredCredentials = false; }
+                    if (hadStoredCredentials)
+                    {
+                        boolean reset = this.scarlet.settings.requireConfirmYesNo(
+                            "The stored credentials were rejected by VRChat.\n\n"
+                            + "Would you like to reset all stored credentials?\n"
+                            + "This safely removes them from the encrypted store\n"
+                            + "so you can enter them fresh on the next attempt.\n\n"
+                            + "(You do NOT need to touch the Registry or AppData.)",
+                            "Invalid credentials \u2014 reset?");
+                        if (reset)
+                            this.clearCredentials();
+                    }
                     data = null;
                 }
                 finally
@@ -627,6 +647,24 @@ finally
                             return null;
                         }
                         LOG.error("Invalid credentials; alt: "+context);
+                        // Only offer reset when stored alt credentials silently failed.
+                        // username/password are non-null here (checked above), so check
+                        // whether they came from the registry rather than being freshly typed.
+                        boolean hadStoredAltCredentials =
+                            (alt.altUsername != null && alt.altUsername.getOrNull() != null)
+                            || (alt.altPassword != null && alt.altPassword.getOrNull() != null);
+                        if (hadStoredAltCredentials)
+                        {
+                            boolean reset = this.scarlet.settings.requireConfirmYesNo(
+                                "The stored alternate credentials for \""+context+"\" were rejected by VRChat.\n\n"
+                                + "Would you like to reset ALL stored credentials?\n"
+                                + "This safely removes them from the encrypted store\n"
+                                + "so you can enter them fresh on the next attempt.\n\n"
+                                + "(You do NOT need to touch the Registry or AppData.)",
+                                "Invalid credentials \u2014 reset?");
+                            if (reset)
+                                this.clearCredentials();
+                        }
                     }
                     finally
                     {
@@ -733,6 +771,13 @@ finally
     }
     void updateGroupInfo()
     {
+        // Check if we have a valid currentUserId before proceeding
+        if (this.currentUserId == null)
+        {
+            LOG.warn("Cannot update group info: currentUserId is null (login may have failed)");
+            return;
+        }
+        
         Group group = this.getGroup(this.groupId, Boolean.TRUE);
         if (group != null)
         {
@@ -765,7 +810,7 @@ finally
         }
         catch (Exception ex)
         {
-            
+            LOG.warn("Failed to get group permissions: {}", ex.getMessage());
         }
     }
     public boolean checkGroupHasAdminTag(GroupAdminTag adminTag)
@@ -783,16 +828,37 @@ finally
     /**
      * <u><i><b>REMOVE AFTER API SDK UPDATE</b></i></u>
      */
-    @Deprecated
-    CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
+
+@Deprecated
+CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
+{
+    JsonObject json = this.client.<JsonObject>execute(auth.getCurrentUserCall(null), JsonObject.class).getData(),
+               presence = json.getAsJsonObject("presence");
+
+    if (presence != null)
     {
-        JsonObject json = this.client.<JsonObject>execute(auth.getCurrentUserCall(null), JsonObject.class).getData(),
-                   presence = json.getAsJsonObject("presence");
         JsonElement cat = presence.get("currentAvatarTags");
-        if (cat != null && cat.isJsonArray())
-            presence.addProperty("currentAvatarTags", cat.getAsJsonArray().asList().stream().map(JsonElement::getAsString).collect(Collectors.joining(",")));
-        return JSON.getGson().fromJson(json, CurrentUser.class);
+
+        if (cat != null && cat.isJsonPrimitive())
+        {
+            // Convert comma-separated string → array (what Gson expects)
+            String tagsStr = cat.getAsString();
+            JsonArray tagsArray = new JsonArray();
+
+            if (tagsStr != null && !tagsStr.isEmpty())
+            {
+                for (String tag : tagsStr.split(","))
+                {
+                    tagsArray.add(tag.trim());
+                }
+            }
+
+            presence.add("currentAvatarTags", tagsArray);
+        }
     }
+
+    return JSON.getGson().fromJson(json, CurrentUser.class);
+}
 
     public boolean logout()
     {
@@ -1164,6 +1230,18 @@ finally
     }
     public GroupMember getGroupMembership(String groupId, String targetUserId)
     {
+        // Validate required parameters
+        if (groupId == null || groupId.isEmpty())
+        {
+            LOG.error("getGroupMembership called with null or empty groupId");
+            return null;
+        }
+        if (targetUserId == null || targetUserId.isEmpty())
+        {
+            LOG.error("getGroupMembership called with null or empty targetUserId");
+            return null;
+        }
+        
         GroupsApi groups = new GroupsApi(this.client);
         try
         {
@@ -1172,8 +1250,14 @@ finally
         catch (ApiException apiex)
         {
             this.scarlet.checkVrcRefresh(apiex);
+            // Only return null for 404 (user not in group), propagate other errors
+            if (apiex.getCode() == 404)
+            {
+                LOG.debug("User {} is not a member of group {}", targetUserId, groupId);
+                return null;
+            }
             LOG.error("Error getting group member group: "+apiex.getMessage());
-            return null;
+            throw new RuntimeException("Failed to get group membership: " + apiex.getMessage(), apiex);
         }
     }
     public GroupMember updateGroupMembershipNotes(String groupId, String targetUserId, String managerNotes)
@@ -1694,6 +1778,24 @@ finally
         scroll.setPreferredSize(new Dimension(500, 300));
         scroll.setMaximumSize(new Dimension(500, 300));
         this.scarlet.execModal.execute(() -> JOptionPane.showMessageDialog(null, scroll, "Alternate credentials", JOptionPane.INFORMATION_MESSAGE));
+    }
+
+    /**
+     * Clears all stored VRChat credentials (username, password, TOTP secret,
+     * and session cookies) from the encrypted registry store and from memory.
+     * The user will be prompted to re-enter credentials on the next login.
+     * This is safe to call at any time and does not require the user to
+     * manually touch the Registry or AppData folders.
+     */
+    public void clearCredentials()
+    {
+        this.username.clear();
+        this.password.clear();
+        this.totpsecret.clear();
+        this.cookies.clear();
+        this.cookies.save();
+        LOG.info("Credentials cleared by user request");
+        this.scarlet.splash.queueFeedbackPopup(null, 5_000L, "Credentials cleared", "You will be prompted to log in again.", Color.CYAN);
     }
 
     public void modalNeedPerms(GroupPermissions perms)
