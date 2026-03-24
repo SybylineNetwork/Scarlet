@@ -14,6 +14,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.sun.jna.Function;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
@@ -36,6 +39,8 @@ import com.sun.jna.ptr.PointerByReference;
  */
 public class WinSapiTtsProvider implements TtsProvider
 {
+
+    private static final Logger LOG = LoggerFactory.getLogger("Scarlet/TTS/WinSAPI");
 
     public static final String NaturalVoiceSAPIAdapter_URL = "https://github.com/gexgd0419/NaturalVoiceSAPIAdapter";
 
@@ -80,6 +85,18 @@ public class WinSapiTtsProvider implements TtsProvider
 //                        gender = ppv.getValue().getWideString(0L);
 //                    }
                     this.voiceById.putIfAbsent(desc, spOT);
+                    // Log a note for Online/Natural voices so the user understands
+                    // they may require the NaturalVoiceSAPIAdapter for file-stream output.
+                    // They are still listed so users with the adapter installed can select them.
+                    // If one fails at speak time, TtsService will automatically fall back to a
+                    // working voice and update the setting.
+                    if (desc.contains("Online") || desc.contains("(Natural)"))
+                    {
+                        LOG.info("TTS: Voice '{}' appears to be an Online/Natural voice. "
+                            + "It will work if NaturalVoiceSAPIAdapter is installed (see {}), "
+                            + "otherwise Scarlet will automatically fall back to a Desktop voice if it fails.",
+                            desc, NaturalVoiceSAPIAdapter_URL);
+                    }
                     this.voices.add(desc);
                 }
             }
@@ -96,7 +113,7 @@ public class WinSapiTtsProvider implements TtsProvider
     public CompletableFuture<Path> speak(String text, String voiceId, float volume, float speed)
     {
         return CompletableFuture.supplyAsync(() -> {
-            Path path = this.dir.resolve(TtsProviderUtil.newRequestName() + ".wav");
+            Path path = this.dir.resolve(TtsProviderUtil.newRequestName()); // newRequestName() already includes .wav
             Invoker spV = this.synth;
             if (spV != null) try (Invoker spS = new Invoker(CLSID_SpStream, IID_ISpStream))
             {
@@ -118,6 +135,25 @@ public class WinSapiTtsProvider implements TtsProvider
                     spV.invokeCheckHRESULT(ISpVoice_SetOutput, spV, spS, 1);
                     spV.invokeCheckHRESULT(ISpVoice_Speak, spV, new WString(text), 0x0010/*no xml*/, new IntByReference()/*returns stream number; unused, but shouldn't be null*/);
                 }
+                catch (com.sun.jna.platform.win32.COM.COMException comEx)
+                {
+                    // HRESULT 0x80004005 (E_FAIL) is returned by "Online (Natural)" voices
+                    // when redirected to a file stream. These voices require the
+                    // NaturalVoiceSAPIAdapter and can only output to the default audio
+                    // device — they cannot write to ISpStream/BindToFile.
+                    // Return null so TtsService logs a clear warning instead of a stack trace.
+                    WinNT.HRESULT hresult = comEx.getHresult();
+                    int hr = hresult != null ? hresult.intValue() : 0;
+                    if (hr == 0x80004005 || hr == (int)0x80004005L)
+                    {
+                        LOG.warn("TTS voice '{}' is an Online/Natural voice that cannot write to a file stream "
+                            + "(HRESULT: 0x{}) — returning null so caller can switch to a fallback voice. "
+                            + "See: " + NaturalVoiceSAPIAdapter_URL,
+                            voiceId, Integer.toHexString(hr).toUpperCase());
+                        return null;
+                    }
+                    throw comEx;
+                }
                 finally
                 {
                     spS.invokeCheckHRESULT(ISpStream_Close, spS);
@@ -132,7 +168,13 @@ public class WinSapiTtsProvider implements TtsProvider
     }
     private static int speed(float speed)
     {
-        return Math.max(-10, Math.min(Math.round(speed * 20 - 10), 10));
+        // Map speed [0.0, 1.0+] to SAPI rate [-10, 10]
+        // speed=0.0 → rate=-10 (slowest)
+        // speed=0.5 → rate=-5 (slow)
+        // speed=1.0 → rate=0 (normal) - matches Linux behavior where 1.0 is normal
+        // speed=2.0 → rate=10 (fastest)
+        int rate = Math.round((speed - 1.0F) * 10);
+        return Math.max(-10, Math.min(rate, 10));
     }
     private static short volume(float volume)
     {

@@ -30,7 +30,7 @@ public interface DaveLibrary extends Library
         }
     }
 
-    DaveLibrary INSTANCE = Native.load("libdave", DaveLibrary.class);
+    DaveLibrary INSTANCE = DaveLibraryLoader.load();
 
     class DAVESessionHandle extends OpaqueHandle
     {   public DAVESessionHandle() { super(); } public DAVESessionHandle(Pointer p) { super(p); }

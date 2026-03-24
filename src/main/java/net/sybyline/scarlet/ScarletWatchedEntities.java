@@ -24,6 +24,7 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.sybyline.scarlet.server.discord.DEnum;
 import net.sybyline.scarlet.util.CsvRecord;
 import net.sybyline.scarlet.util.Func;
+import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
 
 public class ScarletWatchedEntities<E>
@@ -166,8 +167,8 @@ public class ScarletWatchedEntities<E>
         for (CsvRecord record : CsvRecord.parseDocument(reader))
         {
             WatchedEntity watchedEntity = new WatchedEntity();
-            watchedEntity.id = record.get(0);
-            switch (record.get(1))
+            watchedEntity.id = record[0];
+            switch (record[1])
             {
             case "TOXIC":   watchedEntity.type = WatchedEntity.Type.MALICIOUS;  break;
             case "WATCH":   watchedEntity.type = WatchedEntity.Type.NUISANCE;   break;
@@ -175,9 +176,9 @@ public class ScarletWatchedEntities<E>
             case "PARTNER": watchedEntity.type = WatchedEntity.Type.AFFILIATED; break;
             default:        watchedEntity.type = WatchedEntity.Type.OTHER;      break;
             }
-            
+
             Arrays
-                .stream(record.get(5).split("[,;/\\|]"))
+                .stream(record[5].split("[,;/\\|]"))
                 .filter($ -> !$.isEmpty())
                 .map(String::toLowerCase)
                 .forEach(watchedEntity.tags.strings()::add);

@@ -21,6 +21,7 @@ public class MavenDepsLoader
         // noop
     }
 
+    /** @return {@code null} if not running from a jar */
     public static @Nullable Path jarPath()
     {
         return jarPath;

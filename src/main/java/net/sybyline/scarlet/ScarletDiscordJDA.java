@@ -118,6 +118,7 @@ import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.ext.VrcLaunch;
+import net.sybyline.scarlet.server.discord.LDaveSessionFactory;
 import net.sybyline.scarlet.server.discord.DCommands;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
@@ -171,6 +172,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
         try
         {
             NativeDaveFactory.ensureAvailable();
+            // LDaveSessionFactory.isAvailable() ? LDaveSessionFactory.getInstance() : null;
             audioModuleConfig = audioModuleConfig.withDaveSessionFactory(new LDJDADaveSessionFactory(new NativeDaveFactory()));
         }
         catch (RuntimeException rex)
@@ -555,7 +557,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             AudioManager audioManager = this.audioManager;
             if (audioManager == null || !audioManager.isConnected())
+            {
+                LOG.warn("TTS: Cannot submit audio - AudioManager is null or not connected. audioManager={}, isConnected={}",
+                    audioManager, audioManager != null ? audioManager.isConnected() : "N/A");
                 return false;
+            }
             List<byte[]> buffersToAdd = new ArrayList<>();
             try (InputStream fis = new FileInputStream(file))
             {
@@ -574,19 +580,31 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         }
                         else
                         {
+                            LOG.warn("TTS: Audio format conversion not supported: source={}, target={}", ais.getFormat(), AudioSendHandler.INPUT_FORMAT);
                             return false;
                         }
-                        while (ais0.available() > 0)
+                        // FIX 1: Use read() return value instead of available() to detect EOF.
+                        // available() is unreliable on converted AudioInputStreams and can return 0
+                        // even when data remains, causing the entire audio to be silently skipped.
+                        // FIX 2: Track how many bytes were actually read into each buffer so that
+                        // the last (partial) chunk is zero-padded correctly instead of being
+                        // submitted as a full buffer of uninitialized/garbage bytes.
+                        while (true)
                         {
                             byte[] buffer = new byte[BYTES_PER_20MS];
-                            for
-                            (
-                                int read = ais0.read(buffer),
-                                    total = read;
-                                total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1;
-                                total += read
-                            );
+                            int total = 0;
+                            int read;
+                            while (total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1)
+                            {
+                                total += read;
+                            }
+                            if (total == 0)
+                                break; // true EOF - no more data
+                            // If total < BYTES_PER_20MS, the buffer is already zero-padded (new byte[])
+                            // so the partial last frame is safe to submit as-is.
                             buffersToAdd.add(buffer);
+                            if (total < BYTES_PER_20MS)
+                                break; // partial read means EOF was reached
                         }
                     }
                     finally
@@ -602,7 +620,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 return false;
             }
             if (buffersToAdd.isEmpty())
+            {
+                LOG.warn("TTS: No audio buffers loaded from file: {}", file);
                 return true;
+            }
+            LOG.info("TTS: Queuing {} audio buffers (~{}ms) from file: {}", buffersToAdd.size(), buffersToAdd.size() * 20, file);
             synchronized (this)
             {
                 this.buffers.addAll(buffersToAdd);
@@ -638,11 +660,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
                    audioChannelSf = ScarletDiscordJDA.this.audioChannelSf;
             Guild guild = ScarletDiscordJDA.this.jda.getGuildById(guildSf);
             AudioManager audioManager = this.audioManager;
+            LOG.info("TTS Audio: updateChannel called - guildSf={}, audioChannelSf={}, audioManager={}, guild={}", 
+                guildSf, audioChannelSf, audioManager != null ? "present" : "null", guild != null ? "found" : "null");
             if (audioChannelSf == null)
             {
                 this.audioChannel = null;
                 if (audioManager != null)
                 {
+                    LOG.info("TTS Audio: Closing audio connection (audioChannelSf is null)");
                     audioManager.closeAudioConnection();
                     this.buffers.clear();
                 }
@@ -651,15 +676,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
             {
                 AudioChannel audioChannel = guild.getVoiceChannelById(audioChannelSf);
                 this.audioChannel = audioChannel;
+                LOG.info("TTS Audio: AudioChannel lookup result - audioChannel={}", audioChannel != null ? audioChannel.getId() : "null");
                 if (audioManager != null)
                 {
                     if (audioChannel != null)
                     {
+                        LOG.info("TTS Audio: Opening audio connection to channel {}", audioChannel.getId());
                         audioManager.openAudioConnection(audioChannel);
                         this.buffers.clear();
                     }
                     else
                     {
+                        LOG.warn("TTS Audio: AudioChannel not found for sf={}, closing connection", audioChannelSf);
                         audioManager.closeAudioConnection();
                         this.buffers.clear();
                     }
