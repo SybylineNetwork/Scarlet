@@ -18,6 +18,10 @@ public class ExtendedUserAgent
     }
     public static final Func.V1<IOException, HttpURLConnection>
         init_conn = conn -> conn.setRequestProperty("User-Agent", extendedUserAgent),
+        init_conn_json = conn -> {
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("User-Agent", extendedUserAgent);
+        },
         init_conn_disable_redirects = conn -> {
             conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("User-Agent", extendedUserAgent);

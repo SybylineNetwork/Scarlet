@@ -83,7 +83,7 @@ public interface AvatarSearch_VRCDB
 
     static boolean putAvatar(String id, String userid)
     {
-        try (HttpURLInputStream in = HttpURLInputStream.put("https://search.bs002.de/api/Avatar/putavatar", ExtendedUserAgent.init_conn, HttpURLInputStream.writeAsJson(null, null, PutAvatarRequest.class, new PutAvatarRequest(id, userid))))
+        try (HttpURLInputStream in = HttpURLInputStream.put("https://search.bs002.de/api/Avatar/putavatar", ExtendedUserAgent.init_conn_json, HttpURLInputStream.writeAsJson(null, null, PutAvatarRequest.class, new PutAvatarRequest(id, userid))))
         {
         }
         catch (Exception ex)

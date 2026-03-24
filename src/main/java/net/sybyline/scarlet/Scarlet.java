@@ -282,6 +282,7 @@ public class Scarlet implements Closeable
         MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
+        MiscUtils.close(this.amplitude);
         MiscUtils.close(this.ui);
         this.data.saveAll();
         this.settings.updateRunVersionAndTime();
@@ -357,6 +358,7 @@ public class Scarlet implements Closeable
     final TtsService ttsService = new TtsService(new File(dir, "tts"), this.eventListener, this.discord);
     final ScarletCalendar calendar = new ScarletCalendar(this, new File(dir, "event_schedule.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
+    final ScarletVRChatAmplitude amplitude = new ScarletVRChatAmplitude(this.eventListener);
     String[] last25logs = new String[0];
     final ScarletSettings.FileValued<Boolean> confirmGroupInvite = this.settings.new FileValuedBoolean("ui_confirm_group_invite", "Confirmation dialog for group invites", false),
                                      alertForUpdates = this.settings.new FileValuedBoolean("ui_alert_update", "Notify for updates", true),

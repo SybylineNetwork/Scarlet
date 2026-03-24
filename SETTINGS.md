@@ -5,7 +5,7 @@ All settings files for Scarlet can be found in the directory `%LOCALAPPDATA%\Syb
 Some internal volatile data can be found in the Windows registry.
 These registry entries exist because of the use of classes in the [`java.util.prefs`](https://docs.oracle.com/javase/8/docs/api/java/util/prefs/package-summary.html) package.
 
-If it isn't obvious, all nominally sensitive values listed are ficticious.
+If it isn't obvious, all nominally sensitive values (e.g., Discord bot/webhook tokens, HTTP Cookie auth tokens) listed are ficticious.
 
 ## file `logs/scarlet_log_0000-00-00_00-00-00.txt`
 

@@ -40,7 +40,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import org.apache.commons.text.similarity.LevenshteinDistance;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -659,14 +658,13 @@ public class DInteractions
     public static @FunctionalInterface interface ModalSubmitHandler { void handle(ModalInteractionEvent event); }
     public static @FunctionalInterface interface DeferredHandler { void handle(InteractionHook hook) throws Exception; }
 
-    public static final LevenshteinDistance LD = LevenshteinDistance.getDefaultInstance();
     public static Comparator<String> stringsByLevenshtein(String typing)
     {
-        return Comparator.comparingInt($ -> LD.apply(typing, $));
+        return Comparator.comparingInt($ -> MiscUtils.levenshteinEditDistance(typing, $));
     }
     public static Comparator<Command.Choice> choicesByLevenshtein(String typing)
     {
-        return Comparator.comparingInt($ -> Math.min(LD.apply(typing, $.getName()), LD.apply(typing, $.getAsString())));
+        return Comparator.comparingInt($ -> Math.min(MiscUtils.levenshteinEditDistance(typing, $.getName()), MiscUtils.levenshteinEditDistance(typing, $.getAsString())));
     }
     public static enum SlashOptionLocalTime implements SlashCompleteHandler
     {
@@ -781,7 +779,7 @@ public class DInteractions
             return Comparator.<Integer>comparingLong($ ->
             {
                 int order = Arrays.stream(this.names[$]).mapToInt($$ -> $$.startsWith(typing_san) ? 0 : $$.contains(typing_san) ? 1 : 2).min().getAsInt(),
-                    dist = Arrays.stream(this.names[$]).mapToInt($$ -> LD.apply(typing_san, $$)).min().getAsInt();
+                    dist = Arrays.stream(this.names[$]).mapToInt($$ -> MiscUtils.levenshteinEditDistance(typing_san, $$)).min().getAsInt();
                 return ((long)order << 32) | ((long)dist & 0xFFFFFFFF);
             });
         }

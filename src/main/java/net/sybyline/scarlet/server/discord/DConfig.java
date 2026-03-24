@@ -19,7 +19,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +38,7 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
+import net.sybyline.scarlet.util.MiscUtils;
 
 public class DConfig
 {
@@ -361,7 +361,7 @@ public class DConfig
             {
                 return event ->
                 {
-                    this.set(ArrayUtils.add(this.get(), event.getOption(this.name).getAsString()));
+                    this.set(MiscUtils.append(this.get(), event.getOption(this.name).getAsString()));
                 };
             }
             if (name.equals(this.name+"-remove"))
@@ -369,10 +369,10 @@ public class DConfig
                 return event ->
                 {
                     String[] array = this.get();
-                    int index = ArrayUtils.indexOf(array, event.getOption(this.name).getAsString());
+                    int index = MiscUtils.indexOf(event.getOption(this.name).getAsString(), array);
                     if (index >= 0)
                     {
-                        this.set(ArrayUtils.remove(array, index));
+                        this.set(MiscUtils.without(index, array));
                     }
                 };
             }

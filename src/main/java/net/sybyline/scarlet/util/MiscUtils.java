@@ -90,6 +90,36 @@ public interface MiscUtils
         return string == null || string.length() <= maxLength ? string : ('\u2026' + string.substring(maxLength - 1));
     }
 
+    static int levenshteinEditDistance(CharSequence lhs, CharSequence rhs)
+    {
+        return lhs == null || lhs.length() == 0
+            ? rhs == null || rhs.length() == 0
+                ? 0
+                : rhs.length()
+            : rhs == null || rhs.length() == 0
+                ? lhs.length()
+                : lhs.length() >= rhs.length()
+                    ? levenshteinEditDistance_(lhs, rhs)
+                    : levenshteinEditDistance_(rhs, lhs);
+    }
+    static int levenshteinEditDistance_(CharSequence lhs, CharSequence rhs)
+    {
+        int rhsLen = rhs.length(),
+            prev[] = new int[rhsLen + 1],
+            curr[] = new int[rhsLen + 1],
+            next[];
+        for (int j = 0; j <= rhsLen; j++)
+            prev[j] = j;
+        for (int i = 1; i <= lhs.length(); next = curr, curr = prev, prev = next, i++)
+            for (int j = 0; j <= rhsLen; j++)
+                curr[j] = j == 0
+                    ? i
+                    : lhs.charAt(i - 1) == rhs.charAt(j - 1)
+                        ? prev[j - 1]
+                        : 1 + Math.min(prev[j - 1], Math.min(prev[j], curr[j - 1]));
+        return prev[rhsLen];
+    }
+
     static final ZoneRules DEFAULT_ZONE_RULES = ZoneId.systemDefault().getRules();
     static OffsetDateTime odt2utc(LocalDateTime ldt)
     {
@@ -119,6 +149,18 @@ public interface MiscUtils
         if (Objects.equals(array[i], target))
             return i;
         return -1;
+    }
+
+    @SafeVarargs
+    static <T> T[] without(int index, T... array)
+    {
+        if (array == null || index < 0 || index >= array.length)
+            return array;
+        int newLength = array.length - 1;
+        T[] result = Arrays.copyOf(array, newLength);
+        if (index < newLength)
+            System.arraycopy(array, index + 1, result, index, newLength - index);
+        return result;
     }
 
     static boolean sleep(long millis)

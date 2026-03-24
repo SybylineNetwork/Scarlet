@@ -7,6 +7,10 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.16-b2
+  - Added scraping for the Amplitude analytics file
+  - Added avatar id ingestion for some search providers
+
 ## 0.4.16-b1
   - Added (very WIP) support for the new DAVE system (voice channel encryption)
   - Added TTS support for eSpeak on Linux (credit to 0xkubectl and KozyBlake for downstream implementation reference)
