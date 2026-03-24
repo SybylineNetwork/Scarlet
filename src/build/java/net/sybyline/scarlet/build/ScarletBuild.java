@@ -41,6 +41,7 @@ import java.util.zip.ZipOutputStream;
 
 import net.sybyline.scarlet.Scarlet;
 import net.sybyline.scarlet.ScarletMeta;
+import net.sybyline.scarlet.util.CsvRecord;
 
 public class ScarletBuild
 {
@@ -67,6 +68,27 @@ public class ScarletBuild
 
     public static void main(String[] args) throws Throwable
     {
+        long total = 0L;
+for(URL url:classpathURLs())
+{
+    try
+    {
+        Path p = Paths.get(url.toURI());
+        if (Files.isRegularFile(p))
+        {
+            long size = Files.size(p);
+            total += size;
+            System.out.printf("%8d ", size);
+        }
+    }
+    catch (Exception ex)
+    {
+        ex.printStackTrace();
+    }
+    System.out.println(url);
+}
+System.out.println("total: "+total);
+if(null==null)return;
         build();
     }
 

@@ -19,7 +19,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-// commons-lang3 removed: ArrayUtils operations inlined below
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +38,7 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
+import net.sybyline.scarlet.util.MiscUtils;
 
 public class DConfig
 {
@@ -361,9 +361,7 @@ public class DConfig
             {
                 return event ->
                 {
-                    String[] prev = this.get(), next = java.util.Arrays.copyOf(prev, prev.length + 1);
-                    next[prev.length] = event.getOption(this.name).getAsString();
-                    this.set(next);
+                    this.set(MiscUtils.append(this.get(), event.getOption(this.name).getAsString()));
                 };
             }
             if (name.equals(this.name+"-remove"))
@@ -371,15 +369,10 @@ public class DConfig
                 return event ->
                 {
                     String[] array = this.get();
-                    int index = -1;
-                    String target = event.getOption(this.name).getAsString();
-                    for (int i = 0; i < array.length; i++) if (target.equals(array[i])) { index = i; break; }
+                    int index = MiscUtils.indexOf(event.getOption(this.name).getAsString(), array);
                     if (index >= 0)
                     {
-                        String[] trimmed = new String[array.length - 1];
-                        System.arraycopy(array, 0, trimmed, 0, index);
-                        System.arraycopy(array, index + 1, trimmed, index, array.length - index - 1);
-                        this.set(trimmed);
+                        this.set(MiscUtils.without(index, array));
                     }
                 };
             }

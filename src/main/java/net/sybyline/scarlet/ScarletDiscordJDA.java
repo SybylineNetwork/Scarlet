@@ -70,6 +70,8 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.IncomingWebhookClient;
@@ -101,8 +103,6 @@ import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.ICommandReference;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
-import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.FluentRestAction;
@@ -130,6 +130,9 @@ import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VersionedFile;
+
+import moe.kyokobot.libdave.NativeDaveFactory;
+import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
 
 public class ScarletDiscordJDA implements ScarletDiscord
 {
@@ -165,21 +168,29 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.avatarSearchProviders = scarlet.settings.new FileValuedStringArrayPattern("custom_avatar_search_providers", "VRCX-compatible avatar search providers", AvatarSearch.URL_ROOTS.clone(), "https?://.+", false);
         this.resetAvatarSearchProviders = scarlet.settings.new FileValuedVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
         this.load();
-        Dave.INSTANCE.daveSetLogSinkCallbackDefault();
+        AudioModuleConfig audioModuleConfig = new AudioModuleConfig();
+        try
+        {
+            NativeDaveFactory.ensureAvailable();
+            // LDaveSessionFactory.isAvailable() ? LDaveSessionFactory.getInstance() : null;
+            audioModuleConfig = audioModuleConfig.withDaveSessionFactory(new LDJDADaveSessionFactory(new NativeDaveFactory()));
+        }
+        catch (RuntimeException rex)
+        {
+            LOG.error("Failed to ensure DAVE library", rex);
+        }
+//        Dave.INSTANCE.daveSetLogSinkCallbackDefault();
         JDA jda = null;
         String token0 = this.token.getOrNull();
         if (token0 != null && !token0.isEmpty()) try
         {
+            
             jda = JDABuilder
             .createDefault(token0)
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
             .enableCache(CacheFlag.VOICE_STATE)
-            .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(
-                LDaveSessionFactory.isAvailable() 
-                    ? LDaveSessionFactory.getInstance() 
-                    : null // Fallback to passthrough mode if DAVE is not available
-            ))
+            .setAudioModuleConfig(audioModuleConfig)
             .build();
         }
         catch (InvalidTokenException|IllegalArgumentException ex)

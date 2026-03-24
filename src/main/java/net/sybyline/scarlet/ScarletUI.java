@@ -795,7 +795,7 @@ public class ScarletUI implements IScarletUI
             FileAnalysis analysis = bundleInfo.analysis;
             VersionedFile versionedFile = bundleInfo.id;
             ModelFile file = bundleInfo.file;
-            FileAnalysisAvatarStats stats = analysis != null ? analysis.getAvatarStats() : null;
+            FileAnalysisAvatarStats stats = analysis == null ? null : analysis.getAvatarStats();
             infoStatsAppend(panel, constraints, "Avatar name", ()->avatarDisplayName);
             infoStatsAppend(panel, constraints, "File statistics");
             if (file != null)

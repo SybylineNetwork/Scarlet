@@ -2,6 +2,7 @@ package net.sybyline.scarlet.util;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Arrays;
 
 public interface Throwables
 {
@@ -41,6 +42,22 @@ public interface Throwables
         StringWriter ret = new StringWriter();
         throwable.printStackTrace(new PrintWriter(ret));
         return ret.toString();
+    }
+
+    public static NoSuchMethodError noSuchCaller(boolean named)
+    {
+        NoSuchMethodError nsme = new NoSuchMethodError();
+        StackTraceElement st[] = nsme.getStackTrace();
+        /*
+         * st[0]: "net.sybyline.scarlet.util.Throwables.noSuchCaller(Throwables.java:49)"
+         * st[1]: The intended user
+         * st[2]: The first
+         * ...
+         */
+        if (named)
+            nsme = new NoSuchMethodError(String.format("%s.%s", st[1].getClassName(), st[1].getMethodName()));
+        nsme.setStackTrace(Arrays.copyOfRange(st, 2, st.length));
+        return nsme;
     }
 
 }

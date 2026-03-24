@@ -15,7 +15,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-// commons-csv removed: CSV parsing inlined as MiscUtils.parseExcelCsv()
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +23,7 @@ import io.github.vrchatapi.model.Group;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.sybyline.scarlet.server.discord.DEnum;
-import net.sybyline.scarlet.util.MiscUtils;
+import net.sybyline.scarlet.util.CsvRecord;
 import net.sybyline.scarlet.util.UniqueStrings;
 
 public class ScarletWatchedGroups
@@ -154,11 +153,10 @@ public class ScarletWatchedGroups
         
     }
 
-    @SuppressWarnings("resource")
     public boolean importLegacyCSV(Reader reader, boolean overwrite) throws IOException
     {
         List<WatchedGroup> importedWatchedGroups = new ArrayList<>();
-        for (String[] record : MiscUtils.parseExcelCsv(reader))
+        for (CsvRecord record : CsvRecord.parseDocument(reader))
         {
             WatchedGroup watchedGroup = new WatchedGroup();
             watchedGroup.id = record[0];
@@ -176,8 +174,8 @@ public class ScarletWatchedGroups
                 .filter($ -> !$.isEmpty())
                 .map(String::toLowerCase)
                 .forEach(watchedGroup.tags.strings()::add);
-            watchedGroup.critical = Boolean.parseBoolean(record[3]);
-            watchedGroup.message = record[4];
+            watchedGroup.critical = record.getBoolean(3);
+            watchedGroup.message = record.get(4);
             importedWatchedGroups.add(watchedGroup);
         }
         return this.importWatchedGroups(importedWatchedGroups, overwrite);

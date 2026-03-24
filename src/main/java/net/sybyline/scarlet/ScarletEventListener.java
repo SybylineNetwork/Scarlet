@@ -33,13 +33,14 @@ import io.github.vrchatapi.model.User;
 import net.sybyline.scarlet.ext.AvatarBundleInfo;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.util.CollectionMap;
+import net.sybyline.scarlet.util.EventSchemas.AmplitudeCache;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.VersionedFile;
 import net.sybyline.scarlet.util.VrcIds;
 import net.sybyline.scarlet.util.tts.TtsProvider;
 
-public class ScarletEventListener implements ScarletVRChatLogs.Listener
+public class ScarletEventListener implements ScarletVRChatLogs.Listener, ScarletVRChatAmplitude.Listener
 {
 
     public ScarletEventListener(Scarlet scarlet)
@@ -701,6 +702,22 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener
                 this.scarlet.data.customEvent_new(GroupAuditTypeEx.USER_VIDEO, odt, userId, userDisplayName, url, title);
             }
         }
+    }
+
+    // ScarletVRChatAmplitude.Listener
+
+    final Set<String> avatarIdsEncountered = new HashSet<>();
+    @Override
+    public void amplitude(AmplitudeCache amplitude)
+    {
+        if (!amplitude.has("avatarIdsEncountered"))
+            return;
+        String[] avatarIdsEncountered = amplitude.stringArr("avatarIdsEncountered");
+        List<String> fresh = new ArrayList<>();
+        for (String avatarIdEncountered : avatarIdsEncountered)
+            if (this.avatarIdsEncountered.add(avatarIdEncountered))
+                fresh.add(avatarIdEncountered);
+        AvatarSearch.Ingestion.ingest(fresh, Scarlet.GROUP);
     }
 
 }

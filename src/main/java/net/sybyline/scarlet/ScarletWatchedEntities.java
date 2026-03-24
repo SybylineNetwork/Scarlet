@@ -17,12 +17,12 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-// commons-csv removed: CSV parsing inlined as MiscUtils.parseExcelCsv()
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.sybyline.scarlet.server.discord.DEnum;
+import net.sybyline.scarlet.util.CsvRecord;
 import net.sybyline.scarlet.util.Func;
 import net.sybyline.scarlet.util.MiscUtils;
 import net.sybyline.scarlet.util.UniqueStrings;
@@ -161,11 +161,10 @@ public class ScarletWatchedEntities<E>
         
     }
 
-    @SuppressWarnings("resource")
     public boolean importLegacyCSV(Reader reader, boolean overwrite) throws IOException
     {
         List<WatchedEntity> importedWatchedEntities = new ArrayList<>();
-        for (String[] record : MiscUtils.parseExcelCsv(reader))
+        for (CsvRecord record : CsvRecord.parseDocument(reader))
         {
             WatchedEntity watchedEntity = new WatchedEntity();
             watchedEntity.id = record[0];
@@ -183,8 +182,8 @@ public class ScarletWatchedEntities<E>
                 .filter($ -> !$.isEmpty())
                 .map(String::toLowerCase)
                 .forEach(watchedEntity.tags.strings()::add);
-            watchedEntity.critical = Boolean.parseBoolean(record[3]);
-            watchedEntity.message = record[4];
+            watchedEntity.critical = record.getBoolean(3);
+            watchedEntity.message = record.get(4);
             importedWatchedEntities.add(watchedEntity);
         }
         return this.importWatchedEntities(importedWatchedEntities, overwrite);
