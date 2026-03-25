@@ -159,8 +159,8 @@ public class ScarletWatchedGroups
         for (CsvRecord record : CsvRecord.parseDocument(reader))
         {
             WatchedGroup watchedGroup = new WatchedGroup();
-            watchedGroup.id = record[0];
-            switch (record[1])
+            watchedGroup.id = record.get(0);
+            switch (record.get(1))
             {
             case "TOXIC":   watchedGroup.type = WatchedGroup.Type.MALICIOUS;  break;
             case "WATCH":   watchedGroup.type = WatchedGroup.Type.NUISANCE;   break;
@@ -168,9 +168,9 @@ public class ScarletWatchedGroups
             case "PARTNER": watchedGroup.type = WatchedGroup.Type.AFFILIATED; break;
             default:        watchedGroup.type = WatchedGroup.Type.OTHER;      break;
             }
-
+            
             Arrays
-                .stream(record[5].split("[,;/\\|]"))
+                .stream(record.get(5).split("[,;/\\|]"))
                 .filter($ -> !$.isEmpty())
                 .map(String::toLowerCase)
                 .forEach(watchedGroup.tags.strings()::add);

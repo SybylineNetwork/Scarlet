@@ -12,9 +12,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -33,6 +30,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.scalasbt.ipcsocket.UnixDomainServerSocket;
+import org.scalasbt.ipcsocket.Win32NamedPipeServerSocket;
+import org.scalasbt.ipcsocket.Win32SecurityLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,7 +101,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.16-b3",
+        VERSION = "0.4.16-b1",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -158,56 +157,17 @@ public class Scarlet implements Closeable
     static
     {
         String scarletHome = System.getenv("SCARLET_HOME"),
-               localappdata = System.getenv("LOCALAPPDATA"),
-               xdgDataHome = System.getenv("XDG_DATA_HOME");
+               localappdata =  System.getenv("LOCALAPPDATA");
         scarletHome = System.getProperty("SCARLET_HOME", scarletHome);
-        
-        File dir0;
-        if (scarletHome != null && !scarletHome.trim().isEmpty() && !";".equals(scarletHome.trim()))
-        {
-            // SCARLET_HOME is explicitly set
-            dir0 = new File(scarletHome).getAbsoluteFile();
-        }
-        else if (";".equals(scarletHome != null ? scarletHome.trim() : null) && MavenDepsLoader.jarPath() != null)
-        {
-            // SCARLET_HOME=";" means use jar directory
-            dir0 = MavenDepsLoader.jarPath().getParent().toFile();
-        }
-        else if (Platform.CURRENT == Platform.$NIX)
-        {
-            // Linux: Use XDG_DATA_HOME if set, otherwise ~/.local/share
-            if (xdgDataHome != null && !xdgDataHome.trim().isEmpty())
-            {
-                dir0 = new File(xdgDataHome, GROUP+"/"+NAME);
-            }
-            else
-            {
-                dir0 = new File(user_home, ".local/share/"+GROUP+"/"+NAME);
-            }
-        }
-        else if (localappdata != null)
-        {
-            // Windows: Use LOCALAPPDATA
-            dir0 = new File(localappdata, GROUP+"/"+NAME);
-        }
-        else if (Platform.CURRENT == Platform.NT)
-        {
-            // Windows fallback
-            dir0 = new File(user_home, "AppData/Local/"+GROUP+"/"+NAME);
-        }
-        else
-        {
-            // Other platforms: use user home
-            dir0 = new File(user_home, "."+GROUP+"/"+NAME);
-        }
-        
+        File dir0 = scarletHome != null
+            ? ";".equals(scarletHome.trim()) && MavenDepsLoader.jarPath() != null
+                ? MavenDepsLoader.jarPath().getParent().toFile()
+                : new File(scarletHome).getAbsoluteFile()
+            : localappdata != null
+                ? new File(localappdata, GROUP+"/"+NAME)
+                : new File(user_home, "AppData/Local/"+GROUP+"/"+NAME);
         if (!dir0.isDirectory())
-        {
-            if (!dir0.mkdirs())
-            {
-                System.err.println("Failed to create directory: " + dir0);
-            }
-        }
+            dir0.mkdirs();
         dir = dir0;
     }
     public static final Logger LOG = LoggerFactory.getLogger("Scarlet");
@@ -319,8 +279,7 @@ public class Scarlet implements Closeable
         catch (InterruptedException iex)
         {
         }
-        if (this.ttsService != null)
-            MiscUtils.close(this.ttsService);
+        MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
         MiscUtils.close(this.amplitude);
@@ -344,17 +303,7 @@ public class Scarlet implements Closeable
     final ScarletSettings settings = new ScarletSettings(this, new File(dir, "settings.json"));
     {
         Float uiScale = this.settings.getObject("ui_scale", Float.class);
-        if (uiScale != null)
-        {
-            Swing.scaleAll(uiScale.floatValue());
-        }
-        else
-        {
-            // No manual override — try to auto-detect from desktop environment on Linux
-            Float autoScale = Swing.detectLinuxUIScale();
-            if (autoScale != null)
-                Swing.scaleAll(autoScale);
-        }
+        if (uiScale != null) Swing.scaleAll(uiScale.floatValue());
         String groupId = this.settings.getString("vrchat_group_id");
         if (groupId != null && !(groupId = VrcIds.resolveGroupId(groupId)).isEmpty())
         {
@@ -406,7 +355,7 @@ public class Scarlet implements Closeable
     final ScarletData data = new ScarletData(new File(dir, "data"));
     final ScarletVRChat vrc = new ScarletVRChat(this, "global", new File(dir, "store.bin"));
     final ScarletDiscord discord = new ScarletDiscordJDA(this, new File(dir, "discord_bot.json"), new File(dir, "discord_perms.json"));
-    private TtsService ttsService = null;
+    final TtsService ttsService = new TtsService(new File(dir, "tts"), this.eventListener, this.discord);
     final ScarletCalendar calendar = new ScarletCalendar(this, new File(dir, "event_schedule.json"));
     final ScarletVRChatLogs logs = new ScarletVRChatLogs(this.eventListener);
     final ScarletVRChatAmplitude amplitude = new ScarletVRChatAmplitude(this.eventListener);
@@ -422,51 +371,12 @@ public class Scarlet implements Closeable
     final ScarletSettings.FileValued<Void> addAltCreds = this.settings.new FileValuedVoid("Add alternate credentials", "Add", this.vrc::addAlternateCredentials),
                                   removeAltCreds = this.settings.new FileValuedVoid("Remove alternate credentials", "Remove", this.vrc::removeAlternateCredentials),
                                   listAltCreds = this.settings.new FileValuedVoid("List alternate credentials", "List", this.vrc::listAlternateCredentials),
-                                  clearCreds = this.settings.new FileValuedVoid("Reset VRChat credentials", "Reset", this.vrc::clearCredentials),
                                   uiScale = this.settings.new FileValuedVoid("UI scale", "Set", this.ui::setUIScale);
-
-    /**
-     * Initialize the TTS service with user consent dialogs.
-     * This method blocks until the user responds to any dialogs.
-     */
-    private synchronized void initTtsService()
-    {
-        if (this.ttsService != null)
-            return;
-        
-        try
-        {
-            // Get the parent component for dialogs
-            java.awt.Component parentComponent = this.ui.getParentComponent();
-            this.ttsService = new TtsService(new File(dir, "tts"), this.eventListener, this.discord, parentComponent);
-        }
-        catch (Exception ex)
-        {
-            LOG.error("Failed to initialize TTS service", ex);
-            this.ttsService = new TtsService(new File(dir, "tts"), this.eventListener, this.discord, null);
-        }
-    }
-
-    /**
-     * Get the TTS service, initializing it if necessary.
-     * @return The TTS service instance
-     */
-    public TtsService getTtsService()
-    {
-        if (this.ttsService == null)
-        {
-            this.initTtsService();
-        }
-        return this.ttsService;
-    }
 
     public void run()
     {
         this.ui.loadSettings();
         this.eventListener.settingsLoaded();
-        // Initialize TTS after UI is ready (for dialog parent component)
-        this.splash.splashSubtext("Initializing Text-to-Speech");
-        this.initTtsService();
         this.splash.splashSubtext("Logging in to VRChat Api");
         try
         {
@@ -637,7 +547,9 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
 */
     void runIPC()
     {
-        try (ServerSocket ipcServer = createIpcServer())
+        try (ServerSocket ipcServer = Platform.CURRENT.isNT()
+            ? new Win32NamedPipeServerSocket(255, "\\\\.\\pipe\\ScarletIPC-"+this.vrc.groupId, false, false, Win32SecurityLevel.NO_SECURITY)
+            : new UnixDomainServerSocket("/tmp/ScarletIPC-"+this.vrc.groupId+".sock", false))
         {
             try
             {
@@ -683,77 +595,6 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
         }
     }
 
-    /**
-     * Creates the IPC server using platform-specific implementation.
-     * Uses reflection on Windows to avoid ClassNotFoundException when loading Windows-specific classes on Linux.
-     */
-    private ServerSocket createIpcServer() throws Exception
-    {
-        if (Platform.CURRENT.isNT())
-        {
-            // Use reflection to avoid loading Windows-specific classes on non-Windows platforms.
-            // We discover the constructor dynamically because the ipcsocket API has changed across
-            // versions — hardcoding a specific signature causes NoSuchMethodException when the
-            // library is updated.
-            Class<?> socketClass        = Class.forName("org.scalasbt.ipcsocket.Win32NamedPipeServerSocket");
-            Class<?> securityLevelClass = Class.forName("org.scalasbt.ipcsocket.Win32SecurityLevel");
-            Object   noSecurity         = securityLevelClass.getField("NO_SECURITY").get(null);
-            String   pipeName           = "\\\\.\\pipe\\ScarletIPC-" + this.vrc.groupId;
-
-            // Try known constructor signatures from newest to oldest, logging which one matched.
-            // (String pipeName, boolean isInheritable, Win32SecurityLevel security)  — 1.6.x
-            try
-            {
-                java.lang.reflect.Constructor<?> ctor = socketClass.getConstructor(String.class, boolean.class, securityLevelClass);
-                LOG.info("IPC: using Win32NamedPipeServerSocket(String, boolean, Win32SecurityLevel)");
-                return (ServerSocket) ctor.newInstance(pipeName, false, noSecurity);
-            }
-            catch (NoSuchMethodException ignored) {}
-
-            // (String pipeName, boolean isInheritable)  — some intermediate versions
-            try
-            {
-                java.lang.reflect.Constructor<?> ctor = socketClass.getConstructor(String.class, boolean.class);
-                LOG.info("IPC: using Win32NamedPipeServerSocket(String, boolean)");
-                return (ServerSocket) ctor.newInstance(pipeName, false);
-            }
-            catch (NoSuchMethodException ignored) {}
-
-            // (int backlog, String pipeName, boolean inheritHandle, boolean isInheritable, Win32SecurityLevel security)  — 1.5.x
-            try
-            {
-                java.lang.reflect.Constructor<?> ctor = socketClass.getConstructor(int.class, String.class, boolean.class, boolean.class, securityLevelClass);
-                LOG.info("IPC: using Win32NamedPipeServerSocket(int, String, boolean, boolean, Win32SecurityLevel)");
-                return (ServerSocket) ctor.newInstance(255, pipeName, false, false, noSecurity);
-            }
-            catch (NoSuchMethodException ignored) {}
-
-            // Last resort: log all available constructors to help diagnose future version changes
-            java.lang.reflect.Constructor<?>[] ctors = socketClass.getConstructors();
-            StringBuilder sb = new StringBuilder("IPC: No known Win32NamedPipeServerSocket constructor matched. Available constructors:\n");
-            for (java.lang.reflect.Constructor<?> c : ctors)
-                sb.append("  ").append(c).append("\n");
-            LOG.error(sb.toString());
-            throw new NoSuchMethodException("No compatible Win32NamedPipeServerSocket constructor found in ipcsocket on classpath");
-        }
-        else
-        {
-            // Clean up any leftover socket file from a previous instance
-            // This handles the case where the previous instance didn't shut down cleanly
-            String socketPath = "/tmp/ScarletIPC-"+this.vrc.groupId+".sock";
-            Path socketFilePath = Paths.get(socketPath);
-            try
-            {
-                Files.deleteIfExists(socketFilePath);
-            }
-            catch (IOException ex)
-            {
-                LOG.warn("Failed to delete existing socket file: " + socketPath, ex);
-            }
-            return new UnixDomainServerSocket(socketPath, false);
-        }
-    }
-
     void rawCommand(String line)
     {
         if (line == null || line.isEmpty())
@@ -796,15 +637,7 @@ Send-ScarletIPC -GroupID 'grp_00000000-0000-0000-0000-000000000000' -Message 'st
                 String text = ls.nextLine().trim();
                 if (!text.isEmpty())
                 {
-                    TtsService tts = this.getTtsService();
-                    if (tts != null)
-                    {
-                        LOG.info("Submitting TTS: `"+text+"`, success: "+tts.submit("cli-"+Long.toUnsignedString(System.nanoTime()), text));
-                    }
-                    else
-                    {
-                        LOG.warn("TTS service not available");
-                    }
+                    LOG.info("Submitting TTS: `"+text+"`, success: "+this.ttsService.submit("cli-"+Long.toUnsignedString(System.nanoTime()), text));
                 }
             } break;
             case "link": {
