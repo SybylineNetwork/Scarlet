@@ -3446,13 +3446,13 @@ public class ScarletDiscordCommands
     // set-tts-voice
 
     public final SlashOption<String> _voiceName = SlashOption.ofString("voice-name", "The name of the installed voice to use", true, null, new DInteractions.SlashOptionStringsUnsanitized(this::_voiceName, true));
-    String[] _voiceName() { List<String> names = this.discord.scarlet.getTtsService().getInstalledVoices(); return names.toArray(new String[names.size()]); }
+    String[] _voiceName() { List<String> names = this.discord.scarlet.ttsService.getInstalledVoices(); return names.toArray(new String[names.size()]); }
     @SlashCmd("set-tts-voice")
     @Desc("Selects which TTS voice is used to make announcements")
     @DefaultPerms(Permission.USE_APPLICATION_COMMANDS)
     public void setTtsVoice(SlashCommandInteractionEvent event, InteractionHook hook, @SlashOpt("voice-name") String voiceName) throws Exception
     {
-        if (!this.discord.scarlet.getTtsService().getInstalledVoices().stream().anyMatch(voiceName::equals))
+        if (!this.discord.scarlet.ttsService.getInstalledVoices().stream().anyMatch(voiceName::equals))
         {
             hook.sendMessageFormat("TTS voice `%s` is not installed on this system", voiceName).setEphemeral(true).queue();
             return;

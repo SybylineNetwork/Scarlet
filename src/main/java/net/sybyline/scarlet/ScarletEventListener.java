@@ -65,7 +65,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
         this.isInGroupInstance = false;
         this.isSameAsPreviousInstance = false;
 
-        this.ttsVoiceName = scarlet.settings.new FileValuedStringChoice("tts_voice_name", "TTS: Voice name", "", () -> scarlet.getTtsService().getInstalledVoices());
+        this.ttsVoiceName = scarlet.settings.new FileValuedStringChoice("tts_voice_name", "TTS: Voice name", "", () -> scarlet.ttsService.getInstalledVoices());
         this.ttsUseDefaultAudioDevice = scarlet.settings.new FileValuedBoolean("tts_use_default_audio_device", "TTS: Use default system audio device", false);
         this.announceWatchedUsers = scarlet.settings.new FileValuedBoolean("tts_announce_watched_users", "TTS: Announce watched users", true);
         this.announceWatchedGroups = scarlet.settings.new FileValuedBoolean("tts_announce_watched_groups", "TTS: Announce watched groups", true);
@@ -119,7 +119,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
             String voiceName = this.ttsVoiceName.get();
             if (voiceName.trim().isEmpty())
             {
-                this.scarlet.getTtsService().getInstalledVoices().stream().findFirst().ifPresent($ -> this.ttsVoiceName.set($, "default"));
+                this.scarlet.ttsService.getInstalledVoices().stream().findFirst().ifPresent($ -> this.ttsVoiceName.set($, "default"));
             }
         }, 0_000L, 60_000L, TimeUnit.MILLISECONDS);
     }
@@ -136,45 +136,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
     public boolean getTtsUseDefaultAudioDevice()
     {
         return this.ttsUseDefaultAudioDevice.get().booleanValue();
-    }
-
-    /**
-     * Called when a TTS voice fails to produce audio (e.g. an Online/Natural
-     * voice that cannot write to a file stream). Finds the first available
-     * fallback voice, saves it as the new active voice, logs a clear warning,
-     * and shows a UI popup. Returns the fallback voice name, or {@code null}
-     * if no other voices are available.
-     */
-    public String fallbackTtsVoice(String failedVoice)
-    {
-        String fallback = this.scarlet.getTtsService().getInstalledVoices()
-            .stream()
-            .filter(v -> !v.equals(failedVoice))
-            .findFirst()
-            .orElse(null);
-
-        if (fallback == null)
-        {
-            Scarlet.LOG.error("TTS voice '{}' failed and no fallback voices are available.", failedVoice);
-            this.scarlet.splash.queueFeedbackPopup(null, 8_000L,
-                "TTS voice failed",
-                "No fallback voice available. Check TTS settings.",
-                Color.ORANGE, Color.ORANGE);
-            return null;
-        }
-
-        Scarlet.LOG.warn("TTS voice '{}' failed to produce audio (it may be an Online/Natural voice "
-            + "that requires direct audio output and cannot write to a file). "
-            + "Automatically switching to fallback voice: '{}'", failedVoice, fallback);
-
-        this.ttsVoiceName.set(fallback, "tts-voice-fallback");
-
-        this.scarlet.splash.queueFeedbackPopup(null, 8_000L,
-            "TTS voice switched",
-            "\"" + failedVoice + "\" failed — switched to \"" + fallback + "\"",
-            Color.YELLOW, Color.YELLOW);
-
-        return fallback;
     }
 
     // ScarletVRChatLogs.Listener
@@ -274,10 +235,6 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
             this.scarlet.ui.playerJoin(!this.isTailerLive, userId, userDisplayName, timestamp, advisory, text_color, priority[0], isRejoinFromPrev);
             this.scarlet.ui.playerUpdate(!this.isTailerLive, userId, $ -> $.avatarName = avatarDisplayName);
         });
-        // Call checkPlayer with preamble=false and a fresh list to trigger TTS announcements
-        // without inheriting stale advisory text from the UI pass above.
-        if (!preamble)
-            this.checkPlayer(new ArrayList<>(), priority, false, userDisplayName, userId);
         if (Objects.equals(this.clientUserId, userId))
             this.clientLocationPrev_userIds.clear();
 
@@ -414,7 +371,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
                 sb.append("User ").append(userDisplayName).append(" may be wearing a watched avatar.");
                 if (watchedAvatar.message != null)
                     sb.append(' ').append(watchedAvatar.message);
-                this.scarlet.getTtsService().submit("wa-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
+                this.scarlet.ttsService.submit("wa-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
             });
         
         this.scarlet.discord.emitExtendedUserAvatar(this.scarlet, timestamp, this.clientLocation, userId, userDisplayName, avatarDisplayName, potentialIds);
@@ -432,8 +389,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
         if (watchedUser != null && !watchedUser.silent)
         {
             advisories.add(watchedUser.message);
-            if (!preamble && this.announceWatchedUsers.get())
-                this.scarlet.getTtsService().submit("wu-"+Long.toUnsignedString(System.nanoTime()), watchedUser.message);
+            this.scarlet.ttsService.submit("wu-"+Long.toUnsignedString(System.nanoTime()), watchedUser.message);
         }
         
         User user = this.scarlet.vrc.getUser(userId);
@@ -468,7 +424,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
                     sb.append("User ").append(userDisplayName).append(" joined the lobby.");
                     if (wg.message != null)
                         sb.append(' ').append(wg.message);
-                    this.scarlet.getTtsService().submit("wg-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
+                    this.scarlet.ttsService.submit("wg-"+Long.toUnsignedString(System.nanoTime()), sb.toString());
                 }
                 priority[0] = wg.priority;
             }
@@ -489,7 +445,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
             long acctAgeDays = LocalDate.now().toEpochDay() - user.getDateJoined().toEpochDay();
             if (acctAgeDays <= this.announcePlayersNewerThan.get().longValue())
             {
-                this.scarlet.getTtsService().submit("new-"+Long.toUnsignedString(System.nanoTime()), "User "+userDisplayName+" is new to VRChat, joined "+acctAgeDays+" days ago.");
+                this.scarlet.ttsService.submit("new-"+Long.toUnsignedString(System.nanoTime()), "User "+userDisplayName+" is new to VRChat, joined "+acctAgeDays+" days ago.");
             }
         }
         
@@ -522,7 +478,7 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
                     String vtktts = actorId == null
                         ? ("A vote to kick was initiated against "+targetDisplayName+".")
                         : ("A vote to kick was initiated against "+targetDisplayName+" by "+nullable_actorDisplayName+".");
-                    this.scarlet.getTtsService().submit("vtk-"+Long.toUnsignedString(System.nanoTime()), vtktts);
+                    this.scarlet.ttsService.submit("vtk-"+Long.toUnsignedString(System.nanoTime()), vtktts);
                 }
                 OffsetDateTime odt = MiscUtils.odt2utc(timestamp);
                 this.scarlet.data.customEvent_new(GroupAuditTypeEx.VTK_START, odt, actorId, nullable_actorDisplayName, userId, targetDisplayName);

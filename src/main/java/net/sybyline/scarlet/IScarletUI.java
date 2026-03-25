@@ -1,9 +1,9 @@
 package net.sybyline.scarlet;
 
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.GraphicsEnvironment;
 import java.io.Closeable;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.function.Consumer;
 
@@ -21,12 +21,6 @@ public interface IScarletUI extends Closeable
         return GraphicsEnvironment.isHeadless() ? new ScarletUIHeadless() : new ScarletUI(scarlet);
     }
 
-    /**
-     * Get the parent component for dialogs.
-     * @return The parent component, or null if not available
-     */
-    Component getParentComponent();
-
     void jframe(Consumer<JFrame> edit);
     void setUIScale();
     void loadSettings();
@@ -41,7 +35,6 @@ public interface IScarletUI extends Closeable
 
 class ScarletUIHeadless implements IScarletUI
 {
-    public Component getParentComponent() { return null; }
     public void close() {}
     public void jframe(Consumer<JFrame> edit) {}
     public void setUIScale() {}
