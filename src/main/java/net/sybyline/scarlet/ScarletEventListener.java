@@ -437,29 +437,43 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
         }
         
         User user = this.scarlet.vrc.getUser(userId);
-        List<LimitedUserGroups> lugs0 = this.scarlet.vrc.getUserGroups(userId);
-        Stream<LimitedUserGroups> lugs = lugs0 == null || lugs0.isEmpty() ? null : lugs0.stream();
-        for (String alt : this.scarlet.vrc.cookies.alts())
-        {
-//            List<LimitedUserGroups> lugs1 = ScarletVRChatCookieJar.contextGet(alt, () -> this.scarlet.vrc.getMutualsGroups(userId));
-            List<LimitedUserGroups> lugs1 = ScarletVRChatCookieJar.contextGet(alt, () -> this.scarlet.vrc.getUserGroups(userId));
-            if (lugs1 != null && !lugs1.isEmpty())
-                lugs = lugs == null ? lugs1.stream() : Stream.concat(lugs, lugs0.stream());
+        if (userDisplayName == null) {
+            userDisplayName = user != null ? user.getDisplayName() : "Unknown User";
         }
+
+        // Collect all groups (main + alts)
+        List<LimitedUserGroups> allGroups = new ArrayList<>();
+
+        List<LimitedUserGroups> lugs0 = this.scarlet.vrc.getUserGroups(userId);
+        if (lugs0 != null && !lugs0.isEmpty()) {
+            allGroups.addAll(lugs0);
+        }
+
+        for (String alt : this.scarlet.vrc.cookies.alts()) {
+            List<LimitedUserGroups> lugs1 = ScarletVRChatCookieJar.contextGet(
+                    alt,
+                    () -> this.scarlet.vrc.getUserGroups(alt, userId));
+
+            if (lugs1 != null && !lugs1.isEmpty()) {
+                allGroups.addAll(lugs1);
+            }
+        }
+
         // check groups
-        if (lugs != null)
+        if (!allGroups.isEmpty())
         {
-            List<ScarletWatchedGroups.WatchedGroup> wgs = lugs
+            List<ScarletWatchedGroups.WatchedGroup> wgs = allGroups.stream()
                 .map(LimitedUserGroups::getGroupId)
                 .map(this.scarlet.watchedGroups::getWatchedGroup)
                 .filter(Objects::nonNull)
                 .sorted(Comparator.naturalOrder())
                 .collect(Collectors.toList());
+
             ScarletWatchedGroups.WatchedGroup wg = wgs.stream()
                 .filter($ -> !$.silent)
                 .findFirst()
-                .orElse(null)
-                ;
+                .orElse(null);
+
             if (wg != null)
             {
                 if (!preamble && this.announceWatchedGroups.get())
@@ -472,15 +486,21 @@ public class ScarletEventListener implements ScarletVRChatLogs.Listener, Scarlet
                 }
                 priority[0] = wg.priority;
             }
-            wgs.forEach($ -> advisories.add($.message));
+
+            advisories.addAll(
+                    wgs.stream()
+                            .map(g -> g.message)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .collect(Collectors.toList()));
+
             if (overall_type == null)
             {
-            overall_type = wgs.stream()
-                .filter($ -> $.type.text_color != null)
-                .map($ -> $.type.text_color)
-                .findFirst()
-                .orElse(null)
-                ;
+                overall_type = wgs.stream()
+                    .filter($ -> $.type.text_color != null)
+                    .map($ -> $.type.text_color)
+                    .findFirst()
+                    .orElse(null);
             }
         }
         // check new user

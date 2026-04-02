@@ -17,12 +17,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -1404,16 +1406,41 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 embed.addField("History", history, false);
             if (recent != null)
                 embed.addField("Most recent", recent, false);
-            if (lugs != null && !lugs.isEmpty())
+            if (lugs != null) 
             {
-                List<LimitedUserGroups> wgs = lugs.stream()
-                    .filter(lug -> this.scarlet.watchedGroups.getWatchedGroup(lug.getGroupId()) != null)
-                    .collect(Collectors.toList());
-                if (!wgs.isEmpty())
-                {
-                    StringBuilder sb = new StringBuilder();
-                    wgs.forEach(wg -> sb.append(wg.getName()).append('\n'));
-                    embed.addField("Watched group membership", sb.toString(), false);
+                String targetId = target.getId();
+                List<LimitedUserGroups> allGroups = new ArrayList<>(lugs);
+
+                for (String alt : this.scarlet.vrc.cookies.alts()) {
+                    List<LimitedUserGroups> lugs1 = ScarletVRChatCookieJar.contextGet(
+                            alt, 
+                            () -> this.scarlet.vrc.getUserGroups(alt, targetId)
+                    );
+                    
+                    if (lugs1 != null) {
+                        allGroups.addAll(lugs1);
+                    }
+                }
+
+                if (!allGroups.isEmpty()) {
+                    List<LimitedUserGroups> wgs = allGroups.stream()
+                            .filter(lug -> this.scarlet.watchedGroups.getWatchedGroup(lug.getGroupId()) != null)
+                            .collect(Collectors.toList());
+
+                    if (!wgs.isEmpty()) {
+                        StringBuilder sb = new StringBuilder();
+                        Set<String> seenGroupIds = new HashSet<>();
+                        
+                        for (LimitedUserGroups g : wgs) {
+                            if (seenGroupIds.add(g.getGroupId())) { 
+                                sb.append(g.getName()).append('\n');
+                            }
+                        }
+                        
+                        if (sb.length() > 0) {
+                            embed.addField("Watched group membership", sb.toString(), false);
+                        }
+                    }
                 }
             }
             if (entryMeta.hasAuxActor())

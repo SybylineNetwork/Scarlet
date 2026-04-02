@@ -1172,31 +1172,38 @@ CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
         }
     }
 
-    public List<LimitedUserGroups> getUserGroups(String userId)
-    {
-        return this.getUserGroups(userId, Long.MAX_VALUE);
+    public List<LimitedUserGroups> getUserGroups(String userId) {
+        return getUserGroups(null, userId, Long.MAX_VALUE);
     }
-    public List<LimitedUserGroups> getUserGroups(String userId, long minEpoch)
-    {
-        List<LimitedUserGroups> userGroups = this.cachedUserGroups.get(userId, minEpoch);
+
+    public List<LimitedUserGroups> getUserGroups(String userId, long minEpoch) {
+        return getUserGroups(null, userId, minEpoch);
+    }
+
+    public List<LimitedUserGroups> getUserGroups(String viewerId, String userId) {
+        return getUserGroups(viewerId, userId, Long.MAX_VALUE);
+    }
+
+    public List<LimitedUserGroups> getUserGroups(String viewerId, String userId, long minEpoch) {
+        String cacheKey = (viewerId != null) ? viewerId + ":" + userId : userId;
+
+        List<LimitedUserGroups> userGroups = this.cachedUserGroups.get(cacheKey, minEpoch);
         if (userGroups != null)
             return userGroups;
-        if (this.cachedUserGroups.is404(userId))
+        if (this.cachedUserGroups.is404(cacheKey))
             return null;
+
         UsersApi users = new UsersApi(this.client);
-        try
-        {
+        try {
             userGroups = users.getUserGroups(userId);
-            this.cachedUserGroups.put(userId, userGroups);
+            this.cachedUserGroups.put(cacheKey, userGroups);
             return userGroups;
-        }
-        catch (ApiException apiex)
-        {
+        } catch (ApiException apiex) {
             this.scarlet.checkVrcRefresh(apiex);
             if (apiex.getMessage().contains("HTTP response code: 404"))
-                this.cachedUserGroups.add404(userId);
+                this.cachedUserGroups.add404(cacheKey);
             else
-                LOG.error("Error during get user groups: "+apiex.getMessage());
+                LOG.error("Error during get user groups: " + apiex.getMessage());
             return null;
         }
     }
