@@ -2,6 +2,7 @@ package net.sybyline.scarlet.util;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.file.Files;
@@ -37,6 +38,8 @@ public class MavenDepsLoader
         "https://search.maven.org/remotecontent?filepath=",
         "https://jitpack.io/",
         "https://oss.sonatype.org/content/repositories/snapshots/",
+        "https://maven.lavalink.dev/snapshots/",
+        "https://maven.lavalink.dev/releases/",
     };
 
     static Path jarPath = null;
@@ -69,8 +72,7 @@ public class MavenDepsLoader
             throw new Error(ex);
         }
         
-        
-        Path jarPath = Paths.get(unescapedPath),
+        Path jarPath = Paths.get(URI.create("file:/" + unescapedPath)),
              jarDir = jarPath.getParent(),
              depsDir = jarDir.resolve("libraries");
         

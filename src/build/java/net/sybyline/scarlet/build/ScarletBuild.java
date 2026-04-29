@@ -41,7 +41,6 @@ import java.util.zip.ZipOutputStream;
 
 import net.sybyline.scarlet.Scarlet;
 import net.sybyline.scarlet.ScarletMeta;
-import net.sybyline.scarlet.util.CsvRecord;
 
 public class ScarletBuild
 {
@@ -50,45 +49,14 @@ public class ScarletBuild
     static final FileTime FILE_TIME = FileTime.fromMillis(System.currentTimeMillis());
     static final String[] IGNORED_DEPS =
     {
-        "com/google/auto/service/auto-service-annotations/",
-        "com/google/guava/", // *
-        "com/google/j2objc/j2objc-annotations/",
-        "io/opentelemetry/", // *
-        "me/friwi/", // *
-        "net/bytebuddy/byte-buddy/",
-        "org/apache/commons/commons-compress/",
-        "org/apache/commons/commons-exec/",
-        "org/jspecify/jspecify/",
-        "org/nanohttpd/", // *
-        "org/ow2/asm/", // *
-        "org/parboiled/", // *
-        "org/pegdown/pegdown/",
-        "org/seleniumhq/selenium/", // *
+        "javax/ws/rs/jsr311-api/",
+        "com/squareup/okhttp3/okhttp/",
+        "org/jetbrains/kotlin/kotlin-stdlib-jdk7/",
+        "org/jetbrains/kotlin/kotlin-stdlib-jdk8/",
     };
 
     public static void main(String[] args) throws Throwable
     {
-        long total = 0L;
-for(URL url:classpathURLs())
-{
-    try
-    {
-        Path p = Paths.get(url.toURI());
-        if (Files.isRegularFile(p))
-        {
-            long size = Files.size(p);
-            total += size;
-            System.out.printf("%8d ", size);
-        }
-    }
-    catch (Exception ex)
-    {
-        ex.printStackTrace();
-    }
-    System.out.println(url);
-}
-System.out.println("total: "+total);
-if(null==null)return;
         build();
     }
 

@@ -52,7 +52,6 @@ import io.github.vrchatapi.model.User;
 
 import net.dv8tion.jda.api.interactions.DiscordLocale;
 import net.sybyline.scarlet.Scarlet;
-import net.sybyline.scarlet.util.Platform;
 
 public interface MiscUtils
 {
@@ -93,18 +92,17 @@ public interface MiscUtils
 
     static int levenshteinEditDistance(CharSequence lhs, CharSequence rhs)
     {
-        return lhs == null || lhs.length() == 0
-            ? rhs == null || rhs.length() == 0
-                ? 0
-                : rhs.length()
-            : rhs == null || rhs.length() == 0
-                ? lhs.length()
-                : lhs.length() >= rhs.length()
-                    ? levenshteinEditDistance_(lhs, rhs)
-                    : levenshteinEditDistance_(rhs, lhs);
-    }
-    static int levenshteinEditDistance_(CharSequence lhs, CharSequence rhs)
-    {
+        // short path
+        if (lhs == null || lhs.length() == 0)
+            return rhs == null ? 0 : rhs.length();
+        else if (rhs == null || rhs.length() == 0)
+            return lhs.length();
+        if (rhs.length() < lhs.length())
+        {
+            CharSequence swap = rhs;
+            rhs = lhs;
+            lhs = swap;
+        }
         int rhsLen = rhs.length(),
             prev[] = new int[rhsLen + 1],
             curr[] = new int[rhsLen + 1],
@@ -268,6 +266,8 @@ public interface MiscUtils
 
     static String extractTypedUuid(String type, String fallback, String idContaining)
     {
+        if (idContaining == null)
+            return fallback;
         Matcher m = Pattern.compile(type+"_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matcher(idContaining);
         return m.find() ? m.group() : fallback;
     }
@@ -733,89 +733,6 @@ public interface MiscUtils
             Scarlet.LOG.warn("Desktop BROWSE action is not supported on this platform");
             return false;
         }
-    }
-
-    /**
-     * Computes the Levenshtein (edit) distance between two strings.
-     * Drop-in replacement for commons-text LevenshteinDistance.getDefaultInstance().apply(a, b).
-     * Uses a single-row DP approach — O(min(m,n)) space.
-     */
-    public static int levenshtein(String a, String b)
-    {
-        if (a == null) a = "";
-        if (b == null) b = "";
-        // Keep b as the shorter string to minimise memory
-        if (a.length() < b.length()) { String tmp = a; a = b; b = tmp; }
-        int bLen = b.length();
-        int[] prev = new int[bLen + 1];
-        for (int j = 0; j <= bLen; j++) prev[j] = j;
-        for (int i = 1; i <= a.length(); i++)
-        {
-            int[] curr = new int[bLen + 1];
-            curr[0] = i;
-            for (int j = 1; j <= bLen; j++)
-                curr[j] = a.charAt(i - 1) == b.charAt(j - 1)
-                    ? prev[j - 1]
-                    : 1 + Math.min(prev[j - 1], Math.min(prev[j], curr[j - 1]));
-            prev = curr;
-        }
-        return prev[bLen];
-    }
-
-    /**
-     * Parses an Excel-dialect CSV (RFC 4180: comma separator, double-quote quoting, "" escape).
-     * Drop-in replacement for: CSVFormat.EXCEL.parse(reader)
-     * Each returned String[] is one row; fields are accessible by index (like CSVRecord.get(n)).
-     * Empty trailing fields are preserved. The reader is not closed.
-     */
-    public static Iterable<String[]> parseExcelCsv(java.io.Reader reader) throws java.io.IOException
-    {
-        java.io.BufferedReader br = reader instanceof java.io.BufferedReader
-            ? (java.io.BufferedReader) reader
-            : new java.io.BufferedReader(reader);
-        java.util.List<String[]> rows = new java.util.ArrayList<>();
-        String line;
-        while ((line = br.readLine()) != null)
-        {
-            // Skip completely blank lines (Excel CSVFormat skips them too)
-            if (line.isEmpty()) continue;
-            java.util.List<String> fields = new java.util.ArrayList<>();
-            int i = 0, len = line.length();
-            while (i <= len)
-            {
-                if (i < len && line.charAt(i) == '"')
-                {
-                    // Quoted field — consume until closing quote, "" → "
-                    StringBuilder sb = new StringBuilder();
-                    i++; // skip opening quote
-                    while (i < len)
-                    {
-                        char c = line.charAt(i++);
-                        if (c == '"')
-                        {
-                            if (i < len && line.charAt(i) == '"') { sb.append('"'); i++; } // escaped ""
-                            else break; // closing quote
-                        }
-                        else sb.append(c);
-                    }
-                    fields.add(sb.toString());
-                    // skip comma after closing quote (or we're at end)
-                    if (i < len && line.charAt(i) == ',') i++;
-                    else i = len + 1; // signal end
-                }
-                else
-                {
-                    // Unquoted field — read until next comma or end-of-line
-                    int start = i;
-                    while (i < len && line.charAt(i) != ',') i++;
-                    fields.add(line.substring(start, i));
-                    if (i < len) i++; // skip comma
-                    else i = len + 1; // signal end
-                }
-            }
-            rows.add(fields.toArray(new String[0]));
-        }
-        return rows;
     }
 
 }

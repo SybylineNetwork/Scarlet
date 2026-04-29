@@ -2,6 +2,7 @@ package net.sybyline.scarlet.util;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -16,6 +17,32 @@ import io.github.vrchatapi.model.GroupPermissions;
 public final class VrcAllGroupPermissions
 {
 
+    public VrcAllGroupPermissions()
+    {
+        this.allPermissions = Collections.emptyMap();
+    }
+
+    public VrcAllGroupPermissions(Map<String, List<GroupPermissions>> perms)
+    {
+        if (perms == null || perms.isEmpty())
+            this.allPermissions = Collections.emptyMap();
+        else
+        {
+            this.allPermissions = new HashMap<>();
+            perms.forEach((groupId, list) ->
+                this.allPermissions.put(
+                groupId, 
+                list
+                    .stream()
+                    .mapToInt(GroupPermissions::ordinal)
+                    .mapToLong($ -> 1L << $)
+                    .reduce(0L, Long::sum)
+                )
+            );
+        }
+    }
+
+    @Deprecated
     public VrcAllGroupPermissions(JsonObject json)
     {
         if (json == null || json.isEmpty())

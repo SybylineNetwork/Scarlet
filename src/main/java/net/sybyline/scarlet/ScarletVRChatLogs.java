@@ -70,7 +70,7 @@ public class ScarletVRChatLogs implements Closeable
 
     private void handleEntry(File file, boolean preamble, LocalDateTime timestamp, String level, String text, List<String> lines)
     {
-        int cidx;
+        int cidx, cidx2;
         if (text.startsWith("[Behaviour] "))
         {
             if (text.startsWith("[User Authenticated: "))
@@ -161,7 +161,8 @@ public class ScarletVRChatLogs implements Closeable
                    stickerId = text.substring(cidx + 18);
             this.listener.log_playerSpawnSticker(preamble, timestamp, userDisplayName, userId, stickerId);
         }
-        else if (text.startsWith("[VRCProps] Prop ") && (cidx = text.lastIndexOf(" spawned by ")) != -1)
+        else if ((text.startsWith("[VRCItems] Item ")
+               || text.startsWith("[VRCProps] Prop ")) && (cidx = text.lastIndexOf(" spawned by ")) != -1)
         {
             String propId = text.substring(16, cidx),
                    userId = text.substring(cidx + 12);
@@ -173,6 +174,14 @@ public class ScarletVRChatLogs implements Closeable
             this.listener.log_userQuit(preamble, timestamp, lifetimeSeconds);
         }
     // Video players
+      // ProTV
+        else if (text.contains("TVManager (Simple (ProTV))") && (cidx = text.lastIndexOf("loading URL by user '")) != -1 && (cidx2 = text.lastIndexOf("': ")) != -1)
+        {
+            String userDisplayName = text.substring(cidx + 21, cidx2),
+                   url = text.substring(cidx2 + 3);
+            this.listener.log_videoLoad(preamble, timestamp, userDisplayName, url, "");
+        }
+      // USharpVideo
         else if (text.startsWith("[<color=#9C6994>USharpVideo</color>] Started video load for URL: ") && (cidx = text.lastIndexOf(", requested by ")) != -1)
         {
             String url = text.substring(65, cidx),

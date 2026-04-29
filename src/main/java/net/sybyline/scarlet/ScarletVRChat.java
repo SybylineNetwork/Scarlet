@@ -215,7 +215,7 @@ public class ScarletVRChat implements Closeable
         this.group = null;
         this.groupLimitedMember = null;
         this.groupRoles = Collections.synchronizedMap(new LinkedHashMap<>());
-        this.allGroupPermissions = new VrcAllGroupPermissions(null);
+        this.allGroupPermissions = new VrcAllGroupPermissions();
         this.currentUser = null;
         this.currentUserId = null;
         scarlet.settings.setNamespace(this.groupId);
@@ -800,17 +800,10 @@ finally
                 group.getRoles().forEach(role -> this.groupRoles.put(role.getId(), role));
             }
         }
-        try
+        Map<String, List<GroupPermissions>> perms = this.getUserAllGroupPermissions(this.currentUserId, null);
+        if (perms != null)
         {
-            Map<String, String> localVarHeaderParams = new HashMap<>();
-            localVarHeaderParams.put("Accept", "application/json");
-            okhttp3.Call localVarCall = this.client.buildCall(null, "/users/"+this.currentUserId+"/groups/permissions", "GET", new ArrayList<>(), new ArrayList<>(), null, localVarHeaderParams, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null);
-            JsonObject json = this.client.<JsonObject>execute(localVarCall, JsonObject.class).getData();
-            this.allGroupPermissions = new VrcAllGroupPermissions(json);
-        }
-        catch (Exception ex)
-        {
-            LOG.warn("Failed to get group permissions: {}", ex.getMessage());
+            this.allGroupPermissions = new VrcAllGroupPermissions(perms);
         }
     }
     public boolean checkGroupHasAdminTag(GroupAdminTag adminTag)
@@ -1201,16 +1194,41 @@ CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
         }
     }
 
+    public Map<String, List<GroupPermissions>> getUserAllGroupPermissions(String userId, String groupIds)
+    {
+        UsersApi users = new UsersApi(this.client);
+        try
+        {
+            return users.getUserAllGroupPermissions(userId, groupIds);
+        }
+        catch (ApiException apiex)
+        {
+            LOG.error("Error during get user all group permissions: "+apiex.getMessage());
+            return null;
+        }
+    }
+
     static final Type _LimitedUserGroups_Array = new TypeToken<List<LimitedUserGroups>>(){}.getType();
     public List<LimitedUserGroups> getMutualsGroups(String userId)
     {
         if (this.cachedUserGroups.is404(userId))
             return null;
+        UsersApi users = new UsersApi(this.client);
         try
         {
-            Map<String, String> headers = new HashMap<>();
-            headers.put("Accept", "application/json");
-            return this.client.<List<LimitedUserGroups>>execute(this.client.buildCall(null, "/users/"+userId+"/mutuals/groups", "GET", new ArrayList<>(), new ArrayList<>(), null, headers, new HashMap<>(), new HashMap<>(), new String[]{"authCookie"}, null), _LimitedUserGroups_Array).getData();
+            List<LimitedUserGroups> mutualGroups = new ArrayList<>(),
+                                    batch;
+            int offset = 0, batchSize = 50;
+            batch = users.getMutualGroups(userId, batchSize, offset);
+            while (batch.size() == batchSize)
+            {
+                mutualGroups.addAll(batch);
+                offset += batchSize;
+                MiscUtils.sleep(250L);
+                batch = users.getMutualGroups(userId, batchSize, offset);
+            }
+            mutualGroups.addAll(batch);
+            return mutualGroups;
         }
         catch (ApiException apiex)
         {
@@ -1714,8 +1732,6 @@ CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
         });
     }
 
-    public void removeAlternateCredentials()
-    {
         class AltDisplay
         {
             AltDisplay(String id)
@@ -1731,6 +1747,8 @@ CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
                 return this.display;
             }
         }
+    public void removeAlternateCredentials()
+    {
         AltDisplay[] alts = this.cookies.alts().stream().map(AltDisplay::new).toArray(AltDisplay[]::new);
         this.scarlet.settings.requireSelectAsync("Select the credentials to remove", "Remove alternate credentials", alts, null, selected ->
         {

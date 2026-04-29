@@ -2,6 +2,7 @@ package net.sybyline.scarlet.util;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -181,14 +182,13 @@ public interface Hypertext
         }
     }
 
-    public static Map<String, String> scrapeMetaNameContent(Reader reader) throws IOException
+    public static <T> T scrapeMetaNameContent(Reader reader, T container, Func.V3.NE<T, String, String> func) throws IOException
     {
-        Map<String, String> ret = new HashMap<>();
         visit(reader, new HTMLEditorKit.ParserCallback() {
             @Override
             public void handleSimpleTag(HTML.Tag t, MutableAttributeSet a, int pos) {
                 if (HTML.Tag.META == t && a.isDefined(HTML.Attribute.NAME) && a.isDefined(HTML.Attribute.CONTENT))
-                    ret.put(String.valueOf(a.getAttribute(HTML.Attribute.NAME)), String.valueOf(a.getAttribute(HTML.Attribute.CONTENT)));
+                    func.invoke(container, String.valueOf(a.getAttribute(HTML.Attribute.NAME)), String.valueOf(a.getAttribute(HTML.Attribute.CONTENT)));
             }
             @Override
             public void handleEndTag(HTML.Tag t, int pos) {
@@ -196,7 +196,25 @@ public interface Hypertext
                     throw new ShortCircuit();
             }
         });
-        return ret;
+        return container;
+    }
+
+    public static Map<String, String> scrapeMetaNameContent(Reader reader) throws IOException
+    {
+        Map<String, String> ret = new HashMap<>();
+        return scrapeMetaNameContent(reader, ret, Map::put);
+    }
+
+    public static Map<String, List<String>> scrapeMetaNameContentMulti(Reader reader) throws IOException
+    {
+        Map<String, List<String>> ret = new HashMap<>();
+        return scrapeMetaNameContent(reader, ret, (map, name, content) -> map.computeIfAbsent(name, $ -> new ArrayList<>()).add(content));
+    }
+
+    public static List<Map.Entry<String, String>> scrapeMetaNameContentRaw(Reader reader) throws IOException
+    {
+        List<Map.Entry<String, String>> ret = new ArrayList<>();
+        return scrapeMetaNameContent(reader, ret, (list, name, content) -> list.add(new AbstractMap.SimpleImmutableEntry<>(name, content)));
     }
 
     @FunctionalInterface interface Scraper<T> { T scrape(Node parent, Object child, boolean simple, T current); }

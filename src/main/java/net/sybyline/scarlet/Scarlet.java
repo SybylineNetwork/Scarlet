@@ -102,7 +102,7 @@ public class Scarlet implements Closeable
     public static final String
         GROUP = "SybylineNetwork",
         NAME = "Scarlet",
-        VERSION = "0.4.16-b3",
+        VERSION = "0.4.16-b5",
         DEV_DISCORD = "Discord:@vinyarion/Vinyarion#0292/393412191547555841",
         SCARLET_DISCORD_URL = "https://discord.gg/CP3AyhypBF",
         GITHUB_URL = "https://github.com/"+GROUP+"/"+NAME,
@@ -319,8 +319,7 @@ public class Scarlet implements Closeable
         catch (InterruptedException iex)
         {
         }
-        if (this.ttsService != null)
-            MiscUtils.close(this.ttsService);
+        MiscUtils.close(this.ttsService);
         MiscUtils.close(this.discord);
         MiscUtils.close(this.logs);
         MiscUtils.close(this.amplitude);
@@ -340,7 +339,7 @@ public class Scarlet implements Closeable
     public final ScheduledExecutorService exec = Executors.newScheduledThreadPool(4, runnable -> new Thread(runnable, "Scarlet Worker Thread "+this.threadidx.incrementAndGet())),
                                           execModal = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet Modal UI Thread "+this.threadidx.incrementAndGet())),
                                           execIPC = Executors.newSingleThreadScheduledExecutor(runnable -> new Thread(runnable, "Scarlet IPC Thread "+this.threadidx.incrementAndGet()));
-    
+
     final ScarletSettings settings = new ScarletSettings(this, new File(dir, "settings.json"));
     {
         Float uiScale = this.settings.getObject("ui_scale", Float.class);

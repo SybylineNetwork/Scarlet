@@ -3,7 +3,7 @@ package net.sybyline.scarlet.ext;
 import java.io.IOException;
 import java.time.OffsetDateTime;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;

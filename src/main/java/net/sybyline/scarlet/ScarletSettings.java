@@ -68,7 +68,10 @@ public class ScarletSettings
             {
                 Preferences prefs = Preferences.userNodeForPackage(Scarlet.class);
                 EncryptedPrefs enc = new EncryptedPrefs(prefs, globalPW);
-                synchronized (ScarletSettings.this)
+                // synchronizing here causes deadlock during init:
+                // the setting.read() method both synchronizes on ScarletSettings.this
+                // AND awaits the latch -- NOT releasing the synchronization monitor
+                // synchronized (ScarletSettings.this)
                 {
                     ScarletSettings.this.globalPreferences = prefs;
                     ScarletSettings.this.globalEncrypted = enc;

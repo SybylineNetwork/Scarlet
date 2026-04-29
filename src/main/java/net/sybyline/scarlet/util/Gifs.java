@@ -6,7 +6,11 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
 
@@ -18,11 +22,18 @@ import net.dv8tion.jda.api.utils.FileUpload;
 public interface Gifs
 {
 
-    static String resolveTenorGifUrl(String url) throws IOException
+    static String resolveMetaGifUrl(String url) throws IOException
     {
         try (HttpURLInputStream in = HttpURLInputStream.get(url))
         {
-            return Hypertext.scrapeMetaNameContent(new InputStreamReader(in)).getOrDefault("twitter:image", url);
+            Map<String, List<String>> map = Hypertext.scrapeMetaNameContentMulti(new InputStreamReader(in));
+            return Stream.concat(
+                map.getOrDefault("og:image", Collections.emptyList()).stream(),
+                map.getOrDefault("twitter:image", Collections.emptyList()).stream()
+            )
+            .filter($ -> $.endsWith(".gif"))
+            .findFirst()
+            .orElse(url);
         }
     }
 
@@ -46,8 +57,9 @@ public interface Gifs
         }
         public static VrcSpriteSheet decode(String name, String url) throws IOException
         {
-            if (url.startsWith("https://tenor.com/view/"))
-                url = resolveTenorGifUrl(url);
+            if (url.startsWith("https://tenor.com/view/")
+             || url.startsWith("https://giphy.com/gifs/"))
+                url = resolveMetaGifUrl(url);
             return of(name, Gifs.decode(url));
         }
         public static VrcSpriteSheet of(String name, GifDecoder decoder) throws IOException

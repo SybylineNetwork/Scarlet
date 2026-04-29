@@ -100,7 +100,7 @@ public class TtsService implements Closeable
                 else
                 {
                     boolean submitted = this.discord.submitAudio(path.toFile());
-                    Scarlet.LOG.info("TTS({}): Audio submitted to Discord, success={}, file={}", marker, submitted, path);
+                    Scarlet.LOG.debug("TTS({}): Audio submitted to Discord, success={}, file={}", marker, submitted, path);
                     // NOTE: The .wav file is intentionally kept on disk so that Discord and other
                     // consumers have time to finish reading/streaming it. Previously, Files.deleteIfExists(path)
                     // was called here immediately after submitAudio(), causing a race condition where the file
@@ -147,7 +147,7 @@ public class TtsService implements Closeable
                 if (event.getType() == LineEvent.Type.STOP)
                 {
                     clip.close();
-                    Scarlet.LOG.info("TTS({}): System audio playback complete", marker);
+                    Scarlet.LOG.debug("TTS({}): System audio playback complete", marker);
                     done.release();
                 }
             });

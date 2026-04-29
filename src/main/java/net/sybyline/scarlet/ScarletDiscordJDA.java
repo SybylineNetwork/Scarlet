@@ -118,11 +118,9 @@ import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.ext.VrcLaunch;
-import net.sybyline.scarlet.server.discord.LDaveSessionFactory;
 import net.sybyline.scarlet.server.discord.DCommands;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
-import net.sybyline.scarlet.server.discord.dave.Dave;
 import net.sybyline.scarlet.util.LRUMap;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -172,14 +170,13 @@ public class ScarletDiscordJDA implements ScarletDiscord
         try
         {
             NativeDaveFactory.ensureAvailable();
-            // LDaveSessionFactory.isAvailable() ? LDaveSessionFactory.getInstance() : null;
             audioModuleConfig = audioModuleConfig.withDaveSessionFactory(new LDJDADaveSessionFactory(new NativeDaveFactory()));
+            LOG.info("DAVE native library loaded successfully");
         }
         catch (RuntimeException rex)
         {
-            LOG.error("Failed to ensure DAVE library", rex);
+            LOG.error("Failed to initialize DAVE native library - E2EE will not be available", rex);
         }
-//        Dave.INSTANCE.daveSetLogSinkCallbackDefault();
         JDA jda = null;
         String token0 = this.token.getOrNull();
         if (token0 != null && !token0.isEmpty()) try
@@ -546,7 +543,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public boolean submitAudio(File file)
     {
-        return this.audio.submitAudio(file);
+        try
+        {
+            return this.audio.submitAudio(file);
+        }
+        finally
+        {
+            if (file != null && file.isFile() && !file.delete())
+                LOG.warn("TTS failed to delete file after use. file={}", file.toString());
+        }
     }
 
     static final int BYTES_PER_20MS = 3840; // 20ms * (48000 frames/second) * (2 samples/frame) * (2 bytes/sample)
@@ -624,7 +629,7 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 LOG.warn("TTS: No audio buffers loaded from file: {}", file);
                 return true;
             }
-            LOG.info("TTS: Queuing {} audio buffers (~{}ms) from file: {}", buffersToAdd.size(), buffersToAdd.size() * 20, file);
+            LOG.debug("TTS: Queuing {} audio buffers (~{}ms) from file: {}", buffersToAdd.size(), buffersToAdd.size() * 20, file);
             synchronized (this)
             {
                 this.buffers.addAll(buffersToAdd);

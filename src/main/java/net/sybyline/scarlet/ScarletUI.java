@@ -128,7 +128,7 @@ public class ScarletUI implements IScarletUI
     }
 
     @Override
-    public java.awt.Component getParentComponent()
+    public Component getParentComponent()
     {
         return this.jframe;
     }

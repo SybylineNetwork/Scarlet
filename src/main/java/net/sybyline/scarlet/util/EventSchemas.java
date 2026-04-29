@@ -8,6 +8,9 @@ import com.google.gson.reflect.TypeToken;
 
 import io.github.vrchatapi.JSON;
 
+/**
+ * <a href="https://github.com/SybylineNetwork/sybylinenetwork.github.io/blob/main/vrc_ext/amplitudeevents.md">Amplitude Events</a>
+ */
 public interface EventSchemas
 {
 
