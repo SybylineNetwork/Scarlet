@@ -786,11 +786,15 @@ finally
             this.groupLimitedMember = this.getGroupMembership(this.groupId, this.currentUserId);
             if (this.groupLimitedMember == null)
             {
-                if (this.scarlet.settings.requireConfirmYesNo("The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
+                List<LimitedUserGroups> userGroups = this.getUserGroups(this.currentUserId);
+                if (userGroups != null && userGroups.stream().noneMatch($ -> this.groupId != null && this.groupId.equals($.getGroupId())))
                 {
-                    this.cookies.clear();
-                    this.cookies.save();
-                    throw new IllegalStateException();
+                    if (this.scarlet.settings.requireConfirmYesNo("The main VRChat account does not appear\nto be part of the group, delete credentials?", "Wrong account?"))
+                    {
+                        this.cookies.clear();
+                        this.cookies.save();
+                        throw new IllegalStateException();
+                    }
                 }
             }
             if (group.getRoles() == null)
@@ -1268,14 +1272,13 @@ CurrentUser getCurrentUser(AuthenticationApi auth) throws ApiException
         catch (ApiException apiex)
         {
             this.scarlet.checkVrcRefresh(apiex);
-            // Only return null for 404 (user not in group), propagate other errors
             if (apiex.getCode() == 404)
-            {
-                LOG.debug("User {} is not a member of group {}", targetUserId, groupId);
                 return null;
-            }
+            List<LimitedUserGroups> userGroups = this.getUserGroups(targetUserId);
+            if (userGroups != null && userGroups.stream().anyMatch($ -> groupId != null && groupId.equals($.getGroupId())))
+                return new GroupMember().userId(targetUserId).groupId(groupId).membershipStatus(GroupMemberStatus.MEMBER).roleIds(new ArrayList<>());
             LOG.error("Error getting group member group: "+apiex.getMessage());
-            throw new RuntimeException("Failed to get group membership: " + apiex.getMessage(), apiex);
+            return null;
         }
     }
     public GroupMember updateGroupMembershipNotes(String groupId, String targetUserId, String managerNotes)
