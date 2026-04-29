@@ -22,6 +22,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.concurrent.CountDownLatch;
 import java.util.prefs.Preferences;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -55,10 +56,40 @@ public class ScarletSettings
         this.settingsFile = settingsFile;
         this.settingsFileLastModified = settingsFile.lastModified();
         this.hasVersionChangedSinceLastRun = null;
-        this.globalPreferences = Preferences.userNodeForPackage(Scarlet.class);
-        this.globalEncrypted = new EncryptedPrefs(this.globalPreferences, globalPW);
-        this.preferences = this.globalPreferences;
-        this.encrypted = this.globalEncrypted;
+        // Preferences.userNodeForPackage() touches the Windows Registry, and
+        // EncryptedPrefs runs PBKDF2 with 100k iterations — both are slow on
+        // Windows. We kick them off immediately on a background thread so they
+        // run in parallel with the rest of startup (UI build, settings file
+        // load, etc.) and only block when the first actual prefs read/write
+        // occurs (typically at cookie load time, well into the startup sequence).
+        Thread prefsInitThread = new Thread(() ->
+        {
+            try
+            {
+                Preferences prefs = Preferences.userNodeForPackage(Scarlet.class);
+                EncryptedPrefs enc = new EncryptedPrefs(prefs, globalPW);
+                // synchronizing here causes deadlock during init:
+                // the setting.read() method both synchronizes on ScarletSettings.this
+                // AND awaits the latch -- NOT releasing the synchronization monitor
+                // synchronized (ScarletSettings.this)
+                {
+                    ScarletSettings.this.globalPreferences = prefs;
+                    ScarletSettings.this.globalEncrypted = enc;
+                    ScarletSettings.this.preferences = prefs;
+                    ScarletSettings.this.encrypted = enc;
+                }
+            }
+            catch (Throwable t)
+            {
+                LOG.error("Exception initializing Preferences on background thread", t);
+            }
+            finally
+            {
+                ScarletSettings.this.prefsReady.countDown();
+            }
+        }, "Scarlet Prefs Init");
+        prefsInitThread.setDaemon(true);
+        prefsInitThread.start();
         this.json = null;
         this.lastRunVersion = new RegistryString("lastRunVersion");
         this.lastRunTime = new RegistryOffsetDateTime("lastRunTime");
@@ -76,8 +107,29 @@ public class ScarletSettings
         this.outstandingPeriodDays = new FileValuedIntRange("outstandingPeriodDays", "Outstanding Period (days)", 3, 1, 30);
     }
 
+    /**
+     * Blocks until the background Preferences + EncryptedPrefs initialisation
+     * is complete. Must be called before any access to globalPreferences,
+     * globalEncrypted, preferences, or encrypted.
+     */
+    void awaitPrefs()
+    {
+        if (this.prefsReady.getCount() == 0)
+            return;
+        try
+        {
+            this.prefsReady.await();
+        }
+        catch (InterruptedException e)
+        {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for Preferences init", e);
+        }
+    }
+
     public void setNamespace(String namespace)
     {
+        this.awaitPrefs();
         this.preferences = this.globalPreferences.node(namespace);
         this.encrypted = new EncryptedPrefs(this.preferences, globalPW);
     }
@@ -86,8 +138,11 @@ public class ScarletSettings
     final File settingsFile;
     final long settingsFileLastModified;
     Boolean hasVersionChangedSinceLastRun;
-    final Preferences globalPreferences;
-    final EncryptedPrefs globalEncrypted;
+    // These are initialised on a background thread (see constructor). All
+    // access must go through awaitPrefs() before touching them.
+    final CountDownLatch prefsReady = new CountDownLatch(1);
+    Preferences globalPreferences;
+    EncryptedPrefs globalEncrypted;
     Preferences preferences;
     EncryptedPrefs encrypted;
     private JsonObject json;
@@ -414,12 +469,14 @@ public class ScarletSettings
         }
         protected String read()
         {
+            ScarletSettings.this.awaitPrefs();
             String string = ScarletSettings.this.preferences.get(this.name, null);
             if (string == null) string = ScarletSettings.this.globalPreferences.get(this.name, null);
             return string;
         }
         protected void write(String string)
         {
+            ScarletSettings.this.awaitPrefs();
             ScarletSettings.this.preferences.put(this.name, string);
         }
         public void set(T value_)
@@ -430,6 +487,20 @@ public class ScarletSettings
             synchronized (ScarletSettings.this)
             {
                 this.write(this.stringify.apply(value_));
+            }
+        }
+        /**
+         * Removes this value from storage and clears the in-memory cache.
+         * Safe to call even if no value has been stored.
+         */
+        public void clear()
+        {
+            this.cached = null;
+            synchronized (ScarletSettings.this)
+            {
+                ScarletSettings.this.awaitPrefs();
+                ScarletSettings.this.preferences.remove(this.name);
+                ScarletSettings.this.globalPreferences.remove(this.name);
             }
         }
     }
@@ -444,6 +515,7 @@ public class ScarletSettings
         @Override
         protected String read()
         {
+            ScarletSettings.this.awaitPrefs();
             String string = this.globalOnly ? null : ScarletSettings.this.encrypted.get(this.name);
             if (string == null) string = ScarletSettings.this.globalEncrypted.get(this.name);
             return string;
@@ -451,7 +523,24 @@ public class ScarletSettings
         @Override
         protected void write(String string)
         {
+            ScarletSettings.this.awaitPrefs();
             (this.globalOnly ? ScarletSettings.this.globalEncrypted : ScarletSettings.this.encrypted).put(this.name, string);
+        }
+        /**
+         * Removes this encrypted value from both the global and namespace
+         * encrypted stores, and clears the in-memory cache.
+         */
+        @Override
+        public void clear()
+        {
+            this.cached = null;
+            synchronized (ScarletSettings.this)
+            {
+                ScarletSettings.this.awaitPrefs();
+                ScarletSettings.this.globalEncrypted.remove(this.name);
+                if (!this.globalOnly)
+                    ScarletSettings.this.encrypted.remove(this.name);
+            }
         }
     }
 

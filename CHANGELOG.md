@@ -7,6 +7,35 @@
   - Pending: Limited Google Drive interoperability
   - Pending: Distinct Server and Client modes
 
+## 0.4.16-b5
+  - Fixed group logins not working correctly (contributed by EternalModz)
+  - Fixed User Spawn Prop extended event failing to be detected due to a log file format change
+  - Added support for ProTV asset (https://protv.dev/) log entries for detecting video loads
+  - Added Giphy support for GIF url resolution
+  - Added Instance Update audit event
+
+## 0.4.16-b4 (no builds)
+  - Fixed crash on startup due to an unrecognized group permission
+  - Fixed inconsistent csv parsing
+  - Cleaned up dependencies
+  - Changed DAVE implementation to libdave-jvm
+  - Added checks for deadlocks during initialization
+
+## 0.4.16-b3 (KozyBlake)
+  - Fixed repeated TTS announcements on startup
+  - Fixed TTS clips overlapping/playing simultaneously (reported by user ChanAurora)
+  - Fixed UI crash when clicking "View" on a player with no avatar info loaded
+  - Fixed non-Windows TTS in general
+  - Fixed Linux launch/steam folder compatibility
+  - Added installation prompt for eSpeak if not installed
+  - Added asynchronous initialization of encrypted preferences
+  - Added button to reset VRChat credentials
+  - Probably more
+
+## 0.4.16-b2 (no builds)
+  - Added scraping for the Amplitude analytics file
+  - Added avatar id ingestion for some search providers
+
 ## 0.4.16-b1
   - Added (very WIP) support for the new DAVE system (voice channel encryption)
   - Added TTS support for eSpeak on Linux (credit to 0xkubectl and KozyBlake for downstream implementation reference)

@@ -4,12 +4,16 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 import com.google.gson.TypeAdapter;
 import com.google.gson.annotations.SerializedName;
@@ -602,6 +606,27 @@ public interface AvatarSearch
                 .flatMap(Arrays::stream)
                 .filter(Objects::nonNull)
             ;
+        }
+    }
+
+    interface Ingestion
+    {
+        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+        static void ingest(List<String> avatarIds, String attribution)
+        {if (null==null)return;
+            long time = 0L;
+            for (int i = 0; i < avatarIds.size(); i += AvatarSearch_AvtrDB.MAX_BULK_INGEST, time += 15_000L)
+            {
+                String[] subarray = avatarIds.subList(i, Math.min(i + AvatarSearch_AvtrDB.MAX_BULK_INGEST, avatarIds.size())).toArray(new String[0]);
+                executor.schedule(() -> AvatarSearch_AvtrDB.request_ingest_v3(subarray, attribution), time, TimeUnit.MILLISECONDS);
+            }
+            time = 0L;
+            for (String avatarId : avatarIds)
+            {
+                executor.schedule(() -> AvatarSearch_VRCDS.putAvatarExternal(avatarId, attribution), time, TimeUnit.MILLISECONDS);
+                executor.schedule(() -> AvatarSearch_WorldBalancer.putAvatarExternal(avatarId, attribution), time, TimeUnit.MILLISECONDS);
+                time += 15_000L;
+            }
         }
     }
 

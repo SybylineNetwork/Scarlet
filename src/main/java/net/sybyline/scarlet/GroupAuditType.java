@@ -21,6 +21,7 @@ public enum GroupAuditType implements DEnum.DEnumString<GroupAuditType>
     /** If the kick is issued via majority vote: actorId:"vrc_admin", actorDisplayName:"VRChat Admin" **/
     INSTANCE_KICK       ("group.instance.kick"       , "Instance Kick"       , 0x00_FF7F00), // LocationComponent
 //    INSTANCE_MUTE       ("group.instance.mute"       , "Instance Mute"       , 0x00_FF007F), // ? LocationComponent
+    INSTANCE_UPDATE     ("group.instance.update"     , "Instance Update"     , 0x00_007F7F), // Map<String, UpdateSubComponent>
     INSTANCE_WARN       ("group.instance.warn"       , "Instance Warn"       , 0x00_FFFF00), // LocationComponent
     INVITE_CREATE       ("group.invite.create"       , "Invite Create"       , 0x00_00FF00), // <empty object>
     INVITE_CANCEL       ("group.invite.cancel"       , "Invite Cancel"       , 0x00_000000), // <empty object>

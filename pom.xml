@@ -60,50 +60,66 @@
       <id>jitpack.io</id>
       <url>https://jitpack.io</url>
     </repository>
+    <repository>
+      <id>lavalink</id>
+      <url>https://maven.lavalink.dev/snapshots</url>
+      <snapshots><enabled>true</enabled></snapshots>
+    </repository>
   </repositories>
   <properties>
-    <vrchatapi.version>1.20.8-nightly.8</vrchatapi.version>
+    <!-- Main dependencies -->
+    <commons.version>1.13.0</commons.version>
+    <flatlaf.version>3.5.4</flatlaf.version>
+    <gson.version>2.12.1</gson.version>
+    <ipcsocket.version>1.6.3</ipcsocket.version>
     <JDA.version>6.3.0</JDA.version>
-    <selenium.version>4.31.0</selenium.version>
+    <jna.version>5.18.1</jna.version>
+    <jsr305.version>3.0.2</jsr305.version>
+    <libdave.version>f83ad9925</libdave.version>
+    <libdave.adapter.version>e92b3e4ac</libdave.adapter.version>
+    <slf4j.version>2.0.12</slf4j.version>
+    <tfa.version>1.3</tfa.version>
+    <vrchatapi.version>1.20.8-nightly.8</vrchatapi.version>
+    <!-- Test/internal experiment dependencies -->
     <jcef.version>132.3.1</jcef.version>
     <nanohttpd.version>2.3.2-SNAPSHOT</nanohttpd.version>
-    <jna.version>5.18.1</jna.version>
+    <selenium.version>4.31.0</selenium.version>
   </properties>
   <dependencies>
     <dependency>
-      <groupId>net.dv8tion</groupId>
-      <artifactId>JDA</artifactId>
-      <version>${JDA.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.github.vrchatapi</groupId>
-      <artifactId>vrchatapi-java</artifactId>
-      <version>${vrchatapi.version}</version>
+      <groupId>com.formdev</groupId>
+      <artifactId>flatlaf</artifactId>
+      <version>${flatlaf.version}</version>
     </dependency>
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
-      <version>2.12.1</version>
+      <version>${gson.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.j256.two-factor-auth</groupId>
-      <artifactId>two-factor-auth</artifactId>
-      <version>1.3</version>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>api</artifactId>
+      <version>${libdave.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-csv</artifactId>
-      <version>1.13.0</version>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>adapter-jda</artifactId>
+      <version>${libdave.adapter.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-text</artifactId>
-      <version>1.13.0</version>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>impl-jni</artifactId>
+      <version>${libdave.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.formdev</groupId>
-      <artifactId>flatlaf</artifactId>
-      <version>3.5.4</version>
+      <groupId>org.scala-sbt.ipcsocket</groupId>
+      <artifactId>ipcsocket</artifactId>
+      <version>${ipcsocket.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>net.dv8tion</groupId>
+      <artifactId>JDA</artifactId>
+      <version>${JDA.version}</version>
     </dependency>
     <dependency>
       <groupId>net.java.dev.jna</groupId>
@@ -118,69 +134,83 @@
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
-      <version>3.0.2</version>
+      <version>${jsr305.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>moe.kyokobot.libdave</groupId>
+      <artifactId>natives-win-x86-64</artifactId>
+      <version>${libdave.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.j256.two-factor-auth</groupId>
+      <artifactId>two-factor-auth</artifactId>
+      <version>${tfa.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.github.vrchatapi</groupId>
+      <artifactId>vrchatapi-java</artifactId>
+      <version>${vrchatapi.version}</version>
     </dependency>
 <!--
     <dependency>
       <groupId>com.google.api-client</groupId>
       <artifactId>google-api-client</artifactId>
       <version>1.35.2</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.oauth-client</groupId>
       <artifactId>google-oauth-client-jetty</artifactId>
       <version>1.39.0</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.google.apis</groupId>
       <artifactId>google-api-services-drive</artifactId>
       <version>v3-rev20250220-2.0.0</version>
+      <scope>test</scope>
     </dependency>
 -->
     <dependency>
-        <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>selenium-java</artifactId>
-        <version>${selenium.version}</version>
+      <groupId>me.friwi</groupId>
+      <artifactId>jcefmaven</artifactId>
+      <version>${jcef.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>me.friwi</groupId>
-        <artifactId>jcefmaven</artifactId>
-        <version>${jcef.version}</version>
+      <groupId>org.nanohttpd</groupId>
+      <artifactId>nanohttpd</artifactId>
+      <version>${nanohttpd.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>org.nanohttpd</groupId>
-        <artifactId>nanohttpd</artifactId>
-        <version>${nanohttpd.version}</version>
+      <groupId>org.nanohttpd</groupId>
+      <artifactId>nanohttpd-webserver</artifactId>
+      <version>${nanohttpd.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>org.nanohttpd</groupId>
-        <artifactId>nanohttpd-webserver</artifactId>
-        <version>${nanohttpd.version}</version>
+      <groupId>org.nanohttpd</groupId>
+      <artifactId>nanohttpd-webserver-markdown-plugin</artifactId>
+      <version>${nanohttpd.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>org.nanohttpd</groupId>
-        <artifactId>nanohttpd-webserver-markdown-plugin</artifactId>
-        <version>${nanohttpd.version}</version>
+      <groupId>org.nanohttpd</groupId>
+      <artifactId>nanohttpd-websocket</artifactId>
+      <version>${nanohttpd.version}</version>
+      <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>org.nanohttpd</groupId>
-        <artifactId>nanohttpd-websocket</artifactId>
-        <version>${nanohttpd.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
-      <version>2.0.12</version>
-    </dependency>
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-simple</artifactId>
-      <version>2.0.12</version>
-    </dependency>
-    <dependency>
-        <groupId>org.scala-sbt.ipcsocket</groupId>
-        <artifactId>ipcsocket</artifactId>
-        <version>1.6.3</version>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+      <version>${selenium.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

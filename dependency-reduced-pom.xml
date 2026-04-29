@@ -4,7 +4,7 @@
   <groupId>net.sybyline</groupId>
   <artifactId>scarlet</artifactId>
   <name>Scarlet</name>
-  <version>0.4.16-b1</version><!--scarlet-version-->
+  <version>0.4.16-b4</version><!--scarlet-version-->
   <build>
     <plugins>
       <plugin>

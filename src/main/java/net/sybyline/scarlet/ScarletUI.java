@@ -109,7 +109,7 @@ public class ScarletUI implements IScarletUI
     public ScarletUI(Scarlet scarlet)
     {
         this.scarlet = scarlet;
-        this.jframe = new JFrame(Scarlet.NAME);
+        this.jframe = new JFrame(Scarlet.NAME + " " + Scarlet.VERSION);
         this.jtabs = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
         this.propstable = new PropsTable<>();
         this.jpanel_settings = new JPanel();
@@ -125,6 +125,12 @@ public class ScarletUI implements IScarletUI
     public void jframe(Consumer<JFrame> edit)
     {
         edit.accept(this.jframe);
+    }
+
+    @Override
+    public Component getParentComponent()
+    {
+        return this.jframe;
     }
 
     public void setUIScale()
@@ -771,6 +777,11 @@ public class ScarletUI implements IScarletUI
     }
     private void infoStats(String name, String avatarDisplayName, AvatarBundleInfo bundleInfo)
     {
+        if (bundleInfo == null)
+        {
+            ScarletUI.this.messageModalAsyncInfo(null, "Avatar info is not yet available for " + name + ".", name + "'s selected avatar's stats");
+            return;
+        }
         JPanel panel = new JPanel(new GridBagLayout());
         {
             GridBagConstraints constraints = new GridBagConstraints();
@@ -784,7 +795,7 @@ public class ScarletUI implements IScarletUI
             FileAnalysis analysis = bundleInfo.analysis;
             VersionedFile versionedFile = bundleInfo.id;
             ModelFile file = bundleInfo.file;
-            FileAnalysisAvatarStats stats = analysis.getAvatarStats();
+            FileAnalysisAvatarStats stats = analysis == null ? null : analysis.getAvatarStats();
             infoStatsAppend(panel, constraints, "Avatar name", ()->avatarDisplayName);
             infoStatsAppend(panel, constraints, "File statistics");
             if (file != null)

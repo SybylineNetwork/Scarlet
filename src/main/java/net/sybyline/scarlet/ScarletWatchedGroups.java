@@ -15,8 +15,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +23,7 @@ import io.github.vrchatapi.model.Group;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.utils.MarkdownSanitizer;
 import net.sybyline.scarlet.server.discord.DEnum;
+import net.sybyline.scarlet.util.CsvRecord;
 import net.sybyline.scarlet.util.UniqueStrings;
 
 public class ScarletWatchedGroups
@@ -154,11 +153,10 @@ public class ScarletWatchedGroups
         
     }
 
-    @SuppressWarnings("resource")
     public boolean importLegacyCSV(Reader reader, boolean overwrite) throws IOException
     {
         List<WatchedGroup> importedWatchedGroups = new ArrayList<>();
-        for (CSVRecord record : CSVFormat.EXCEL.parse(reader))
+        for (CsvRecord record : CsvRecord.parseDocument(reader))
         {
             WatchedGroup watchedGroup = new WatchedGroup();
             watchedGroup.id = record.get(0);
@@ -170,13 +168,13 @@ public class ScarletWatchedGroups
             case "PARTNER": watchedGroup.type = WatchedGroup.Type.AFFILIATED; break;
             default:        watchedGroup.type = WatchedGroup.Type.OTHER;      break;
             }
-            
+
             Arrays
                 .stream(record.get(5).split("[,;/\\|]"))
                 .filter($ -> !$.isEmpty())
                 .map(String::toLowerCase)
                 .forEach(watchedGroup.tags.strings()::add);
-            watchedGroup.critical = Boolean.parseBoolean(record.get(3));
+            watchedGroup.critical = record.getBoolean(3);
             watchedGroup.message = record.get(4);
             importedWatchedGroups.add(watchedGroup);
         }

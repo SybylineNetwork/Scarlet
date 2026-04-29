@@ -70,6 +70,8 @@ import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.IncomingWebhookClient;
@@ -101,8 +103,6 @@ import net.dv8tion.jda.api.interactions.callbacks.IReplyCallback;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.ICommandReference;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
-import net.dv8tion.jda.api.components.actionrow.ActionRow;
-import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.managers.AudioManager;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.FluentRestAction;
@@ -118,11 +118,9 @@ import net.sybyline.scarlet.ScarletData.AuditEntryMetadata;
 import net.sybyline.scarlet.ScarletData.InstanceEmbedMessage;
 import net.sybyline.scarlet.ext.AvatarSearch;
 import net.sybyline.scarlet.ext.VrcLaunch;
-import net.sybyline.scarlet.server.discord.DAudioDaveSession;
 import net.sybyline.scarlet.server.discord.DCommands;
 import net.sybyline.scarlet.server.discord.DInteractions;
 import net.sybyline.scarlet.server.discord.DPerms;
-import net.sybyline.scarlet.server.discord.dave.Dave;
 import net.sybyline.scarlet.util.LRUMap;
 import net.sybyline.scarlet.util.Location;
 import net.sybyline.scarlet.util.MiscUtils;
@@ -130,6 +128,9 @@ import net.sybyline.scarlet.util.Pacer;
 import net.sybyline.scarlet.util.UniqueStrings;
 import net.sybyline.scarlet.util.VRChatHelpDeskURLs;
 import net.sybyline.scarlet.util.VersionedFile;
+
+import moe.kyokobot.libdave.NativeDaveFactory;
+import moe.kyokobot.libdave.jda.LDJDADaveSessionFactory;
 
 public class ScarletDiscordJDA implements ScarletDiscord
 {
@@ -165,17 +166,28 @@ public class ScarletDiscordJDA implements ScarletDiscord
         this.avatarSearchProviders = scarlet.settings.new FileValuedStringArrayPattern("custom_avatar_search_providers", "VRCX-compatible avatar search providers", AvatarSearch.URL_ROOTS.clone(), "https?://.+", false);
         this.resetAvatarSearchProviders = scarlet.settings.new FileValuedVoid("Reset avatar search providers to default", "Reset", this::resetAvatarSearchProviders);
         this.load();
-        Dave.INSTANCE.daveSetLogSinkCallbackDefault();
+        AudioModuleConfig audioModuleConfig = new AudioModuleConfig();
+        try
+        {
+            NativeDaveFactory.ensureAvailable();
+            audioModuleConfig = audioModuleConfig.withDaveSessionFactory(new LDJDADaveSessionFactory(new NativeDaveFactory()));
+            LOG.info("DAVE native library loaded successfully");
+        }
+        catch (RuntimeException rex)
+        {
+            LOG.error("Failed to initialize DAVE native library - E2EE will not be available", rex);
+        }
         JDA jda = null;
         String token0 = this.token.getOrNull();
         if (token0 != null && !token0.isEmpty()) try
         {
+            
             jda = JDABuilder
             .createDefault(token0)
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .addEventListeners(new JDAEvents())
             .enableCache(CacheFlag.VOICE_STATE)
-            .setAudioModuleConfig(new AudioModuleConfig().withDaveSessionFactory(DAudioDaveSession::new))
+            .setAudioModuleConfig(audioModuleConfig)
             .build();
         }
         catch (InvalidTokenException|IllegalArgumentException ex)
@@ -531,7 +543,15 @@ public class ScarletDiscordJDA implements ScarletDiscord
     @Override
     public boolean submitAudio(File file)
     {
-        return this.audio.submitAudio(file);
+        try
+        {
+            return this.audio.submitAudio(file);
+        }
+        finally
+        {
+            if (file != null && file.isFile() && !file.delete())
+                LOG.warn("TTS failed to delete file after use. file={}", file.toString());
+        }
     }
 
     static final int BYTES_PER_20MS = 3840; // 20ms * (48000 frames/second) * (2 samples/frame) * (2 bytes/sample)
@@ -542,7 +562,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
         {
             AudioManager audioManager = this.audioManager;
             if (audioManager == null || !audioManager.isConnected())
+            {
+                LOG.warn("TTS: Cannot submit audio - AudioManager is null or not connected. audioManager={}, isConnected={}",
+                    audioManager, audioManager != null ? audioManager.isConnected() : "N/A");
                 return false;
+            }
             List<byte[]> buffersToAdd = new ArrayList<>();
             try (InputStream fis = new FileInputStream(file))
             {
@@ -561,19 +585,31 @@ public class ScarletDiscordJDA implements ScarletDiscord
                         }
                         else
                         {
+                            LOG.warn("TTS: Audio format conversion not supported: source={}, target={}", ais.getFormat(), AudioSendHandler.INPUT_FORMAT);
                             return false;
                         }
-                        while (ais0.available() > 0)
+                        // FIX 1: Use read() return value instead of available() to detect EOF.
+                        // available() is unreliable on converted AudioInputStreams and can return 0
+                        // even when data remains, causing the entire audio to be silently skipped.
+                        // FIX 2: Track how many bytes were actually read into each buffer so that
+                        // the last (partial) chunk is zero-padded correctly instead of being
+                        // submitted as a full buffer of uninitialized/garbage bytes.
+                        while (true)
                         {
                             byte[] buffer = new byte[BYTES_PER_20MS];
-                            for
-                            (
-                                int read = ais0.read(buffer),
-                                    total = read;
-                                total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1;
-                                total += read
-                            );
+                            int total = 0;
+                            int read;
+                            while (total < BYTES_PER_20MS && (read = ais0.read(buffer, total, BYTES_PER_20MS - total)) != -1)
+                            {
+                                total += read;
+                            }
+                            if (total == 0)
+                                break; // true EOF - no more data
+                            // If total < BYTES_PER_20MS, the buffer is already zero-padded (new byte[])
+                            // so the partial last frame is safe to submit as-is.
                             buffersToAdd.add(buffer);
+                            if (total < BYTES_PER_20MS)
+                                break; // partial read means EOF was reached
                         }
                     }
                     finally
@@ -589,7 +625,11 @@ public class ScarletDiscordJDA implements ScarletDiscord
                 return false;
             }
             if (buffersToAdd.isEmpty())
+            {
+                LOG.warn("TTS: No audio buffers loaded from file: {}", file);
                 return true;
+            }
+            LOG.debug("TTS: Queuing {} audio buffers (~{}ms) from file: {}", buffersToAdd.size(), buffersToAdd.size() * 20, file);
             synchronized (this)
             {
                 this.buffers.addAll(buffersToAdd);
@@ -625,11 +665,14 @@ public class ScarletDiscordJDA implements ScarletDiscord
                    audioChannelSf = ScarletDiscordJDA.this.audioChannelSf;
             Guild guild = ScarletDiscordJDA.this.jda.getGuildById(guildSf);
             AudioManager audioManager = this.audioManager;
+            LOG.info("TTS Audio: updateChannel called - guildSf={}, audioChannelSf={}, audioManager={}, guild={}", 
+                guildSf, audioChannelSf, audioManager != null ? "present" : "null", guild != null ? "found" : "null");
             if (audioChannelSf == null)
             {
                 this.audioChannel = null;
                 if (audioManager != null)
                 {
+                    LOG.info("TTS Audio: Closing audio connection (audioChannelSf is null)");
                     audioManager.closeAudioConnection();
                     this.buffers.clear();
                 }
@@ -638,15 +681,18 @@ public class ScarletDiscordJDA implements ScarletDiscord
             {
                 AudioChannel audioChannel = guild.getVoiceChannelById(audioChannelSf);
                 this.audioChannel = audioChannel;
+                LOG.info("TTS Audio: AudioChannel lookup result - audioChannel={}", audioChannel != null ? audioChannel.getId() : "null");
                 if (audioManager != null)
                 {
                     if (audioChannel != null)
                     {
+                        LOG.info("TTS Audio: Opening audio connection to channel {}", audioChannel.getId());
                         audioManager.openAudioConnection(audioChannel);
                         this.buffers.clear();
                     }
                     else
                     {
+                        LOG.warn("TTS Audio: AudioChannel not found for sf={}, closing connection", audioChannelSf);
                         audioManager.closeAudioConnection();
                         this.buffers.clear();
                     }
