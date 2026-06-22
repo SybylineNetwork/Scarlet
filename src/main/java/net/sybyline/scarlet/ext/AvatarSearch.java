@@ -35,7 +35,7 @@ public interface AvatarSearch
         URL_ROOT_AVTRDB = AvatarSearch_AvtrDB.API_ROOT+"/avatar/search/vrcx",
         URL_ROOT_NEKOSUNEVR = AvatarSearch_VRCDS.API_ROOT+"/vrcx_search",
         URL_ROOT_VRCDB = "https://vrcx.vrcdb.com/avatars/Avatar/VRCX",
-        URL_ROOT_WORLDBALANCER = AvatarSearch_WorldBalancer.API_ROOT+"/vrcx_search",
+        URL_ROOT_WORLDBALANCER = AvatarSearch_WorldBalancer.API_ROOT+"/scarlet_search",
         URL_ROOTS[] =
         {
             URL_ROOT_AVATARRECOVERY,
